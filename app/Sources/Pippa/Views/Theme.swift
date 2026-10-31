@@ -52,10 +52,14 @@ enum Theme {
     // Calm chat surfaces. Color marks interaction, not the whole work area.
     static let chatTint = dyn(hex(0xFCFBF9, 0.98), hex(0x1B1B1D, 0.98))
     static let chatSidebar = dynamic(light: hex(0xF1F0ED), dark: hex(0x222224))
-    static let chatCard = dynamic(light: hex(0xFFFFFF), dark: hex(0x232833))
+    // Neutral like the window around it: a blue cast here made the composer, step chips and receipts look bluish.
+    static let chatCard = dynamic(light: hex(0xFFFFFF), dark: hex(0x262628))
     static let chatInset = dynamic(light: hex(0xF2F5FA), dark: hex(0x1B202A))
     static let chatBorder = dynamic(light: hex(0x202735, 0.10), dark: hex(0xEDF1F7, 0.12))
     static let chatUser = dynamic(light: hex(0xEEEDEA), dark: hex(0x303033))
+    // Raised chat surfaces (composer, floating buttons): a close contact shadow and a soft far one.
+    static let raiseNear = dynamic(light: hex(0x162238, 0.08), dark: NSColor(white: 0, alpha: 0.30))
+    static let raiseFar = dynamic(light: hex(0x162238, 0.10), dark: NSColor(white: 0, alpha: 0.40))
 
     // Sage outside the chat
     static let well = dynamic(light: hex(0x86AD94, 0.20), dark: hex(0x86AD94, 0.11))
@@ -71,6 +75,9 @@ enum Theme {
     static let folderA = dynamic(light: hex(0x79B8F3), dark: hex(0x3F8FE0))
     static let folderB = dynamic(light: hex(0xA4D0FA), dark: hex(0x69AAF0))
     static let shadowInk = dynamic(light: hex(0x162238), dark: NSColor.black)
+
+    /// Hover, press and focus changes: quick out, soft landing (Astryx's standard curve).
+    static let quick = Animation.timingCurve(0.24, 1, 0.4, 1, duration: 0.15)
 
     // Material tint over the glass
     static let materialTint = dyn(NSColor(srgbRed: 249 / 255, green: 250 / 255, blue: 248 / 255, alpha: 0.74),

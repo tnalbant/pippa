@@ -681,31 +681,27 @@ struct ConversationWorkspace: View {
                     }
                     .onSubmit { model.route(model.query) }.padding(.vertical, 8)
                 if UserDefaults.standard.bool(forKey: Dictation.enabledKey) { DictationButton(dictation: model.dictation) }
+                // Send and Stop share one circle in the same place, so the row never jumps between the two.
                 if chat.isRunning {
-                    Button { model.stopChat() } label: {
-                        Label(T("Stop Answering", table: "Views"), systemImage: "stop.fill")
-                            .font(.scaled(size: 12, weight: .medium))
-                            .padding(.horizontal, 10).frame(height: 32)
-                            .background(Theme.fill2, in: Capsule())
-                    }
-                        .buttonStyle(.plain).accessibilityLabel(T("Stop Answering", table: "Views"))
+                    Button { model.stopChat() } label: { Image(systemName: "stop.fill").font(.scaled(size: 11, weight: .bold)) }
+                        .buttonStyle(ComposerCircleStyle(primary: false)).accessibilityLabel(T("Stop Answering", table: "Views"))
                         .help(T("Stop Answering", table: "Views") + "  ⌘.")
                         .keyboardShortcut(".", modifiers: .command)
                 } else {
                     // While Pippa is working: queue it, the message is handled afterwards.
-                    Button { model.route(model.query) } label: { Image(systemName: "arrow.up").fontWeight(.semibold).frame(width: 32, height: 32) }
-                        .pippa(.primary).accessibilityLabel(model.isActiveWork ? T("Send When Ready", table: "Views") : T("Send Message", table: "Views"))
+                    Button { model.route(model.query) } label: { Image(systemName: "arrow.up").font(.scaled(size: 14, weight: .bold)) }
+                        .buttonStyle(ComposerCircleStyle(primary: true))
+                        .accessibilityLabel(model.isActiveWork ? T("Send When Ready", table: "Views") : T("Send Message", table: "Views"))
                         .accessibilityHint(model.sendBlockedReason(for: model.query) ?? "")
                         .help(model.sendBlockedReason(for: model.query) ?? (model.isActiveWork ? T("Send when ready · up next", table: "Views") : T("Send Message", table: "Views")))
                         .disabled((!model.isActiveWork && model.sendBlockedReason(for: model.query) != nil)
                                   || model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-            }.padding(8).background(Theme.chatCard, in: RoundedRectangle(cornerRadius: 18))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 18)
-                        .strokeBorder(focused ? Theme.accent.opacity(0.4) : Theme.chatBorder, lineWidth: 1)
-                        .allowsHitTesting(false)
-                }
+            }
+                // Concentric: radius 24 − padding 8 = 16, the radius of the 32 pt send circle inside.
+                .padding(8)
+                .raised(in: RoundedRectangle(cornerRadius: 24, style: .continuous), lifted: focused)
+                .animation(reduceMotion ? nil : Theme.quick, value: focused)
             if let error = chat.error, chat.current?.messages.last?.text != error {
                 Text(error).font(Fonts.hint).foregroundStyle(Theme.ink2)
             }
@@ -771,29 +767,66 @@ struct KnowledgeStatus: View {
 
 /// Round "back down" button, centered above the composer while the person reads further up.
 /// While an answer is still arriving below, the arrow takes the accent color: there is something new to see.
+/// The composer's action circle: Send in the accent, Stop on a quiet fill. Same size and place for both.
+private struct ComposerCircleStyle: ButtonStyle {
+    var primary: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        CircleBody(configuration: configuration, primary: primary)
+    }
+
+    private struct CircleBody: View {
+        let configuration: Configuration
+        let primary: Bool
+        @Environment(\.isEnabled) private var enabled
+        private let hoverState = State(initialValue: false)
+        private var hover: Bool { get { hoverState.wrappedValue } nonmutating set { hoverState.wrappedValue = newValue } }
+
+        var body: some View {
+            let active = configuration.isPressed || hover
+            configuration.label
+                .foregroundStyle(primary ? Color.white : Theme.ink)
+                .frame(width: 32, height: 32)
+                .background(Circle().fill(primary ? (active ? Theme.accentPress : Theme.accentFill) : (active ? Theme.fill3 : Theme.fill2)))
+                .contentShape(Circle())
+                .opacity(enabled ? 1 : 0.5)
+                .onHover { hover = $0 }
+                .animation(Theme.quick, value: active)
+        }
+    }
+}
+
 private struct JumpToLatestButton: View {
     var arriving: Bool
     var action: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    private var reduceMotion: Bool { systemReduceMotion || MarkHub.shared.reduced }
     private let hoverState = State(initialValue: false)
     private var hover: Bool { get { hoverState.wrappedValue } nonmutating set { hoverState.wrappedValue = newValue } }
 
     var body: some View {
+        // While an answer arrives below, the circle widens into a labelled pill, so it says why it is worth a click.
         Button(action: action) {
-            Image(systemName: "arrow.down")
-                .font(.scaled(size: 13, weight: .semibold))
-                .foregroundStyle(arriving ? Theme.accent : hover ? Theme.ink : Theme.ink2)
-                .frame(width: 34, height: 34)
-                .background(Circle().fill(hover ? Theme.fill2 : .clear))
-                .background(Circle().fill(Theme.chatCard))
-                .overlay(Circle().strokeBorder(Theme.chatBorder, lineWidth: 0.5))
-                .shadow(color: Theme.shadowInk.opacity(0.10), radius: 1, y: 0.5)
-                .shadow(color: Theme.shadowInk.opacity(0.16), radius: 8, y: 4)
-                .contentShape(Circle())
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.down").font(.scaled(size: 13, weight: .semibold))
+                if arriving {
+                    Text(T("New Answer", table: "Views")).font(.scaled(size: 12.5, weight: .semibold)).lineLimit(1).fixedSize()
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .leading)))
+                }
+            }
+            .foregroundStyle(arriving ? Theme.accent : hover ? Theme.ink : Theme.ink2)
+            .padding(.horizontal, arriving ? 13 : 0)
+            .frame(minWidth: 34, minHeight: 34)
+            .background(Capsule().fill(hover ? Theme.fill2 : .clear))
+            .raised(in: Capsule(), lifted: hover)
+            .contentShape(Capsule())
+            .animation(reduceMotion ? nil : Theme.quick, value: arriving)
+            .animation(reduceMotion ? nil : Theme.quick, value: hover)
         }
         .buttonStyle(.plain)
         .onHover { hover = $0 }
         .help(T("Jump to Latest", table: "Views"))
-        .accessibilityLabel(T("Jump to Latest", table: "Views"))
+        .accessibilityLabel(arriving ? T("New Answer", table: "Views") + ", " + T("Jump to Latest", table: "Views") : T("Jump to Latest", table: "Views"))
     }
 }
 

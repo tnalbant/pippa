@@ -156,9 +156,10 @@ struct StepChip: View {
         HStack(spacing: 7) {
             StepPicture(symbol: bubble.failed ? "exclamationmark" : StepRow.symbol(bubble.kind),
                         color: StepPicture.color(bubble.kind, failed: bubble.failed), size: 20)
+            // One text colour throughout: the state slot at the end says running or done, not the words.
             Text(bubble.outcome.map { bubble.text + " · " + $0 } ?? bubble.text)
                 .lineLimit(1).truncationMode(.middle).layoutPriority(1)
-                .foregroundStyle(bubble.running ? Theme.ink : Theme.ink2)
+                .foregroundStyle(Theme.ink2)
                 .contentTransition(reduceMotion ? .opacity : .interpolate)
             if bubble.count > 1 {
                 Text(verbatim: "×\(bubble.count)")
@@ -171,19 +172,28 @@ struct StepChip: View {
             if !bubble.running, let duration = WorkStep.duration(bubble.seconds) {
                 Text(duration).font(Fonts.hint.monospacedDigit()).foregroundStyle(Theme.ink3).lineLimit(1).fixedSize()
             }
-            if found {
-                Image(systemName: "checkmark").font(.scaled(size: 10, weight: .heavy)).foregroundStyle(Theme.ok)
-                    .transition(reduceMotion ? .opacity : .scale(scale: 0.1).combined(with: .opacity))
+            // A fixed slot for the state: a small spinner while running, a check once found. A failed step already
+            // shows it in its picture. The slot keeps its width, so the chip does not jump when the step finishes.
+            ZStack {
+                if bubble.running {
+                    if reduceMotion {
+                        Image(systemName: "ellipsis").font(.scaled(size: 10, weight: .bold)).foregroundStyle(Theme.ink3)
+                    } else {
+                        ProgressView().controlSize(.mini).scaleEffect(0.8)
+                    }
+                } else if found {
+                    Image(systemName: "checkmark").font(.scaled(size: 10, weight: .heavy)).foregroundStyle(Theme.ok)
+                        .transition(reduceMotion ? .opacity : .scale(scale: 0.1).combined(with: .opacity))
+                }
             }
+            .frame(width: 12, height: 12)
+            .accessibilityHidden(true)
         }
         .font(.scaled(size: 13, weight: .semibold, design: .rounded))
         .padding(.leading, 5).padding(.trailing, 12).frame(minHeight: 30)
-        .background {
-            Capsule().fill(Theme.chatCard)
-            if found { Capsule().fill(Theme.okTint) }
-        }
+        // Quiet on purpose: the answer is the point, the steps are context. No drop shadow, no green wash.
+        .background(Capsule().fill(Theme.chatCard))
         .overlay { Capsule().strokeBorder(Theme.chatBorder, lineWidth: 0.5) }
-        .shadow(color: Theme.shadowInk.opacity(0.06), radius: 4, y: 1)
         .animation(reduceMotion ? nil : .spring(response: 0.45, dampingFraction: 0.8), value: bubble)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel([bubble.spoken, bubble.running ? nil : WorkStep.duration(bubble.seconds)].compactMap { $0 }.joined(separator: ", "))

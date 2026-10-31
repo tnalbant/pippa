@@ -13,7 +13,8 @@ theme mirrors the dark values; Pippa's `Theme.fill*` tokens already work the sam
 **Baseline.** Pippa as on `release/0.3.18`. The thought line (twelve-dot `DotPulseView`, phase note, reasoning
 disclosure, step chips with durations, the folded work receipt) stays the basis. Astryx only tunes how it looks.
 
-Status of this document: proposal. Nothing is implemented; the items in [Priorities](#priorities) wait for a pick.
+Status: items 1–5 of [Priorities](#priorities) are implemented (see [Implemented](#implemented)); the rest wait
+for a pick.
 
 ## What Astryx does, component by component
 
@@ -246,3 +247,16 @@ review across surfaces.
 
 Recommended first batch: **1–5**. They are independent, each touches one or two files, and together they carry most of
 the Astryx feel (round raised composer, one action circle, calm steps, neutral surfaces) without moving any layout.
+
+## Implemented
+
+Items 1–5, with these deviations from the text above:
+
+- **Composer padding stays 8**, not 12, so the concentric rule gives the 32 pt send circle exactly (24 − 8 = 16).
+- **No separate keyboard-focus ring.** SwiftUI cannot tell keyboard from pointer focus on a text field; the shadow
+  lift and the caret mark focus for both.
+- **The step state sits at the end of the chip, not the start.** The leading place already holds the step's picture,
+  which shows a failed step; a second leading glyph would stack two circles. The end slot has a fixed width, so the
+  chip keeps its size when the spinner turns into the check. Under Reduce Motion the spinner is a static ellipsis.
+- **Motion:** only `Theme.quick` (the arrival curve, 150 ms) was added, for the send circle, the composer lift and the
+  scroll button. `Motion.exit` and the rest of item 8 are still open.
