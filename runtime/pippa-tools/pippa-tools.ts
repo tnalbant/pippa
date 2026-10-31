@@ -12,6 +12,8 @@
  *   call, grouped by target (`groups: [{into: "Bilder", files: [...]}]`). Never overwrites. One call instead of one
  *   model turn per file (r7: 16 turns, 211 s for 15 files); one tool instead of two (fewer declaration tokens).
  * - `move_to_trash`: to the trash, never permanently delete.
+ * - `applescript`: Mac apps through AppleScript (applescript.ts): reads at once, changes only after the person's OK,
+ *   never sending, shell or emptying the Trash.
  * - `bash`: Pi's own shell tool, run inside a macOS sandbox (shell.ts): every program, but writing outside Pippa's
  *   working folder and the internet require the person's OK; generic app control stays blocked. Never deletes for good.
  *
@@ -36,6 +38,7 @@ import { exists, folderLabel, moveOne, planMoves, resolvePath } from "./files.ts
 import { search } from "./search.mjs";
 import { shellTool } from "./shell.ts";
 import { listFolder } from "./list-folder.ts";
+import { applescriptTool } from "./applescript.ts";
 
 type ExtensionAPI = any;
 
@@ -75,6 +78,7 @@ export default function (pi: ExtensionAPI) {
 	const shell = shellTool(createBashToolDefinition, { keep: backups ? (file) => backUp(file, backups) : undefined });
 	pi.on("agent_start", () => shell.resetAnswer());
 	pi.registerTool(shell.definition(process.cwd()));
+	pi.registerTool(applescriptTool());
 	// One result must not fill a 16k window (Pi's read and bash allow 50 KB, ~14k tokens).
 	pi.on("tool_result", (event: any, ctx: any) => {
 		const content = capResult(String(event?.toolName ?? ""), event?.content, resultLimit(ctx?.model?.contextWindow));
