@@ -3,10 +3,12 @@
 Astryx is Meta's React design system (`@astryxdesign/core`). Pippa is SwiftUI, so this study takes only the visual
 language: radii, spacing, surface contrast, type, state changes and motion. No code is ported.
 
-**Source.** The Chat pages at <https://astryx.atmeta.com/components/ChatComposer> and siblings, `@astryxdesign/core`
-v0.7.5, read on 2026-10-31. All numbers below are computed styles measured in the docs' live demos (dark theme), not
-values guessed from screenshots. Astryx builds its neutrals from white/black at low alpha, so its light theme mirrors
-the dark values; Pippa's `Theme.fill*` tokens already work the same way.
+**Sources.** The Chat pages at <https://astryx.atmeta.com/components/ChatComposer> and siblings, `@astryxdesign/core`
+v0.7.5, read on 2026-10-31. The numbers below are computed styles measured in the docs' live demos (dark theme), not
+values guessed from screenshots. They were then checked against the MIT-licensed source at
+<https://github.com/meta/astryx> (`packages/core/src/Chat/*.tsx`, `packages/core/src/theme/tokens.stylex.ts`); see
+[What the source adds](#what-the-source-adds). Astryx builds its neutrals from white/black at low alpha, so its light
+theme mirrors the dark values; Pippa's `Theme.fill*` tokens already work the same way.
 
 **Baseline.** Pippa as on `release/0.3.18`. The thought line (twelve-dot `DotPulseView`, phase note, reasoning
 disclosure, step chips with durations, the folded work receipt) stays the basis. Astryx only tunes how it looks.
@@ -85,6 +87,31 @@ Status of this document: proposal. Nothing is implemented; the items in [Priorit
   sits in a code block, radius 10, darker than the page, 1 px hairline.
 - Colour is reserved for state (green/red glyphs, diff numbers). Text never changes colour.
 
+## What the source adds
+
+The repository confirms the measurements and explains the reasoning behind several of them. These points change or
+sharpen the recommendations below.
+
+- **A separate chat radius.** `--radius-chat` (28 px) is its own token "so chat rounding can be themed
+  independently": chat surfaces (bubbles, composer, drawer) are *intentionally rounder than cards in the same view*.
+  The rest of the scale is small and regular: inner 4, element 8, container 12, page 28, full 9999.
+- **Concentric radius.** Inside the composer, buttons take `max(8, outer radius − padding)`: 28 − 12 = 16, which makes
+  the 32 px send button a circle *because of* the shell, not by its own rule.
+- **Focus is elevation, not a ring.** The raised composer sits at `--shadow-low` and bumps to `--shadow-med` on hover
+  and focus. The focus *ring* only appears for keyboard focus; clicking into the field adds none.
+- **Motion tokens.** Defaults are fast **175 ms** (min 130, max 230), medium **410 ms**, slow **975 ms**.
+  `--ease-standard` = `cubic-bezier(0.24, 1, 0.4, 1)` for arrivals and state changes; `--ease-exit` =
+  `cubic-bezier(0.3, 0, 0.6, 0.6)` for things leaving. (The docs site runs a slightly faster theme, hence the 125 ms
+  measured above.) Composer shadow uses fast; the scroll button's appear/expand (opacity, transform, `max-width`) uses
+  fast-max; a tool-call row opens with a height reveal at medium; its chevron turns at fast.
+- **Tool calls.** Pending and running both show a subtle spinner; complete and error swap in a semantic icon. With
+  several calls the collapsed header *is* the latest call plus the count, not a separate summary line. Duration shows
+  only once complete.
+- **Dictation bars.** Five bars, 2.5 px wide with 2 px gaps, 18 px tall at most, never below 8 % height, in the accent
+  colour, blending toward the error colour when the input clips. Reduce Motion drops the transition to 0 s.
+- **Send button.** Size `md` by default (an `sm` exists); Send is `primary` with `arrowUp`, Stop is `secondary` with
+  `stop`, both from the icon registry, swappable per product.
+
 ## Mapping onto Pippa
 
 Decision key: **adopt** = take as is, **adapt** = take the idea in Pippa's terms, **skip** = not for Pippa.
@@ -94,7 +121,8 @@ Decision key: **adopt** = take as is, **adapt** = take the idea in Pippa's terms
 | Trait | Decision | Why |
 |---|---|---|
 | Radius 28, padding 12 | **Adapt**: radius 24 continuous, padding 10–12 | Pippa's window is 700 pt wide with 14.5 pt type; 28 reads as a pill at one line, 24 keeps it soft but still a field. |
-| Raised: shadow + inset hairline, no border | **Adapt** | Replaces the 1 pt `chatBorder` outline. Keep a focus cue, but as a softer accent inset (`accent 0.25`) instead of the current outer 1 pt `accent 0.4` stroke. |
+| Raised: shadow + inset hairline, no border | **Adapt** | Replaces the 1 pt `chatBorder` outline. Follow the source: focus raises the shadow one step instead of drawing the current outer 1 pt `accent 0.4` stroke. Keep an accent ring only for keyboard focus (Full Keyboard Access). |
+| Concentric inner radius | **Adopt** | Inner controls take outer radius − padding (24 − 8 = 16 → the 32 pt send circle). One rule instead of per-button radii. |
 | Two rows: input, then footer with actions | **Adapt** | Input gets the full width; `+` (add files), mic and Send move to a footer row. Fixes the `+` sitting baseline-aligned left of a multi-line field. |
 | Drawer behind the body for context | **Adapt** | `FrontAppChip`, `composerAttachments`, pending drops and `DictationStrip` currently stack loosely above the field (`VStack(spacing: 8)`). One drawer tucked under the body ties them to the message they belong to. |
 | Collapsible drawer with count | **Skip for now** | Pippa rarely carries more than a few files; revisit if folders of files land here. |
@@ -111,7 +139,7 @@ Decision key: **adopt** = take as is, **adapt** = take the idea in Pippa's terms
 | Stop = secondary fill + square | **Adopt** | `Theme.fill2` disc with `stop.fill`. |
 | Disabled = 0.5 | **Adopt** (close) | `PippaButtonStyle` uses 0.4; 0.5 on the circle reads better on the blue. |
 | Mic as ghost button next to Send | **Adopt** (already there) | `DictationButton` is 28 × 32 ghost; align to 32 × 32. |
-| Listening = level bars in the button | **Adapt** | Replace `mic.fill` with three to five bars driven by the input level `Dictation` already has, or, if no level is exposed, a gentle idle wave. Reduce Motion: static bars. |
+| Listening = level bars in the button | **Adapt** | Replace `mic.fill` with five accent bars (Astryx: 2.5 pt wide, 2 pt gaps, 18 pt tall, never below 8 %). `Dictation` publishes no level yet: it needs an RMS value computed in the existing audio tap (`App/Dictation.swift`, `installTap`), throttled to ~15 Hz like `DotPulseView`. Skip the clip-to-red blend. Reduce Motion: static bars. |
 | Interim text as ghost text in the field | **Skip** | Pippa's strip with "⏎ inserts · esc discards" is clearer about what happens; it moves into the drawer instead. |
 
 ### Messages (`plainMessageView`, `ConversationWorkspace.swift:491`)
@@ -144,7 +172,8 @@ earlier steps", the folded receipt. Astryx changes only the *weight* of the step
 | Trait | Decision | Why |
 |---|---|---|
 | Flat rows, no chip | **Adapt** | `StepChip` is a 30 pt capsule with card fill, hairline, drop shadow and, once done, an `okTint` wash. Four of them stacked is the loudest thing on screen while the answer is the point. Keep the capsule but drop the shadow and the green wash; done = the check glyph only. (Full flattening into `StepRow`-style rows is the L option below.) |
-| Status glyph per state | **Adapt** | Running steps show nothing extra today; done gets a check at the end. Move state to a fixed leading slot: running = small ring/spinner, done = check, failed = `exclamationmark` in `need`. Same slot in `StepRow` in the receipt. |
+| Status glyph per state | **Adapt** | Running steps show nothing extra today; done gets a check at the end. Move state to a fixed leading slot: running = small subtle spinner (Astryx uses the same spinner for pending and running), done = check, failed = `exclamationmark` in `need`. Same slot in `StepRow` in the receipt. The twelve-dot sign stays the one sign for the whole answer; the slot is per step. |
+| Collapsed group = latest call + count | **Adapt** | "N earlier steps" already folds older chips. Astryx folds into the latest row itself; Pippa keeps four visible, which reads better for slow local steps. Keep, but align the wording and chevron. |
 | Colour only for state | **Adopt** | Running text switches `ink` → `ink2` when done; keep the text one colour and let the glyph carry it. |
 | Monospace tool names | **Skip** | Pippa says "Read the contract", not `read`. Everyday words are a product decision. |
 | Target + duration trailing | **Adopt** (already there) | Durations landed in 0.3.18; keep them trailing, monospaced digits. |
@@ -168,7 +197,8 @@ earlier steps", the folded receipt. Astryx changes only the *weight* of the step
 | Trait | Decision | Why |
 |---|---|---|
 | Pure neutral greys | **Adapt** | Dark `chatCard` is `#232833`, blue-tinted, while `chatTint` (`#1B1B1D`) and `chatUser` (`#303033`) are neutral. Composer, step chips and receipts therefore look bluish against a neutral window. Make dark `chatCard` neutral (around `#262628`). Light mode is already neutral white. |
-| One "quick" curve for hover/press | **Adopt** | Astryx uses 125 ms `cubic-bezier(0.24, 1, 0.4, 1)` for every state change. Pippa mixes `easeOut(0.15)` and springs. Add `Motion.quick = .timingCurve(0.24, 1, 0.4, 1, duration: 0.125)` for hover and press; springs stay for layout. |
+| Named motion curves | **Adopt** | Astryx uses one arrival curve, `cubic-bezier(0.24, 1, 0.4, 1)`, for every state change, and a separate exit curve. Pippa mixes `easeOut(0.15)`, `easeOut(0.3)` and springs. Add `Motion.quick = .timingCurve(0.24, 1, 0.4, 1, duration: 0.15)` for hover, press and colour changes and `Motion.exit = .timingCurve(0.3, 0, 0.6, 0.6, duration: 0.15)` for things leaving. Springs stay for layout and the shell. |
+| Small regular radius scale + separate chat radius | **Adapt** | Pippa's views use 15 different corner radii (1.4 to 26; 8, 12, 14, 16 and 18 most often). Introduce `Radius.inner 4 / element 8 / container 12 / chat 20–24` and move views onto it as they are touched. Chat surfaces (composer, user bubble) stay rounder than cards, as in Astryx. |
 | Elevation shadow pair | **Adopt** | A `raised` modifier (`shadowInk` 0.10 r1 y0.5 + 0.16 r8 y4, inset hairline) already exists ad hoc on `JumpToLatestButton`; name it and use it for the composer too. |
 | Figtree, 14/20 type | **Skip** | Pippa uses SF with its own scaled sizes; 14.5/15 pt body suits macOS reading distance. |
 
@@ -176,7 +206,8 @@ earlier steps", the folded receipt. Astryx changes only the *weight* of the step
 
 | Element | Before (0.3.18) | After (proposed) |
 |---|---|---|
-| Composer body | radius 18, padding 8, `chatCard` + 1 pt `chatBorder`, focus = 1 pt accent 0.4 stroke | radius 24 continuous, padding 12, `raised` shadow + inset hairline, focus = soft accent inset |
+| Composer body | radius 18, padding 8, `chatCard` + 1 pt `chatBorder`, focus = 1 pt accent 0.4 stroke | radius 24 continuous, padding 8–12, `raised` shadow + inset hairline, focus = shadow one step up (ring only for keyboard focus) |
+| Corner radii | 15 different values across the views | `Radius` scale 4 / 8 / 12 + chat 20–24, adopted as views are touched |
 | Composer rows | one row: `+` · field · mic · send | field full width; footer row: `+` … mic · send |
 | Context above field | front-app chip, file chips, drops, dictation strip stacked loosely | one drawer tucked behind the body |
 | Send | blue capsule ≈ 64 × 34 | blue 32 pt circle, `arrow.up` |
@@ -188,7 +219,7 @@ earlier steps", the folded receipt. Astryx changes only the *weight* of the step
 | Step chip | capsule, card fill, hairline, shadow, green wash when done, check at the end | capsule, card fill, hairline; state glyph in a fixed leading slot; no shadow, no wash |
 | Scroll button on new content | turns accent | widens to "New answer ↓" |
 | Dark `chatCard` | `#232833` (blue cast) | neutral, around `#262628` |
-| Hover/press motion | mixed `easeOut(0.15)` and springs | one `Motion.quick` curve |
+| Hover/press motion | mixed `easeOut(0.15)` and springs | `Motion.quick` for arrivals and state, `Motion.exit` for leaving |
 
 ## Priorities
 
@@ -196,19 +227,21 @@ Size: **S** ≈ one view, under an hour; **M** ≈ several views or a new compon
 review across surfaces.
 
 1. **S · Send/Stop as one 32 pt circle.** Biggest visible win per line changed; ends the footer jump between states.
-2. **S · Composer surface.** Radius 24, padding 12, `raised` shadow + inset hairline instead of the outline; softer focus.
+2. **S · Composer surface.** Radius 24, `raised` shadow + inset hairline instead of the outline; focus lifts the
+   shadow instead of drawing an accent stroke; inner controls follow the concentric radius.
 3. **S · Neutral dark `chatCard`.** One token; removes the blue cast from composer, chips and receipts. Check every
    `chatCard` user in snapshots.
 4. **S · Quieter step chips.** Drop shadow and green wash; state glyph in a fixed leading slot. Prima basis untouched.
 5. **S · Scroll button label on new content.** "New answer ↓" while Pippa answers off-screen.
 6. S · User bubble radius/padding/max width.
 7. S · Centered system notices.
-8. S · `Motion.quick` token for hover and press.
+8. S · `Motion.quick` / `Motion.exit` curves for hover, press, appear and leave.
 9. M · Two-row composer with footer actions.
 10. M · Composer drawer for front app, files, drops and dictation.
 11. M · Metadata line below messages with hover copy / ask again.
-12. M · Dictation level bars.
-13. L · Full flattening of running steps into Astryx-style rows (chips become rows like `StepRow`). Only if 4 is not
+12. M · Dictation level bars (needs a level from the audio tap).
+13. M · `Radius` scale with a separate chat radius; views move onto it as they are touched.
+14. L · Full flattening of running steps into Astryx-style rows (chips become rows like `StepRow`). Only if 4 is not
     calm enough.
 
 Recommended first batch: **1–5**. They are independent, each touches one or two files, and together they carry most of
