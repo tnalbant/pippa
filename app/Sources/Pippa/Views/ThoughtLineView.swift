@@ -179,7 +179,7 @@ struct StepChip: View {
                     if reduceMotion {
                         Image(systemName: "ellipsis").font(.scaled(size: 10, weight: .bold)).foregroundStyle(Theme.ink3)
                     } else {
-                        ProgressView().controlSize(.mini).scaleEffect(0.8)
+                        StepSpinner()
                     }
                 } else if found {
                     Image(systemName: "checkmark").font(.scaled(size: 10, weight: .heavy)).foregroundStyle(Theme.ok)
@@ -563,4 +563,19 @@ struct PermissionRepairControl: View {
 
     /// Shared with the real-controller fixture: exercise the same button action without opening real Settings.
     func openSettings() { onOpen(target) }
+}
+
+/// The running step's state: a small arc in the chip's text colour. The system mini spinner is too pale on a chip.
+private struct StepSpinner: View {
+    private let turningState = State(initialValue: false)
+    private var turning: Bool { get { turningState.wrappedValue } nonmutating set { turningState.wrappedValue = newValue } }
+
+    var body: some View {
+        Circle()
+            .trim(from: 0, to: 0.72)
+            .stroke(Theme.ink2, style: StrokeStyle(lineWidth: 1.75, lineCap: .round))
+            .frame(width: 10, height: 10)
+            .rotationEffect(.degrees(turning ? 360 : 0))
+            .onAppear { withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) { turning = true } }
+    }
 }
