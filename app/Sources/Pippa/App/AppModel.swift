@@ -58,6 +58,9 @@ final class AppModel: ObservableObject {
     @Published private(set) var context: WorkContext?
     /// The last file/text task stays reachable for follow-ups.
     @Published private(set) var taskCard: ShellMode?
+    /// The receipt of a notice card: only a notice for something Pippa did (sorted, filed, entered) is work Pi may build
+    /// on. An update notice or a refusal has none and stays out of `workflowSummary`.
+    private var taskCardReceipt: UUID?
     @Published private(set) var dropTargeted = false
     struct PendingDrop {
         let payload: DropPayload
@@ -608,6 +611,7 @@ final class AppModel: ObservableObject {
         switch mode {
         case .overview, .sortSheet, .deadlines, .entryPreview, .notice:
             taskCard = mode
+            if case .notice = mode { taskCardReceipt = receipt } else { taskCardReceipt = nil }
         default: break
         }
         if recordResult {
@@ -910,27 +914,27 @@ final class AppModel: ObservableObject {
     }
 
     private func resetFileWork() {
-        taskCard = nil; plan = nil; deadlines = []; lastOverview = nil; parked = nil
+        taskCard = nil; taskCardReceipt = nil; plan = nil; deadlines = []; lastOverview = nil; parked = nil
         entryDraft = nil; entryDeadline = nil; excluded = []; deadlineSender = nil
     }
 
     /// Open preview, overview or receipt per conversation: kept when switching (while Pippa is running).
     private struct FileWork {
-        var taskCard: ShellMode?, plan: Plan?, excluded: Set<UUID>
+        var taskCard: ShellMode?, taskCardReceipt: UUID?, plan: Plan?, excluded: Set<UUID>
         var deadlines: [Deadline], lastOverview: Overview?, deadlineSender: String?
     }
     private var savedWork: [UUID: FileWork] = [:]
 
     private func stashFileWork() {
         guard let id = conversations.current?.id else { return }
-        savedWork[id] = FileWork(taskCard: taskCard, plan: plan, excluded: excluded,
+        savedWork[id] = FileWork(taskCard: taskCard, taskCardReceipt: taskCardReceipt, plan: plan, excluded: excluded,
                                  deadlines: deadlines, lastOverview: lastOverview, deadlineSender: deadlineSender)
     }
 
     private func restoreFileWork() {
         resetFileWork()
         guard let id = conversations.current?.id, let w = savedWork[id] else { return }
-        taskCard = w.taskCard; plan = w.plan; excluded = w.excluded
+        taskCard = w.taskCard; taskCardReceipt = w.taskCardReceipt; plan = w.plan; excluded = w.excluded
         deadlines = w.deadlines; lastOverview = w.lastOverview; deadlineSender = w.deadlineSender
     }
 
@@ -966,7 +970,7 @@ final class AppModel: ObservableObject {
             }
             if plan.ops.count > 40 { parts.append("Weitere Vorschauzeilen hier nicht enthalten.") }
         }
-        if case .notice(let title, let detail, _) = taskCard { parts.append("Bestätigtes Ergebnis: " + title + "\n" + detail) }
+        if case .notice(let title, let detail, _) = taskCard, taskCardReceipt != nil { parts.append("Bestätigtes Ergebnis: " + title + "\n" + detail) }
         return String(parts.joined(separator: "\n").prefix(12000))
     }
 
