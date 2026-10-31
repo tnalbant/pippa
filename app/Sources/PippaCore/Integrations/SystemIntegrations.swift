@@ -51,6 +51,10 @@ public final class SystemIntegrations: AppIntegrations, @unchecked Sendable {
     }
 
     public func selectedMail() async throws -> MailMessage? { try await MailScript.selected() }
+    public func findMail(subject: String, sender: String) async throws -> MailMessage? {
+        guard AppleEvents.isRunning(.mail) else { throw PippaError.appNotOpen(Integration.mail.appName) }
+        return try await MailScript.find(subject: subject, sender: sender)
+    }
 
     public func insertReply(_ draft: MailDraft) async throws -> MailInsertResult { try await MailReplyScript.insert(draft) }
 
@@ -390,7 +394,32 @@ enum MailScript {
         tell application id "com.apple.mail"
             set sel to selection
             if (count of sel) is 0 then return {}
-            set m to item 1 of sel
+            return my messageInfo(item 1 of sel)
+        end tell
+    end selectedMessage
+
+    on findInInbox(q, who)
+        tell application id "com.apple.mail"
+            with timeout of 20 seconds
+                set found to (messages of inbox whose subject is q)
+            end timeout
+            set best to missing value
+            repeat with m in found
+                if who is "" or (sender of m) contains who then
+                    if best is missing value then
+                        set best to contents of m
+                    else if (date received of m) > (date received of best) then
+                        set best to contents of m
+                    end if
+                end if
+            end repeat
+            if best is missing value then return {}
+            return my messageInfo(best)
+        end tell
+    end findInInbox
+
+    on messageInfo(m)
+        tell application id "com.apple.mail"
             set attachmentNames to {}
             repeat with a in (mail attachments of m)
                 set end of attachmentNames to (name of a)
@@ -420,23 +449,38 @@ enum MailScript {
                 end repeat
                 set theLocation to {acctName, boxPath, (id of m)}
             end try
-            return {subject of m, sender of m, date received of m, content of m, attachmentNames, theID, (reply to of m) as text, theLocation}
+            set theSource to ""
+            try
+                set theSource to (source of m) as text
+            end try
+            return {subject of m, sender of m, date received of m, content of m, attachmentNames, theID, (reply to of m) as text, theLocation, theSource}
         end tell
-    end selectedMessage
+    end messageInfo
     """
 
     static func selected() async throws -> MailMessage? {
         try await AppleEvents.perform { () throws -> MailMessage? in
-            let r = try AppleEvents.call(source, handler: "selectedMessage", app: .mail)
-            let parts = AppleEvents.items(r)
-            guard parts.count >= 5 else { return nil }
-            let rawID = parts.count >= 6 ? (parts[5].stringValue ?? "") : ""
-            let messageID: String? = rawID.isEmpty ? nil : rawID
-            let locator = parts.count >= 8 ? MailReplyScript.locator(ScriptValue(parts[7])) : nil
-            return MailMessage(subject: parts[0].stringValue ?? "", sender: parts[1].stringValue ?? "", date: parts[2].dateValue,
-                               body: parts[3].stringValue ?? "", attachmentNames: AppleEvents.strings(parts[4]), messageID: messageID,
-                               replyTo: parts.count >= 7 ? parts[6].stringValue : nil, locator: locator)
+            message(try AppleEvents.call(source, handler: "selectedMessage", app: .mail))
         }
+    }
+
+    static func find(subject: String, sender: String) async throws -> MailMessage? {
+        try await AppleEvents.perform { () throws -> MailMessage? in
+            message(try AppleEvents.call(source, handler: "findInInbox",
+                                         [NSAppleEventDescriptor(string: subject), NSAppleEventDescriptor(string: sender)], app: .mail))
+        }
+    }
+
+    static func message(_ r: NSAppleEventDescriptor) -> MailMessage? {
+        let parts = AppleEvents.items(r)
+        guard parts.count >= 5 else { return nil }
+        let rawID = parts.count >= 6 ? (parts[5].stringValue ?? "") : ""
+        let messageID: String? = rawID.isEmpty ? nil : rawID
+        let locator = parts.count >= 8 ? MailReplyScript.locator(ScriptValue(parts[7])) : nil
+        let source = parts.count >= 9 ? parts[8].stringValue : nil
+        return MailMessage(subject: parts[0].stringValue ?? "", sender: parts[1].stringValue ?? "", date: parts[2].dateValue,
+                           body: parts[3].stringValue ?? "", attachmentNames: AppleEvents.strings(parts[4]), messageID: messageID,
+                           replyTo: parts.count >= 7 ? parts[6].stringValue : nil, locator: locator, source: source)
     }
 }
 

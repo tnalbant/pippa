@@ -331,12 +331,22 @@ private final class PageResults: @unchecked Sendable {
 private struct UncheckedPDF: @unchecked Sendable { let doc: PDFDocument }
 private struct UncheckedImageRef: @unchecked Sendable { let image: CGImage? }
 
-/// Minimal MIME reader: header lines, first text/plain part (otherwise text/html), attachment names.
+/// Minimal MIME reader: header lines, first text/plain part (otherwise text/html), attachments.
 public enum MailParser {
     public struct Mail: Sendable {
         public var headers: [String: String]; public var body: String; public var attachments: [String]
         /// The message has an HTML part but no text/plain alternative: typical for designed bulk mail, rare for letters.
         public var htmlOnly = false
+        /// The attachments' decoded bytes, in the order of `attachments`; empty for a part that carries none (Pippa's
+        /// own name-only .eml before 0.3.20).
+        public var files: [Attachment] = []
+    }
+
+    public struct Attachment: Sendable, Equatable {
+        public var name: String
+        public var data: Data
+        /// Shown inside the text (`Content-Disposition: inline` with a Content-ID): signature logos and social icons.
+        public var inline: Bool
     }
 
     public static func parse(_ data: Data) -> Mail {
@@ -347,13 +357,14 @@ public enum MailParser {
         var plain: String?
         var html: String?
         var attachments: [String] = []
+        var files: [Attachment] = []
         let (headers, body) = splitPart(text)
-        walk(headers: headers, body: body, plain: &plain, html: &html, attachments: &attachments, depth: 0)
+        walk(headers: headers, body: body, plain: &plain, html: &html, attachments: &attachments, files: &files, depth: 0)
         var decoded: [String: String] = [:]
         for (k, v) in headers { decoded[k] = decodeWords(decode(bytes(v), charset: "utf-8")) }
         let bodyText = plain ?? html.map(TextReader.stripHTML) ?? ""
         return Mail(headers: decoded, body: bodyText.trimmingCharacters(in: .whitespacesAndNewlines), attachments: attachments,
-                    htmlOnly: plain == nil && html != nil)
+                    htmlOnly: plain == nil && html != nil, files: files)
     }
 
     static func splitPart(_ text: String) -> ([String: String], String) {
@@ -382,7 +393,8 @@ public enum MailParser {
         return nil
     }
 
-    static func walk(headers: [String: String], body: String, plain: inout String?, html: inout String?, attachments: inout [String], depth: Int) {
+    static func walk(headers: [String: String], body: String, plain: inout String?, html: inout String?, attachments: inout [String],
+                     files: inout [Attachment], depth: Int) {
         guard depth < 8 else { return }
         let contentType = headers["content-type"] ?? "text/plain"
         let lowerType = contentType.lowercased()
@@ -393,27 +405,27 @@ public enum MailParser {
                 if part.hasPrefix("--") { break }
                 let trimmed = part.hasPrefix("\n") ? String(part.dropFirst()) : part
                 let (h, b) = splitPart(trimmed)
-                walk(headers: h, body: b, plain: &plain, html: &html, attachments: &attachments, depth: depth + 1)
+                walk(headers: h, body: b, plain: &plain, html: &html, attachments: &attachments, files: &files, depth: depth + 1)
             }
             return
         }
         let filename = param("filename", in: disposition) ?? param("name", in: contentType)
+        let encoding = (headers["content-transfer-encoding"] ?? "").lowercased()
+        func content() -> Data {
+            if encoding.contains("base64") { return Data(base64Encoded: body.filter { !$0.isWhitespace }) ?? Data() }
+            if encoding.contains("quoted-printable") { return quotedPrintable(body) }
+            return Self.bytes(body)            // 7bit, 8bit, binary: the original bytes
+        }
         if disposition.lowercased().hasPrefix("attachment") || (filename != nil && !lowerType.hasPrefix("text/")) {
-            attachments.append(filename.map { decodeWords(decode(Self.bytes($0), charset: "utf-8")) } ?? "Anhang")
+            let name = filename.map { decodeWords(decode(Self.bytes($0), charset: "utf-8")) } ?? "Anhang"
+            attachments.append(name)
+            let inline = !disposition.lowercased().hasPrefix("attachment") && headers["content-id"] != nil
+            files.append(Attachment(name: name, data: content(), inline: inline))
             return
         }
         guard lowerType.hasPrefix("text/") else { return }
         let charset = param("charset", in: contentType)?.lowercased() ?? "utf-8"
-        let encoding = (headers["content-transfer-encoding"] ?? "").lowercased()
-        var bytes: Data
-        if encoding.contains("base64") {
-            bytes = Data(base64Encoded: body.filter { !$0.isWhitespace }) ?? Data()
-        } else if encoding.contains("quoted-printable") {
-            bytes = quotedPrintable(body)
-        } else {
-            bytes = Self.bytes(body)            // 7bit, 8bit, binary: the original bytes
-        }
-        let text = decode(bytes, charset: charset)
+        let text = decode(content(), charset: charset)
         if lowerType.hasPrefix("text/plain") { if plain == nil { plain = text } } else if lowerType.hasPrefix("text/html") { if html == nil { html = text } }
     }
 

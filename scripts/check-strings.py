@@ -67,6 +67,7 @@ DYNAMIC_KEYS: dict[tuple[str, str], frozenset[str]] = {
         "Moving files",
         "Reading %lld files",
         "Reading a document",
+        "Opening the mail",
         "Reading a file",
         "Reading a web page",
         "Reading the selected mail",

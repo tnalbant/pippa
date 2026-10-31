@@ -4,6 +4,7 @@
   when a reader could not read (no permission, app not open, error). The model passes them on.
   Key = the English text itself. Format: "English key" = "Translation";
 */
+"I couldn’t find this email in the inbox." = "Diese Mail finde ich im Posteingang nicht.";
 "No email is selected in Mail. Select one and ask again." = "In Mail ist keine Mail ausgewählt. Wähl eine aus und frag dann nochmal.";
 "No table is open in Excel. Open it, select the cells and ask again." = "In Excel ist keine Tabelle offen. Öffne sie, wähl die Zellen aus und frag dann nochmal.";
 "Open %@ first. Then ask again." = "Öffne zuerst %@. Dann frag nochmal.";
