@@ -64,4 +64,15 @@ extension View {
         background(Theme.chatCard, in: RoundedRectangle(cornerRadius: 16))
             .overlay { RoundedRectangle(cornerRadius: 16).strokeBorder(Theme.chatBorder, lineWidth: 0.5) }
     }
+
+    /// Raised chat surface: card fill, a fine inner edge and a two-step shadow instead of an outline. `lifted` (focus,
+    /// hover) raises the shadow one step. The shadow sits on the shape only, so text inside casts none.
+    func raised<S: InsettableShape>(in shape: S, lifted: Bool = false) -> some View {
+        background {
+            shape.fill(Theme.chatCard)
+                .shadow(color: Theme.raiseNear, radius: lifted ? 1.5 : 1, y: lifted ? 1 : 0.5)
+                .shadow(color: Theme.raiseFar.opacity(lifted ? 1 : 0.7), radius: lifted ? 12 : 7, y: lifted ? 5 : 3)
+        }
+        .overlay { shape.strokeBorder(Theme.chatBorder, lineWidth: 0.5).allowsHitTesting(false) }
+    }
 }
