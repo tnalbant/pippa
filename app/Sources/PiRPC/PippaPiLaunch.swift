@@ -1,7 +1,6 @@
 import Foundation
 
-/// How Pippa starts the real Pi. Applies to the Pippa window (PiRPCChat) and the probe program (PiRPCSpike),
-/// so both measure the same thing.
+/// How Pippa starts the real Pi: the one place that builds the command line for the app and for `Pippa --ask`.
 ///
 /// - Shared agent directory: `~/.pi/agent` as in the terminal. **No** `PI_CODING_AGENT_DIR` is set here;
 ///   only test scripts set one so ~/.pi stays untouched.
@@ -12,11 +11,10 @@ import Foundation
 ///   the counterpart of `defaultProjectTrust: "never"`, without touching the person's settings.
 /// - `--session-dir` in Pippa's support folder and `--session-id` per conversation (one Pi session per Pippa conversation).
 /// - `--system-prompt`: Pippa's own short prompt instead of "expert coding assistant"; fixed per language (prompt cache).
-/// - `--tools`: a fixed list (`tools`); `--no-skills --skill <bundle>`: bundled skills come first (Pi keeps the first of
-///   two same-named skills); skills the person saved with save_skill follow from `<support>/skills`, standard scope only.
-/// - Memory and context (pippa-memory.ts, pippa-context.ts): what Pippa knows about the person from `Paths.memoryFile`
-///   as its own prompt section, the `remember` tool, a quiet summary while the person reads, and a short handover into
-///   the session of a new topic. Without `memoryFile` (trial runs) nothing is kept beyond the process.
+/// - `--tools`: a fixed list (`tools`); `--no-skills --skill <bundle>`: only Pippa's bundled skills, never the ones the
+///   person installed for Pi in the terminal.
+/// - Memory (pippa-memory.ts): what Pippa knows about the person from `Paths.memoryFile` as its own prompt section and
+///   the `remember` tool. Without `memoryFile` (trial runs) nothing is kept beyond the process. Pi compacts sessions.
 public enum PippaPiLaunch {
     public struct Paths: Sendable {
         /// runtime/pippa-tools: pippa-tools.ts (search_files, list_folder, move_files), pippa-assist.ts (documents as
@@ -101,7 +99,7 @@ public enum PippaPiLaunch {
 
     /// The tools Pi declares to the model, named explicitly so the person's `defaultTools` cannot widen or narrow
     /// them (cli.md "Tools"). Pi's read/bash/write tools (not `edit`: exact text replacement is a coding tool; `write` and Pippa's document tools cover her tasks), Pippa's file tools (pippa-tools.ts), the web
-    /// (pi-web-access: search, read a page), Pippa's memory and saved skills (pippa-memory.ts, skill-save.ts) and Pippa's
+    /// (pi-web-access: search, read a page), Pippa's memory (pippa-memory.ts) and Pippa's
     /// MCP server. Names Pi does not know are ignored.
     public static let tools = ["read", "bash", "write", "search_files", "list_folder", "move_files", "remember",
                                "web_search", "fetch_content", "mcp__pippa__*"]

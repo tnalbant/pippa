@@ -59,12 +59,16 @@ import PiRPC
           && withMCP.environment["PIPPA_MCP_URL"] == "http://127.0.0.1:4711/mcp"
           && withMCP.environment["PIPPA_MCP_TOKEN"] == endpoint.token && withMCP.environment["PIPPA_MCP_EXPOSURE"] == "direct")
 
-    let refused: [String: Any] = ["content": [["type": "text", "text": "Not saved"]], "details": ["pippaSkill": "not_saved"]]
-    let saved: [String: Any] = ["content": [["type": "text", "text": "Saved."]],
-                                "details": ["pippaSkill": "saved", "file": "/fixture/skills/x/SKILL.md"]]
     let broken: [String: Any] = ["content": [["type": "text", "text": "EACCES"]]]
-    check("A save_skill refusal is a known no-effect outcome; a saved skill is done; a bare error stays a failure",
-          PiTurnReceipt.classify(tool: "save_skill", isError: true, result: refused) == .blocked
-          && PiTurnReceipt.classify(tool: "save_skill", isError: false, result: saved) == .done
-          && PiTurnReceipt.classify(tool: "save_skill", isError: true, result: broken) == .failed)
+    let moved: [String: Any] = ["content": [["type": "text", "text": "Moved a.pdf to the Trash."]], "details": ["trash": true]]
+    check("A tool's own error stays a failure; a finished move is done",
+          PiTurnReceipt.classify(tool: "move_files", isError: true, result: broken) == .failed
+          && PiTurnReceipt.classify(tool: "move_files", isError: false, result: moved) == .done)
+    var receipt = PiTurnReceipt()
+    for (id, to) in [("a", "/x/trash bin"), ("b", " Trash ")] {
+        receipt.observe(.toolStarted(id: id, name: "move_files", arguments: #"{"from":"/x/a.pdf","to":"\#(to)"}"#))
+        receipt.observe(.toolEnded(id: id, name: "move_files", isError: false, result: "Moved.", outcome: .done, fileAccessFailure: nil))
+    }
+    check("Only the word trash means the Trash; a folder whose name contains it is a move",
+          receipt.records.map(\.action) == ["move", "trash"])
 }

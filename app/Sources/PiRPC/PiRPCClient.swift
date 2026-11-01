@@ -120,7 +120,7 @@ public actor PiRPCClient {
     private var nextID = 0
     /// How many user messages have arrived in the current run: the first is the prompt itself, each further one delivered later.
     private var userMessagesInRun = 0
-    /// A summary runs between answers (pippa-context.ts compacts while the person reads). Pi refuses a prompt meanwhile.
+    /// Pi compacts a long session between answers. Pi refuses a prompt meanwhile.
     private var compacting = false
     private var nativeReadinessAttempt: UUID?
 
@@ -381,9 +381,8 @@ public actor PiRPCClient {
                                           error: message["errorMessage"] as? String))
         case "tool_execution_start":
             let name = record["toolName"] as? String ?? ""
-            // save_skill's receipt takes the name from its arguments, and in sorted JSON it follows the long steps.
             events?.yield(.toolStarted(id: record["toolCallId"] as? String ?? "", name: name,
-                                       arguments: Self.json(record["args"], valueLimit: name == "save_skill" ? 8_000 : Self.argumentValueLimit)))
+                                       arguments: Self.json(record["args"], valueLimit: Self.argumentValueLimit)))
         case "tool_execution_end":
             let payload = record["result"] as? [String: Any]
             let flag = record["isError"] as? NSNumber
