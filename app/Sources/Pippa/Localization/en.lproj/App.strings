@@ -112,7 +112,6 @@
 "Send" = "Send";
 "Show" = "Show";
 "Thinking…" = "Thinking…";
-"Thinking… %lld s" = "Thinking… %lld s";
 "Thought it through" = "Thought it through";
 "Today" = "Today";
 "What’s new in my Downloads folder?" = "What’s new in my Downloads folder?";
@@ -120,3 +119,11 @@
 "Yesterday" = "Yesterday";
 "Your conversations appear here." = "Your conversations appear here.";
 "Loading AI…" = "Loading AI…";
+"Drop something on me!" = "Drop something on me!";
+"Writing…" = "Writing…";
+"Loading my AI · %lld %%" = "Loading my AI · %lld %%";
+"Set up my AI" = "Set up my AI";
+"Your answer is ready" = "Your answer is ready";
+"That didn’t work" = "That didn’t work";
+"Working…" = "Working…";
+"%lld s" = "%lld s";

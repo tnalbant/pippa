@@ -42,8 +42,12 @@ final class ChatModel: ObservableObject {
     @Published var currentID: String?
     @Published var draft = ""
     @Published var attachments: [URL] = []
-    /// The app that was in front when Pippa was called, offered as a chip ("Mail"); Pi reads it with `front_read`.
-    @Published var frontApp: String?
+    /// The app that was in front when Pippa was called ("Mail"), told to Pi with the next question so "this mail"
+    /// works; Pi reads it with `front_read`. Not shown: most questions have nothing to do with it.
+    var frontApp: String?
+    /// An answer came in or failed while the chat window was not in front: the pill says so until the chat opens.
+    @Published var unseen: Unseen?
+    enum Unseen { case answer, failed }
     @Published private(set) var isAnswering = false
     /// When the running answer started, for the live "Thinking … 12 s".
     @Published private(set) var answerStarted: Date?
@@ -112,6 +116,7 @@ final class ChatModel: ObservableObject {
             }
             isAnswering = false
             answerStarted = nil
+            if !ChatWindow.shared.isKey { unseen = current?.messages.last?.error == nil ? .answer : .failed }
             save(id)
         }
     }

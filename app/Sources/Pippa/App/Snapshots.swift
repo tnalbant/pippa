@@ -24,7 +24,6 @@ enum Snapshots {
                 setup.showForSnapshot(.ready(adoptedFrom: nil))
                 chat.showSample(sampleConversations(), current: nil, answering: false)
                 chat.attachments = [URL(fileURLWithPath: "/Users/me/Desktop/Rechnung-Oktober.pdf"), URL(fileURLWithPath: "/Users/me/Desktop/IMG_2041.jpeg")]
-                chat.frontApp = "Mail"
             }),
         ]
         for (name, prepare) in scenes {
@@ -34,10 +33,16 @@ enum Snapshots {
                 let file = folder.appendingPathComponent("\(name)-\(dark ? "dark" : "light").png")
                 await render(view, size: NSSize(width: 1040, height: 720), dark: dark, to: file)
             }
-            chat.attachments = []; chat.frontApp = nil
+            chat.attachments = []
         }
         await render(SettingsView(settings: .shared, setup: setup), size: NSSize(width: 560, height: 640), dark: false, to: folder.appendingPathComponent("settings-light.png"))
-        await render(PillPreview(), size: NSSize(width: 120, height: 80), dark: false, to: folder.appendingPathComponent("pill.png"))
+        chat.showSample([], current: nil, answering: false)
+        await render(PillPreview(), size: NSSize(width: 300, height: 80), dark: false, to: folder.appendingPathComponent("pill-rest.png"))
+        chat.showSample(sampleConversations(answering: true), current: "c1", answering: true)
+        await render(PillPreview(), size: NSSize(width: 300, height: 80), dark: true, to: folder.appendingPathComponent("pill-working.png"))
+        chat.showSample(sampleConversations(), current: "c1", answering: false)
+        chat.unseen = .answer
+        await render(PillPreview(), size: NSSize(width: 300, height: 80), dark: false, to: folder.appendingPathComponent("pill.png"))
         print(folder.path)
         return 0
     }
@@ -61,7 +66,10 @@ enum Snapshots {
     }
 
     private struct PillPreview: View {
-        var body: some View { HStack { PillView(chat: .shared, setup: .shared) }.frame(width: 120, height: 80).background(Color.gray.opacity(0.3)) }
+        var body: some View {
+            HStack { PillView(chat: .shared, setup: .shared) }.frame(width: 300, height: 80)
+                .background(LinearGradient(colors: [.indigo.opacity(0.5), .teal.opacity(0.4)], startPoint: .leading, endPoint: .trailing))
+        }
     }
 
     private static func sampleConversations(answering: Bool = false, failed: Bool = false) -> [Conversation] {

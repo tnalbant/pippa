@@ -112,7 +112,6 @@
 "Send" = "Senden";
 "Show" = "Zeigen";
 "Thinking…" = "Denkt nach …";
-"Thinking… %lld s" = "Denkt nach … %lld s";
 "Thought it through" = "Nachgedacht";
 "Today" = "Heute";
 "What’s new in my Downloads folder?" = "Was ist neu in meinem Downloads-Ordner?";
@@ -120,3 +119,11 @@
 "Yesterday" = "Gestern";
 "Your conversations appear here." = "Hier erscheinen deine Gespräche.";
 "Loading AI…" = "KI wird geladen …";
+"Drop something on me!" = "Gib mir was!";
+"Writing…" = "Schreibt …";
+"Loading my AI · %lld %%" = "Lade meine KI · %lld %%";
+"Set up my AI" = "KI einrichten";
+"Your answer is ready" = "Deine Antwort ist da";
+"That didn’t work" = "Das hat nicht geklappt";
+"Working…" = "Arbeitet …";
+"%lld s" = "%lld s";

@@ -1,9 +1,13 @@
+import Combine
 import AppKit
 import PippaCore
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
+    /// The menu bar mark: still and single-colour at rest, turning while Pippa works.
+    private let menuMark = MarkNSView(size: 18, monochromeIdle: true)
+    private var markWatch: AnyCancellable?
     private var shuttingDown = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -26,7 +30,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func makeStatusItem() -> NSStatusItem {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(systemSymbolName: "circle.hexagongrid", accessibilityDescription: "Pippa")
+        if let button = item.button {
+            menuMark.frame = NSRect(x: (button.bounds.width - 18) / 2, y: (button.bounds.height - 18) / 2, width: 18, height: 18)
+            menuMark.autoresizingMask = [.minXMargin, .maxXMargin, .minYMargin, .maxYMargin]
+            button.addSubview(menuMark)
+            button.setAccessibilityLabel("Pippa")
+        }
+        markWatch = ChatModel.shared.$isAnswering.sink { [weak self] working in self?.menuMark.setState(working ? .arbeitet : .ruht) }
         let menu = NSMenu()
         menu.addItem(MenuAction.item(T("Ask Pippa", table: "App")) { AppActions.callPippa() })
         menu.addItem(MenuAction.item(T("New Conversation", table: "App")) { ChatModel.shared.newConversation(); ChatWindow.shared.show() })

@@ -24,6 +24,7 @@ final class ChatWindow {
         }
         NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
+        ChatModel.shared.unseen = nil
         PiSession.shared.preload()
     }
 
@@ -31,7 +32,8 @@ final class ChatWindow {
     func hide() { window?.orderOut(nil) }
 }
 
-/// The pill: a small floating mark that opens the chat and takes dropped files. A dot says what Pippa is doing.
+/// The pill: Pippa's living mark and one short line, floating at the edge of the screen. It opens the chat, takes
+/// dropped files and says what Pippa is doing ("Reading Lease.pdf"), and that an answer is ready.
 @MainActor
 final class Pill {
     static let shared = Pill()
@@ -45,7 +47,7 @@ final class Pill {
     func show() {
         guard isShown else { return }
         if panel == nil {
-            let size = NSSize(width: 52, height: 52)
+            let size = NSSize(width: 140, height: 64)
             let panel = NSPanel(contentRect: NSRect(origin: .zero, size: size), styleMask: [.nonactivatingPanel, .borderless],
                                 backing: .buffered, defer: false)
             panel.isFloatingPanel = true
@@ -53,16 +55,23 @@ final class Pill {
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             panel.backgroundColor = .clear
             panel.isOpaque = false
-            panel.hasShadow = true
+            panel.hasShadow = false
             panel.isMovableByWindowBackground = true
             panel.contentView = NSHostingView(rootView: PillView(chat: .shared, setup: .shared))
             if let screen = NSScreen.main?.visibleFrame {
-                panel.setFrameOrigin(NSPoint(x: screen.maxX - size.width - 24, y: screen.minY + 24))
+                panel.setFrameOrigin(NSPoint(x: screen.maxX - size.width - 16, y: screen.minY + 16))
             }
             panel.setFrameAutosaveName("PippaPill")
             self.panel = panel
         }
         panel?.orderFrontRegardless()
+    }
+
+    /// The line grows and shrinks; the pill keeps its right edge where the person put it.
+    func fit(_ size: CGSize) {
+        guard let panel, size.width > 0, abs(panel.frame.width - size.width) > 0.5 || abs(panel.frame.height - size.height) > 0.5 else { return }
+        let frame = panel.frame
+        panel.setFrame(NSRect(x: frame.maxX - size.width, y: frame.minY, width: size.width, height: size.height), display: true)
     }
 }
 
@@ -70,36 +79,38 @@ struct PillView: View {
     @ObservedObject var chat: ChatModel
     @ObservedObject var setup: SetupModel
     private let targetedState = State(initialValue: false)
-
     private let hoverState = State(initialValue: false)
 
+    private enum Tone { case rest, working, needsYou, done, failed }
+
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            Image(nsImage: NSApp.applicationIconImage)
-                .resizable().frame(width: 44, height: 44)
-                .overlay {
-                    // Working: a ring that turns around the mark.
-                    if chat.isAnswering {
-                        TimelineView(.animation) { context in
-                            Circle().trim(from: 0, to: 0.3)
-                                .stroke(Theme.accent, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                                .rotationEffect(.degrees(context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.2) / 1.2 * 360))
-                                .frame(width: 48, height: 48)
-                        }
-                    }
-                }
-                .scaleEffect(targetedState.wrappedValue ? 1.12 : hoverState.wrappedValue ? 1.05 : 1)
-                .animation(.easeOut(duration: 0.15), value: hoverState.wrappedValue)
-                .animation(.easeOut(duration: 0.15), value: targetedState.wrappedValue)
-                .onTapGesture { AppActions.callPippa() }
-                .onHover { hoverState.wrappedValue = $0 }
-            // Only when Pippa needs the person: the AI is not set up yet.
-            if !setup.canAnswer && !chat.isAnswering {
-                Circle().fill(Theme.needDot).frame(width: 11, height: 11)
-                    .overlay(Circle().strokeBorder(.white, lineWidth: 1.5))
+        HStack(spacing: 8) {
+            PippaMark(size: 30, state: markState, hovered: hoverState.wrappedValue)
+            Text(label)
+                .font(.system(size: 13, weight: .semibold)).monospacedDigit()
+                .foregroundStyle(tone == .needsYou ? Theme.accent : Theme.ink)
+                .lineLimit(1).truncationMode(.middle)
+                .frame(maxWidth: 240, alignment: .leading)
+                .contentTransition(.opacity)
+            if let symbol {
+                Image(systemName: symbol).font(.system(size: 11, weight: .bold)).foregroundStyle(tint)
+                    .transition(.scale.combined(with: .opacity))
             }
         }
-        .frame(width: 52, height: 52)
+        .padding(.leading, 8).padding(.trailing, symbol == nil ? 18 : 14)
+        .frame(height: 44)
+        .fixedSize()
+        .background { Glass().clipShape(Capsule()) }
+        .background { Capsule().fill(.black.opacity(0.18)).blur(radius: 6).offset(y: 2) }
+        .overlay { if let wash { Capsule().fill(wash).allowsHitTesting(false) } }
+        .overlay { Capsule().strokeBorder(rim, lineWidth: tone == .rest || tone == .working ? 0.5 : 1) }
+        .scaleEffect(targetedState.wrappedValue ? 1.06 : 1)
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: label)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: targetedState.wrappedValue)
+        .padding(10)
+        .contentShape(Capsule())
+        .onTapGesture { AppActions.callPippa() }
+        .onHover { hoverState.wrappedValue = $0 }
         .help(T("Ask Pippa", table: "App"))
         .onDrop(of: [.fileURL], isTargeted: targetedState.projectedValue) { providers in
             for provider in providers {
@@ -110,7 +121,102 @@ struct PillView: View {
             }
             return true
         }
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { Pill.shared.fit($0) }
     }
+
+    private var tone: Tone {
+        if chat.isAnswering { return .working }
+        if !setup.usesOnlineAI {
+            switch setup.state {
+            case .preparing, .downloading: return .working
+            case .askDownload, .failed: return .needsYou
+            case .ready: break
+            }
+        }
+        switch chat.unseen {
+        case .answer: return .done
+        case .failed: return .failed
+        case nil: return .rest
+        }
+    }
+
+    private var label: String {
+        if targetedState.wrappedValue { return T("Drop something on me!", table: "App") }
+        if chat.isAnswering {
+            let last = chat.current?.messages.last
+            if let step = last?.steps.last(where: { !$0.done }) { return step.label }
+            if let text = last?.text, !text.isEmpty { return T("Writing…", table: "App") }
+            return T("Thinking…", table: "App")
+        }
+        if !setup.usesOnlineAI {
+            switch setup.state {
+            case .preparing: return T("Getting ready…", table: "App")
+            case .downloading(let progress, _): return T("Loading my AI · %lld %%", table: "App", Int(progress * 100))
+            case .askDownload, .failed: return T("Set up my AI", table: "App")
+            case .ready: break
+            }
+        }
+        switch chat.unseen {
+        case .answer: return T("Your answer is ready", table: "App")
+        case .failed: return T("That didn’t work", table: "App")
+        case nil: return "Pippa"
+        }
+    }
+
+    private var markState: MarkState {
+        switch tone {
+        case .rest, .done: return .ruht
+        case .working: return .arbeitet
+        case .needsYou: return .offen
+        case .failed: return .fehler
+        }
+    }
+
+    private var tint: Color {
+        switch tone {
+        case .done: return Theme.ok
+        case .failed: return Theme.bad
+        default: return Theme.accent
+        }
+    }
+
+    private var wash: Color? {
+        switch tone {
+        case .done: return Theme.okTint
+        case .failed: return Theme.badTint
+        case .needsYou: return Theme.accentTint
+        default: return nil
+        }
+    }
+
+    private var rim: Color {
+        switch tone {
+        case .rest, .working: return Theme.chatBorder
+        default: return tint.opacity(0.6)
+        }
+    }
+
+    /// A small sign after the words, so the state does not depend on colour alone.
+    private var symbol: String? {
+        switch tone {
+        case .rest, .working: return nil
+        case .needsYou: return "questionmark"
+        case .done: return "checkmark"
+        case .failed: return "exclamationmark"
+        }
+    }
+}
+
+/// Behind-window glass for the floating pill.
+private struct Glass: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .popover
+        view.blendingMode = .behindWindow
+        view.state = .active
+        return view
+    }
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {}
 }
 
 /// What the shortcut, the pill, the menu and the Dock icon do.

@@ -233,6 +233,10 @@ private struct MessageView: View {
                 WorkView(message: message, live: live, started: chat.answerStarted)
             }
             if !message.text.isEmpty { MarkdownText(text: message.text) }
+            // Text came, but Pippa is still at it (more tools, more thinking): keep showing that she works.
+            if live && !message.text.isEmpty && message.steps.allSatisfy(\.done) {
+                LiveLine(started: chat.answerStarted, label: T("Working…", table: "App"))
+            }
             if !message.cards.isEmpty { ResultCardsView(cards: message.cards) }
             ForEach(Array(message.receipts.enumerated()), id: \.offset) { _, receipt in ReceiptRow(receipt: receipt) }
             if let error = message.error {
@@ -260,7 +264,14 @@ private struct WorkView: View {
         VStack(alignment: .leading, spacing: 6) {
             if live {
                 steps
-                if message.text.isEmpty && message.steps.allSatisfy(\.done) { thinkingLine }
+                if message.text.isEmpty && message.steps.allSatisfy(\.done) {
+                    LiveLine(started: started, label: T("Thinking…", table: "App")) {
+                        if !(message.thinking ?? "").isEmpty {
+                            Button(openState.wrappedValue ? T("Hide", table: "App") : T("Show", table: "App")) { openState.wrappedValue.toggle() }
+                                .buttonStyle(.link).font(.callout)
+                        }
+                    }
+                }
                 if openState.wrappedValue { thinkingText }
             } else {
                 Button { withAnimation(.easeOut(duration: 0.15)) { openState.wrappedValue.toggle() } } label: {
@@ -306,25 +317,6 @@ private struct WorkView: View {
         }
     }
 
-    private var thinkingLine: some View {
-        HStack(spacing: 7) {
-            ProgressView().controlSize(.mini).frame(width: 14)
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                Text(elapsed(at: context.date)).monospacedDigit()
-            }
-            if !(message.thinking ?? "").isEmpty {
-                Button(openState.wrappedValue ? T("Hide", table: "App") : T("Show", table: "App")) { openState.wrappedValue.toggle() }
-                    .buttonStyle(.link).font(.callout)
-            }
-        }
-        .font(.callout).foregroundStyle(.secondary)
-    }
-
-    private func elapsed(at now: Date) -> String {
-        guard let started else { return T("Thinking…", table: "App") }
-        let seconds = Int(now.timeIntervalSince(started))
-        return seconds < 3 ? T("Thinking…", table: "App") : T("Thinking… %lld s", table: "App", seconds)
-    }
 
     @ViewBuilder private var thinkingText: some View {
         if let thinking = message.thinking?.trimmingCharacters(in: .whitespacesAndNewlines), !thinking.isEmpty {
@@ -335,6 +327,32 @@ private struct WorkView: View {
                 .padding(.leading, 12)
                 .overlay(alignment: .leading) { Rectangle().fill(Theme.chatBorder).frame(width: 2) }
         }
+    }
+}
+
+/// "Thinking … 12 s": a spinner, what Pippa is doing and how long the answer has been running.
+private struct LiveLine<Trailing: View>: View {
+    var started: Date?
+    var label: String
+    @ViewBuilder var trailing: Trailing
+
+    init(started: Date?, label: String, @ViewBuilder trailing: () -> Trailing = { EmptyView() }) {
+        self.started = started; self.label = label; self.trailing = trailing()
+    }
+
+    var body: some View {
+        HStack(spacing: 7) {
+            ProgressView().controlSize(.mini).frame(width: 14)
+            Text(label)
+            if let started {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    let seconds = Int(context.date.timeIntervalSince(started))
+                    if seconds >= 3 { Text(T("%lld s", table: "App", seconds)).monospacedDigit() }
+                }
+            }
+            trailing
+        }
+        .font(.callout).foregroundStyle(.secondary)
     }
 }
 
@@ -432,12 +450,9 @@ private struct Composer: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if !chat.attachments.isEmpty || chat.frontApp != nil {
+            if !chat.attachments.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
-                        if let app = chat.frontApp {
-                            Chip(title: app, icon: Self.appIcon(app), symbol: "macwindow") { chat.frontApp = nil }
-                        }
                         ForEach(chat.attachments, id: \.self) { url in
                             Chip(title: url.lastPathComponent, icon: NSWorkspace.shared.icon(forFile: url.path), symbol: "doc") {
                                 chat.attachments.removeAll { $0 == url }
@@ -485,10 +500,6 @@ private struct Composer: View {
         panel.canChooseDirectories = true
         guard panel.runModal() == .OK else { return }
         for url in panel.urls where !chat.attachments.contains(url) { chat.attachments.append(url) }
-    }
-
-    static func appIcon(_ name: String) -> NSImage? {
-        NSWorkspace.shared.runningApplications.first { $0.localizedName == name }?.icon
     }
 }
 
