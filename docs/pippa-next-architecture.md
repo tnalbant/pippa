@@ -21,7 +21,7 @@ Pi is the harness. Pippa is the window and the hands.
 | Reasoning, tool choice, sessions, compaction, skills, memory | Pi, unchanged, over RPC |
 | Chat window, menu-bar pill, hotkey, file drop, cards | Pippa app |
 | Mail, Calendar, Reminders, Photos, documents, PDF building, file search and moves | One MCP server inside the app process |
-| Model download, llama-server, model choice per Mac | Pippa app |
+| Model and runtime download, the oMLX server, whether this Mac can run the model | Pippa app |
 
 The MCP server stays inside the app so macOS asks for "Pippa" when a tool first touches Mail or Calendar, and the
 permission belongs to the app. The same server can be offered to Pi in the terminal, so the tools outlive the app if
@@ -62,17 +62,19 @@ the app process, the app can fall back to the result it produced itself.
 
 ## What carries over
 
-`PiRPC`, model download and llama-server start (`PiSetup`, `LlamaServer`), the native readers and writers in
+`PiRPC`, model download and local server start (`PiSetup`; since 2026-11-01 `OMLXServer`, see
+[omlx-switch.md](omlx-switch.md)), the native readers and writers in
 `PippaMCP*` and `runtime/pippa-tools` (trimmed to the tool list), and the deterministic parts of PippaCore:
 `GermanText`, `Naming`, `MailFiling`, `PreSort`, `CalendarRange`, `FolderLookup`, PDF building and Undo.
 
 Not carried over: shell modes, line surfaces, the keyword routers, `pippa_more_tools`, `SourceFidelity`'s sentence
-removal, `LocalEngine`, the second llama-server supervisor, the snapshot harness in the product target, and the
+removal, `LocalEngine`, the second local server supervisor, the snapshot harness in the product target, and the
 wave-named source-grep checks. Target size: 6,000 to 8,000 lines of Swift.
 
 ## Acceptance
 
-The new app replaces the old one when these pass on a 16 GB Mac with Qwen 3.5 9B:
+The new app replaces the old one when these pass on a 16 GB Mac with Pippa's local model (Ornith 1.5 9B on oMLX since
+2026-11-01):
 
 1. "Find my ETF portfolio overview in my iCloud folder brain": names `ETF-Portfolio.md` as the current file.
 2. "Evaluate the attachments of the last three mails about Zahlungseingänge": reads the PDFs and gives the totals.

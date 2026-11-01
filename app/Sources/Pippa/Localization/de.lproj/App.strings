@@ -48,7 +48,6 @@
 "Pippa couldn't start her Mac tools. Quit Pippa and open her again." = "Pippa konnte ihre Mac-Werkzeuge nicht starten. Beende Pippa und öffne sie erneut.";
 "Pippa couldn’t move herself." = "Pippa konnte sich nicht selbst verschieben.";
 "Pippa isn't set up yet. Open Settings to finish setting up her AI." = "Pippa ist noch nicht eingerichtet. Öffne die Einstellungen, um ihre KI fertig einzurichten.";
-"Pippa needs a Mac with Apple silicon (M1 or later)." = "Pippa braucht einen Mac mit Apple-Chip (M1 oder neuer).";
 "Pippa’s AI" = "Pippas KI";
 "Pippa’s AI runs on this Mac. It needs a one-time download of %@." = "Pippas KI läuft auf diesem Mac. Dafür ist einmalig ein Download von %@ nötig.";
 "Preparing files" = "Bereite Dateien vor";
@@ -127,3 +126,4 @@
 "That didn’t work" = "Das hat nicht geklappt";
 "Working…" = "Arbeitet …";
 "%lld s" = "%lld s";
+"The AI on this Mac didn’t start. Try again in a moment." = "Die KI auf diesem Mac ist nicht gestartet. Versuch es gleich noch einmal.";

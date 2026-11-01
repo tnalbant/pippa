@@ -17,8 +17,8 @@ is in German.
 
 ## Where her AI runs
 
-- **On your Mac, by default.** Pippa's AI runs in llama.cpp's `llama-server` on your Mac. It only accepts connections
-  from your own Mac and needs a key that Pippa keeps in her own folder. Which AI your Mac gets: [Pippa's local AI](models.md).
+- **On your Mac, by default.** Pippa's AI runs in [oMLX](https://github.com/jundot/omlx) on your Mac. It only accepts
+  connections from your own Mac and needs a key that Pippa keeps in her own folder. Which AI your Mac gets: [Pippa's local AI](models.md).
 - **No account and no analytics.** Pippa has no sign-up and no server of her own, and the app collects no usage
   statistics. The website heypippa.app counts page visits and download clicks; the app does not.
 
@@ -44,7 +44,7 @@ Web searches never go through a signed-in online AI.
 
 | What | When |
 |---|---|
-| Downloading her AI | Once, after you say OK. The file comes from Hugging Face and is checked before use. |
+| Downloading her AI | Once, after you say OK. The model comes from Hugging Face, the runtime that runs it (Python with oMLX) from this repository's releases; each file is checked before use. |
 | Update checks | Once a day, from this repository's releases. Updates install when you quit or after a while without input. |
 | Web searches | The first search in an answer shows you the exact search text and waits for your OK. |
 | Reading web pages | Pages from your own message or from that answer's search results are read without asking again. Any other address is asked for. Addresses on your Mac or your local network are never read. |
@@ -118,9 +118,8 @@ given. Check results, especially for actions you didn't expect.
 
 | What | Where |
 |---|---|
-| Conversations, task records, settings, backups, her AI (by default) | `~/Library/Application Support/Pippa` |
+| Conversations, task records, settings, backups, her AI and its runtime | `~/Library/Application Support/Pippa` |
 | Results, dropped mails and images, table copies | `~/Library/Caches/Pippa` |
-| Her AI, if you already had a shared `~/models` folder | `~/models` |
 | Preferences | `~/Library/Preferences/io.github.tschnorpfeil.pippa.plist` |
 | Log | `~/Library/Logs/Pippa` |
 | Pi, her assistant core, shared with Pi in Terminal | `~/.pi/agent` and `~/.local/share/pi-node` |
@@ -133,7 +132,7 @@ To open a hidden folder in Finder, choose **Go → Go to Folder…** (Shift-Comm
 2. Remove `~/Library/Application Support/Pippa`, `~/Library/Preferences/io.github.tschnorpfeil.pippa.plist`,
    `~/Library/Caches/Pippa`, `~/Library/Caches/io.github.tschnorpfeil.pippa` and `~/Library/Logs/Pippa`. From older versions, also remove
    `~/Library/Containers/io.github.tschnorpfeil.pippa`.
-3. If her AI file is in `~/models`, remove it there as well.
+3. Versions before the switch to oMLX may have put an AI file (`.gguf`) in `~/models`; remove it there as well.
 4. Pippa set up Pi in `~/.pi/agent` and `~/.local/share/pi-node`. If you don't use Pi in Terminal yourself, you can
    remove both. If you do, remove only `~/.pi/agent/extensions/pippa-local-server` and the `pippa-local` entry (and
    `pippa-online`, if present) in `~/.pi/agent/models.json`.

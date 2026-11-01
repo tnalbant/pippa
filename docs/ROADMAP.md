@@ -18,15 +18,16 @@ model engine are gone.
 
 ## Next
 
-1. **Acceptance.** The five tasks in the plan, on a 16 GB Mac with Qwen 3.5 9B: find a file in iCloud, evaluate mail
+1. **Acceptance.** The five tasks in the plan, on a 16 GB Mac with Ornith 1.5 9B on oMLX: find a file in iCloud, evaluate mail
    attachments, add a calendar entry, answer a letter's deadline with the quoted sentence, and photos to one PDF
    without the model. If they pass, the new app replaces the old one; if not, the tools go to Pi in the terminal as a
    package.
 2. **Undo** for calendar entries and reminders in the receipt row (the old app had it).
 3. **Mail and Calendar acceptance** needs a signed build or the person's clicks: a re-signed development copy asks
    macOS again.
-4. **Model candidate.** Ornith-1.5-9B (MLX, 4-bit) runs at 25–30 tokens/s in Pi on a 24 GB Mac and leaves it usable.
-   Trying it is a provider entry in `models.json` plus an MLX server instead of llama-server.
+4. **Local AI on oMLX.** Pippa's AI on the Mac is now one model, Ornith 1.5 9B (MLX, 4-bit), served by oMLX; the
+   Python runtime with oMLX is downloaded at setup. llama.cpp, GGUF and the model table by memory are gone. What is
+   left (acceptance runs with Ornith, publishing the runtime archive) is in [omlx-switch.md](omlx-switch.md).
 5. **Release.** The website (`site/`), release notes and entitlements catch up with the new app before the next
    release.
 

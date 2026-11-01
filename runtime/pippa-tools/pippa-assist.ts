@@ -33,7 +33,7 @@ const NATIVE_CHANGES = new Set(["mcp__pippa__calendar_add", "mcp__pippa__reminde
 /** Tools that change something: successful or uncertain changes are not repeated in one answer. */
 const CHANGES = new Set(["write", "edit", "move_files", ...NATIVE_CHANGES]);
 
-/** Tool calls per answer before Pi is told to answer with what it has (docs/measurements/model-compare). */
+/** Tool calls per answer before Pi is told to answer with what it has (docs/archive/measurements/model-compare). */
 export const MAX_CALLS = 20;
 
 /** Over budget: the reason Pi gets instead of the call. */

@@ -27,14 +27,14 @@ final class PiSession {
     private var sessionID: String?
     private var launchKey: String?
     private var needsFreshClient = false
-    private var localServer: LlamaServer?
+    private var localServer: OMLXServer?
     private var localPlan: PiLocalServer.Plan?
 
     static var sessionDirectory: URL { Pippa.supportDirectory.appendingPathComponent("pi-sessions", isDirectory: true) }
     static var settingsDirectory: URL { Pippa.supportDirectory }
 
-    /// The running llama-server, so quitting can stop it without the main actor.
-    var ownedServer: LlamaServer? { localServer }
+    /// The local server, so quitting can stop it without the main actor.
+    var ownedServer: OMLXServer? { localServer }
 
     // MARK: Asking
 
@@ -47,14 +47,11 @@ final class PiSession {
         var settled = false
         defer { if !settled { needsFreshClient = true; PippaMCPService.invalidateEndpoint() } }
         let route = try await launchRoute()
-        let lease: (server: LlamaServer, lease: LlamaServer.AgentLease)?
         if route.online == nil && route.subscriptionModel == nil {
-            let server = try await localModelServer()
-            lease = (server, try await server.acquireAgentLease())
-        } else {
-            lease = nil
+            do { try await localModelServer().ensureRunning() }
+            catch let error as Failure { throw error }
+            catch { throw Failure.setup(T("The AI on this Mac didn’t start. Try again in a moment.", table: "App")) }
         }
-        defer { if let lease { Task { await lease.server.releaseAgentLease(lease.lease) } } }
         try Task.checkCancellation()
         let client = try await ready(conversation: conversation, route: route)
         let stream: AsyncThrowingStream<PiRPCEvent, Error>
@@ -78,7 +75,6 @@ final class PiSession {
     /// Before a conversation is deleted: end Pi if it holds that session, then move the session file to the Trash.
     func forget(_ conversation: String) async {
         if sessionID == conversation { await client?.shutdown(); client = nil; sessionID = nil }
-        await localServer?.discardSavedSlot()
         PiSessionFiles.trash(ids: [PippaPiLaunch.piSessionID(conversation)], in: Self.sessionDirectory) { url in
             try FileManager.default.trashItem(at: url, resultingItemURL: nil)
         }
@@ -165,14 +161,14 @@ final class PiSession {
         return LaunchRoute(key: routeKey, online: (connection, key))
     }
 
-    /// The local llama-server for `pippa-local`, created when the plan (model, port) changes.
-    private func localModelServer() async throws -> LlamaServer {
+    /// The local oMLX server for `pippa-local`, created when the plan (model, port) changes.
+    private func localModelServer() async throws -> OMLXServer {
         let target = try Self.installTarget(ProcessInfo.processInfo.environment)
         let support = Pippa.supportDirectory
         let plan: PiLocalServer.Plan
         do {
             plan = try await Task.detached {
-                try PiLocalServer.plan(roots: target.roots, agentDirectory: target.agent, modelID: target.model, legacySupport: support)
+                try PiLocalServer.plan(roots: target.roots, agentDirectory: target.agent, modelID: target.model)
             }.value
         } catch { throw Failure.setup(error.localizedDescription) }
         if let localServer, localPlan == plan { return localServer }

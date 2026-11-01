@@ -96,7 +96,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let reply = TerminateReply()
         Task { @MainActor in await PiSession.shared.shutdown() }
         Task.detached {
-            await server?.stopSavingConversation()
+            await server?.stop()
             reply.send()
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) { reply.send() }

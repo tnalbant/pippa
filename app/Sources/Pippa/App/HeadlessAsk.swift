@@ -5,6 +5,23 @@ import PippaCore
 /// `Pippa --ask "…"`: one question through `PiSession`, printed as plain lines. For acceptance runs without the window.
 @MainActor
 enum HeadlessAsk {
+    static func setup() async -> Int32 {
+        let setup = SetupModel.shared
+        setup.begin()
+        var last = ""
+        while true {
+            let line = String(describing: setup.state)
+            if line != last, !line.hasPrefix("downloading") || line.count < 60 { print(line); last = line }
+            switch setup.state {
+            case .ready: return 0
+            case .failed(let problem): print("FAILED: \(problem.message) — \(problem.details)"); return 1
+            case .askDownload: setup.load()
+            default: break
+            }
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+    }
+
     static func run(_ question: String) async -> Int32 {
         let started = Date()
         func say(_ line: String) {

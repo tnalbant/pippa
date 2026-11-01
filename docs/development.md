@@ -12,14 +12,15 @@ Pi is the harness, Pippa is the window and the hands. [Pi](https://github.com/ea
 tool choice, sessions, compaction, skills and memory. Pippa is a native chat front end: menu bar, pill, one chat window
 with a conversation sidebar, a first-run card and settings. Mac access (Mail, Calendar, Reminders, Photos, documents,
 PDF building) is one MCP server inside the app process, so macOS asks for "Pippa" and the permission belongs to the app.
-[llama.cpp](https://github.com/ggml-org/llama.cpp) runs the local model on a loopback-only server.
+[oMLX](https://github.com/jundot/omlx) (MLX) runs the local model on a loopback-only server; it and the model are
+downloaded at setup, not bundled ([decision](omlx-switch.md)).
 
 No code decides what the person means before Pi does, and no code rewrites Pi's answer afterwards. Tools return facts,
 not raw data: sorted, with full timestamps, at most 20 entries, documents read to text.
 
 ```
 Pippa.app (Swift, SwiftUI)
- ├─ llama-server (llama.cpp)        local model on 127.0.0.1, started and unloaded by the app
+ ├─ oMLX (Python runtime)           local model on 127.0.0.1, started by the app, unloads the model when idle
  ├─ pi --mode rpc                   the agent, one Pi session per Pippa conversation
  │   ├─ --extension pippa-tools     file tools, memory, small-model helps (runtime/pippa-tools)
  │   ├─ --extension pippa-web       web search and pages: pi-web-access (runtime/pippa-web)
@@ -74,16 +75,18 @@ in `PippaMCPTools.swift` and `PippaMCPTurn.swift` (`read_document`, with text re
 `<Application Support>/Pippa/pi-web` (`PIPPA_WEB_DIR`): DuckDuckGo only, no switch to another signed-in provider. The
 person's own `~/.pi` web settings are never read or changed. The first search of an answer asks the person.
 
-**Local model.** `LlamaServer` runs the bundled llama.cpp `llama-server` on a fixed loopback port with a key file and
-unloads the model when idle (`PIPPA_LLAMA_IDLE_SECONDS`). `ModelSelector` (`Models.swift`) picks the model by memory
-from `app/Sources/PippaCore/Resources/catalog.json`. Models are downloaded only after consent (resumable,
-SHA256-verified) or adopted from other apps' folders (`ExistingModels.swift`). A new catalog model is pinned with
-`scripts/pin-model.sh <catalog-key> <hf-repo> [<file>]`; `build-app.sh` refuses an unpinned default model
-(`scripts/check-default-models.py`).
+**Local model.** One model, Ornith 1.5 9B (MLX 4-bit), the only entry in
+`app/Sources/PippaCore/Resources/catalog.json`. `ModelSelector` (`Models.swift`) only decides whether it fits: Apple
+silicon with 16 GB or more, 32K context from 24 GB, 16K on 16 GB. `OMLXServer` runs oMLX from the Python runtime
+(`MLXRuntime`, manifest `Resources/mlx-runtime.json`, built by `scripts/build-mlx-runtime.sh`) on a fixed loopback port
+with a key file; oMLX unloads the model by itself after an idle timeout. Runtime and model are downloaded only after
+consent (resumable, SHA256-verified), or the model is cloned from oMLX's or Hugging Face's folders
+(`ExistingModels.swift`). A catalog model is pinned with `scripts/pin-model.sh <catalog-key> <hf-repo> [<file>]`;
+`build-app.sh` refuses an unpinned model (`scripts/check-default-models.py`). See [Pippa's local AI](models.md).
 
 **Setup (`app/Sources/PippaCore/PiSetup`).** `PiInstaller` copies the bundled Pi payload into Pi's managed layout
 (`~/.pi/agent/install/releases/<version>`), puts Node under `~/.local/share/pi-node` and writes the `pippa-local`
-provider into `models.json`. `PiLocalServer` plans the llama-server for it, `PiModelTuning` sets thinking and
+provider into `models.json`. `PiLocalServer` plans the oMLX server for it, `PiModelTuning` sets thinking and
 compaction per model in Pi's `settings.json`. See [Updating Pi](updating-pi.md).
 
 **Online AI.** Two routes, chosen in Settings: the ChatGPT subscription through Pi's own sign-in (`PiSubscriptionAuth`,
@@ -91,8 +94,9 @@ compaction per model in Pi's `settings.json`. See [Updating Pi](updating-pi.md).
 `apiKey: "$PIPPA_ONLINE_KEY"`, and the key from the Keychain goes only into the environment of Pippa's Pi.
 
 **Terminal autostart (`runtime/pippa-local-server`).** Installed as `~/.pi/agent/extensions/pippa-local-server`. When
-the terminal `pi` uses provider `pippa-local` and nothing answers, it starts the llama-server through a detached
-supervisor with the app's settings. One lock file (`llama-server-pi.lock`) keeps app and terminal from running two.
+the terminal `pi` uses provider `pippa-local` and nothing answers, it starts the oMLX server through a detached
+supervisor from the app's launch file (`pippa-local-server.json`). One lock file (`local-server.lock`) keeps app and
+terminal from running two.
 
 **Skills (`runtime/pippa-skills`).** One Pi skill per folder (`SKILL.md`), in German, bundled and loaded with
 `--skill`. `PIPPA_SKILLS_DIR` overrides the folder for development.
@@ -102,12 +106,12 @@ supervisor with the app's settings. One lock file (`llama-server-pi.lock`) keeps
 | Path | Contents |
 |---|---|
 | `app/Sources/Pippa` | The app: menu bar, pill, chat window, settings, first-run card, hotkey, Sparkle updates, `PiSession`, `Pippa --ask` |
-| `app/Sources/PippaCore` | Model catalog and download, `llama-server`, Pi installer, MCP server, Mail/Calendar/Reminders/Photos readers and writers, PDF building, journal |
+| `app/Sources/PippaCore` | Model catalog and download, runtime download, oMLX server, Pi installer, MCP server, Mail/Calendar/Reminders/Photos readers and writers, PDF building, journal |
 | `app/Sources/PiRPC` | Starts Pi with Pippa's flags, speaks JSON lines over stdin and stdout, turns tool events into receipts |
 | `app/Sources/PippaChecks` | Checks without a model |
 | `app/Sources/PiRPCChecks` | RPC lifecycle and receipts against a fake Pi process |
 | `app/Sources/PippaUpdateProbe` | Probe for a real Sparkle update through a loopback feed |
-| `app/Packaging` | `Info.plist` and its translations, entitlements, icon generator, pinned llama.cpp (and patches), Node, Pi, fd and rg |
+| `app/Packaging` | `Info.plist` and its translations, entitlements, icon generator, pinned Node, Pi, fd and rg; `mlx-runtime/` (lock file for the runtime builder) |
 | `runtime/` | Pi extensions (`pippa-tools`), web access (`pippa-web`), ChatGPT sign-in helper (`pippa-auth`), terminal autostart (`pippa-local-server`), skills (`pippa-skills`) |
 | `scripts/` | Build, verify, DMG, release and check scripts |
 | `site/` | Static website, German and English, no build step |
@@ -115,8 +119,7 @@ supervisor with the app's settings. One lock file (`llama-server-pi.lock`) keeps
 
 ## Requirements
 
-Apple silicon Mac, macOS 15 or later, Command Line Tools with Swift 6 (`xcode-select --install`) and `cmake` for
-llama-server. Xcode is not needed, which is why checks run as executables instead of XCTest. Node 22.19 or later for the
+Apple silicon Mac, macOS 15 or later, Command Line Tools with Swift 6 (`xcode-select --install`). Xcode is not needed, which is why checks run as executables instead of XCTest. Node 22.19 or later for the
 runtime tests. The app ships its own pinned Node (`app/Packaging/node-release.json`) and Pi release
 (`app/Packaging/pi-release`); users need neither Terminal nor npm.
 
@@ -130,19 +133,18 @@ scripts/make-dmg.sh       # dist/Pippa.dmg
 
 `build-app.sh` runs a release `swift build`, fills `Contents/Info.plist` from `app/Packaging/Info.plist` (version from
 `Pippa.version` in `PippaCore.swift`), copies the SwiftPM resources and the Info.plist translations, draws the icon
-(`app/Packaging/make-icon.swift`), builds a static `llama-server` from the pinned llama.cpp source plus
-`app/Packaging/llama-patches` (`llama-release.json`, SHA256-verified, cached in `~/Library/Caches/pippa-build`), adds
-fd and rg (`search-tools.json`), bundles Node and web access (`bundle-web.sh`), the Pi install payload
+(`app/Packaging/make-icon.swift`), adds fd and rg (`search-tools.json`, SHA256-verified, cached in
+`~/Library/Caches/pippa-build`), bundles Node and web access (`bundle-web.sh`), the Pi install payload
 (`bundle-pi-payload.sh`), the skills, the sign-in helper and the extension sources Pi loads from
-`runtime/pippa-tools` (without tests), and signs everything from the inside out.
+`runtime/pippa-tools` (without tests), and signs everything from the inside out. The oMLX runtime and the model are
+not in the app; `scripts/build-mlx-runtime.sh` builds the runtime archive that setup downloads.
 
 | Variable | Effect |
 |---|---|
 | `PIPPA_SIGN_IDENTITY` | `Developer ID Application: Name (TEAMID)`; without it signing is ad hoc |
 | `PIPPA_NOTARY_PROFILE` | Keychain profile for `xcrun notarytool`; without it `make-dmg.sh` does not notarize |
 | `PIPPA_SKIP_BUILD=1` | Package the existing release build |
-| `PIPPA_CACHE` | Download and llama.cpp build cache (default `~/Library/Caches/pippa-build`) |
-| `PIPPA_CMAKE`, `PIPPA_NINJA` | cmake and ninja for llama-server (default: from `PATH`) |
+| `PIPPA_CACHE` | Download cache (default `~/Library/Caches/pippa-build`) |
 | `PIPPA_BUILD_JOBS` | Parallel compile jobs (default: cores minus two) |
 | `PIPPA_ALLOW_UNPINNED=1` | Local test builds only: allow an unpinned default model |
 | `PIPPA_DMG_LAYOUT` | Finder window layout in the DMG: unset only when the Terminal may already control Finder, `1` try and let macOS ask, `0` skip |
@@ -153,7 +155,7 @@ fd and rg (`search-tools.json`), bundles Node and web access (`bundle-web.sh`), 
 
 **Signing and entitlements.** Pippa runs without the App Sandbox because a sandboxed app cannot set up and start Pi in
 the home folder. `Pippa.entitlements` holds only Hardened Runtime rights; `Node.entitlements` adds JIT and turns
-library validation off, because the terminal Pi loads add-ons the person installs. `llama-server`, fd, rg and esbuild
+library validation off, because the terminal Pi loads add-ons the person installs. fd, rg and esbuild
 carry no entitlements. With a Developer ID all code is signed with one team ID; ad-hoc builds run without Hardened
 Runtime. `verify-app.sh` asserts all of this. An ad-hoc build runs on your own Mac; elsewhere macOS asks for *System
 Settings → Privacy & Security → Open Anyway*. With a Developer ID and a notary profile (`xcrun notarytool
@@ -166,11 +168,11 @@ swift build --package-path app                                          # all ta
 swift run --package-path app PippaChecks                                # native checks, no model
 swift run --package-path app PiRPCChecks                                # RPC lifecycle against a fake Pi process
 python3 scripts/check-strings.py                                        # every UI text in en and de
-python3 scripts/check-default-models.py                                 # every model in ModelSelector's table is pinned
+python3 scripts/check-default-models.py                                 # the catalog model is pinned
 python3 -m unittest discover -s scripts/tests -p 'test_*.py'            # release and fixture scripts
 node --experimental-strip-types --test $(ls runtime/pippa-tools/*.test.mjs | grep -v /real-pi-)  # extensions, no Pi needed
 node --test runtime/pippa-auth/pi-auth.test.mjs                         # ChatGPT sign-in helper (no network)
-node --experimental-strip-types --test runtime/pippa-local-server/test/autostart.test.mjs   # terminal autostart, fake llama-server
+node --experimental-strip-types --test runtime/pippa-local-server/test/autostart.test.mjs   # terminal autostart, fake server
 scripts/check-downloads.sh                                              # downloader fixtures; build PippaChecks first
 node scripts/check-site.cjs                                             # website content and behavior
 ```
@@ -217,12 +219,12 @@ dist/Pippa.app/Contents/MacOS/Pippa --ask "Find my lease and tell me the notice 
 A debug build without a bundle loads the extensions and web access from this checkout's `runtime/`. macOS asks for
 Calendar, Mail or Photos in the name of the process that runs it; a re-signed development copy asks again.
 
-**Developer switches.** `PIPPA_PI_HOME` (a fake home for Pi's install), `PIPPA_PI_PAYLOAD`, `PIPPA_PI_MODEL`,
-`PIPPA_PI_EXTENSIONS`, `PIPPA_PI_WEB`, `PIPPA_PI_MCP`, `PIPPA_SKILLS_DIR`, `PIPPA_LLAMA_SERVER`, `PIPPA_MODELS_DIR`,
-`PIPPA_MODEL_FILE` (any GGUF, unverified), `PIPPA_TRASH_DIR` (a test folder instead of the real Trash),
-`PIPPA_LOG_DIR` and `PIPPA_RESULTS_DIR`. `PI_CODING_AGENT_DIR` is passed through to Pi, so a test can keep `~/.pi`
-untouched. `scripts/pi-rpc-spike.sh env` prints such an environment for a fake home under `.build/`;
-`scripts/pi-rpc-spike.sh llama-start|llama-stop` runs a llama-server there.
+**Developer switches.** `PIPPA_PI_HOME` (a fake home for Pi's install), `PIPPA_PI_PAYLOAD`, `PIPPA_PI_MODEL` (a model
+id from `models.json` instead of the first), `PIPPA_PI_EXTENSIONS`, `PIPPA_PI_WEB`, `PIPPA_PI_MCP`, `PIPPA_SKILLS_DIR`,
+`PIPPA_MLX_RUNTIME_DIR` (an unpacked oMLX runtime, used as it is), `PIPPA_MLX_RUNTIME_ARCHIVE` (install the runtime
+from a local archive instead of the download; the hash is still checked), `PIPPA_HF_ENDPOINT` (another Hugging Face
+endpoint), `PIPPA_TRASH_DIR` (a test folder instead of the real Trash), `PIPPA_LOG_DIR` and `PIPPA_RESULTS_DIR`.
+`PI_CODING_AGENT_DIR` is passed through to Pi, so a test can keep `~/.pi` untouched.
 
 **Clicking through the real app.** Pippa is a menu bar app (accessory). `PIPPA_REGULAR_APP=1` gives it a Dock icon for
 UI automation tools. For a clean first start, point Foundation at a fake home and Pi's setup at its own folder:
@@ -311,7 +313,7 @@ defaults domain, so back up that preferences file first.
 
 | What | Where |
 |---|---|
-| Conversations (`conversations/`), Pi sessions (`pi-sessions/`), Pi's working folder (`pi-work/`), `memory.md`, `Backups/`, web settings (`pi-web/`), `journal.sqlite`, models, `settings.json` | `~/Library/Application Support/Pippa/` |
+| Conversations (`conversations/`), Pi sessions (`pi-sessions/`), Pi's working folder (`pi-work/`), `memory.md`, `Backups/`, web settings (`pi-web/`), `journal.sqlite`, oMLX and its model (`omlx/`), the Python runtime (`mlx-runtime/`), `settings.json` | `~/Library/Application Support/Pippa/` |
 | Tool results (`Results/`), read mails and their attachments (`Inbox/`), `pippa.lock` | `~/Library/Caches/Pippa/` |
 | Preferences | `~/Library/Preferences/io.github.tschnorpfeil.pippa.plist` |
 | Log `pippa.log` (version and events, no file contents; `PIPPA_LOG_DIR` overrides) | `~/Library/Logs/Pippa/` |
@@ -319,7 +321,8 @@ defaults domain, so back up that preferences file first.
 | Node for the terminal `pi` | `~/.local/share/pi-node` |
 | Build cache (developers) | `~/Library/Caches/pippa-build` |
 
-**Network.** Only these go out: the model download from Hugging Face (after consent), Sparkle's update check, web
+**Network.** Only these go out: the model download from Hugging Face and the oMLX runtime from Pippa's GitHub
+releases (both after consent), Sparkle's update check, web
 search and page reads (the first search of an answer is asked for), and the online AI the person switches on. Files,
 conversations and the model otherwise stay on the Mac.
 

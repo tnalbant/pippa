@@ -1,18 +1,83 @@
 import Foundation
 import PippaCore
 
-// `pi` in the terminal starts Pippa's llama-server itself (runtime/pippa-local-server). This is the Swift side: the shared
-// lock file (`PiServerLock`, same format as common.mjs), the launch file for the extension
-// (`PiLocalServer.publishLaunchFile`), the app sharing a terminal-started server (`LlamaServer`, `lockFile`)
-// and installing the extension (`PiInstaller.installTerminalExtension`). Fake HOME, stand-in llama-server from
-// Wave2dChecks; the extension itself is tested by runtime/pippa-local-server/test/*.test.mjs.
-// Runs with PIPPA_SETUP_CHECKS=1 and in the full run (via runWave2dChecks).
+// `pi` in the terminal starts Pippa's oMLX server itself (runtime/pippa-local-server). This is the Swift side: the shared
+// lock file (`PiServerLock`, same format as common.mjs), the plan and the launch file for the extension
+// (`PiLocalServer.plan`, `publishLaunchFile`), oMLX's settings.json (`writeServerSettings`), the app starting and
+// stopping its own server (`OMLXServer`, with a stand-in python that only answers /health) and installing the
+// extension (`PiInstaller.installTerminalExtension`). Fake HOME; the extension itself is tested by
+// runtime/pippa-local-server/test/*.test.mjs. Runs with PIPPA_SETUP_CHECKS=1 and in the full run.
 
-func runTerminalAutostartChecks(binary: URL, argsLog: URL) async {
-    func starts() -> Int { ((try? String(contentsOf: argsLog, encoding: .utf8)) ?? "").split(separator: "\n").count }
+/// An unpacked runtime as in development (`PIPPA_MLX_RUNTIME_DIR`): only an executable `bin/python3`.
+/// `script`: its content; by default it does nothing.
+func fakeRuntimeDirectory(in base: URL, script: String = "#!/bin/sh\nexit 0\n") -> URL {
+    let runtime = base.appendingPathComponent("mlx-runtime-dev-\(UUID().uuidString.prefix(8))", isDirectory: true)
+    let python = runtime.appendingPathComponent("bin/python3")
+    try? fm.createDirectory(at: python.deletingLastPathComponent(), withIntermediateDirectories: true)
+    write(script, python)
+    try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: python.path)
+    return runtime
+}
 
-    /// Fake HOME with payload (metadata.json + extension), port, key, models.json and a developer model file.
-    func setup(_ name: String) throws -> (roots: PiInstallRoots, plan: PiLocalServer.Plan) {
+func fakeRuntimeManifest(size: Int64, sha256: String) -> MLXRuntime.Manifest {
+    let json = #"{"version": "9.9.9-1", "omlx": "9.9.9", "file": "pippa-mlx-runtime-check.tar.gz", "size": \#(size), "sha256": "\#(sha256)", "url": "https://example.invalid/runtime.tar.gz"}"#
+    return try! JSONDecoder().decode(MLXRuntime.Manifest.self, from: Data(json.utf8))
+}
+
+/// A runtime archive like scripts/build-mlx-runtime.sh makes: one top folder with `bin/python3`.
+func fakeRuntimeArchive(in base: URL) throws -> URL {
+    let source = base.appendingPathComponent("runtime-src", isDirectory: true)
+    let python = source.appendingPathComponent("pippa-mlx-runtime/bin/python3")
+    try fm.createDirectory(at: python.deletingLastPathComponent(), withIntermediateDirectories: true)
+    write("#!/bin/sh\nexit 0\n", python)
+    try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: python.path)
+    let archive = base.appendingPathComponent("pippa-mlx-runtime-check.tar.gz")
+    let tar = Process()
+    tar.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
+    tar.arguments = ["-czf", archive.path, "-C", source.path, "pippa-mlx-runtime"]
+    tar.environment = ["COPYFILE_DISABLE": "1"]
+    try tar.run()
+    tar.waitUntilExit()
+    guard tar.terminationStatus == 0 else { throw PippaError.writeFailed("tar \(tar.terminationStatus)") }
+    return archive
+}
+
+/// The bundled model's files in `<Support>/omlx/models/<key>/`, marked verified. Sparse files of the pinned sizes:
+/// nothing is read, so no real weights are needed.
+func installFakeBundledModel(support: URL) throws -> CatalogModel {
+    guard let model = ModelCatalog.bundled().models.first, let files = model.pinned?.files else { throw PippaError.modelUnavailable }
+    let folder = PiLocalServer.baseDirectory(support: support).appendingPathComponent("models/\(model.key)", isDirectory: true)
+    try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+    for file in files {
+        let url = folder.appendingPathComponent((file.path as NSString).lastPathComponent)
+        fm.createFile(atPath: url.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: url)
+        try handle.truncate(atOffset: UInt64(file.size))
+        try handle.close()
+        try file.sha256.write(to: url.appendingPathExtension("ok"), atomically: true, encoding: .utf8)
+    }
+    return model
+}
+
+/// Stand-in for oMLX: reads the port from `<base-path>/settings.json` and answers 200 on every GET.
+private let fakeOMLX = #"""
+import json, sys
+from http.server import BaseHTTPRequestHandler, HTTPServer
+base = sys.argv[sys.argv.index("--base-path") + 1]
+port = json.load(open(base + "/settings.json"))["server"]["port"]
+class Health(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200); self.end_headers(); self.wfile.write(b"{}")
+    def log_message(self, *args): pass
+HTTPServer(("127.0.0.1", port), Health).serve_forever()
+"""#
+
+func runTerminalAutostartChecks() async {
+    let ornith = ModelCatalog.bundled().models.first?.key ?? "-"
+
+    /// Fake HOME with payload (metadata.json + extension), port, key, models.json, runtime and the model in place.
+    func setup(_ name: String, contextWindow: Int = 16384, runtimeScript: String = "#!/bin/sh\nexit 0\n")
+        throws -> (roots: PiInstallRoots, environment: [String: String]) {
         let home = dir(name)
         let payload = home.appendingPathComponent("payload", isDirectory: true)
         let release = payload.appendingPathComponent("release", isDirectory: true)
@@ -23,26 +88,18 @@ func runTerminalAutostartChecks(binary: URL, argsLog: URL) async {
         for file in ["index.ts", "common.mjs", "ensure.mjs", "supervisor.mjs"] { write("// \(file)\n", ext.appendingPathComponent(file)) }
         let roots = PiInstallRoots(home: home, payload: try PiPayload(release: release, node: URL(fileURLWithPath: "/usr/bin/false")), searchPath: [])
         let port = PiInstaller.stablePort(support: roots.support)
-        let entry = PiInstaller.providerEntry(models: [PiProviderModel(id: "qwen3.5-9b-q4", name: "Qwen", contextWindow: 16384)],
+        let entry = PiInstaller.providerEntry(models: [PiProviderModel(id: ornith, name: "Ornith", contextWindow: contextWindow)],
                                               port: port, keyFile: PiInstaller.keyFile(support: roots.support))
         try fm.createDirectory(at: roots.agentDirectory, withIntermediateDirectories: true)
         try JSONSerialization.data(withJSONObject: ["providers": [PiInstaller.providerKey: entry]]).write(to: roots.modelsJSON)
-        let model = home.appendingPathComponent("dev.gguf"); write("x", model)
-        let plan = try PiLocalServer.plan(roots: roots, modelID: "qwen3.5-9b-q4", legacySupport: home.appendingPathComponent("legacy"),
-                                          physicalMemory: 16 << 30, binary: binary, environment: ["PIPPA_MODEL_FILE": model.path])
-        return (roots, plan)
+        _ = try installFakeBundledModel(support: roots.support)
+        let runtime = fakeRuntimeDirectory(in: home, script: runtimeScript)
+        return (roots, ["PIPPA_MLX_RUNTIME_DIR": runtime.path])
     }
 
-    /// A live process that only waits (holder of a foreign lock).
-    func sleeper() throws -> Process {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/bin/sleep"); p.arguments = ["30"]
-        try p.run()
-        return p
-    }
-
-    check("Lock file: created exclusively only, same format as common.mjs, live according to server or holder, removes only its own") {
-        let url = dir("ta-lock").appendingPathComponent(PiServerLock.fileName)
+    check("Lock file: <Support>/local-server.lock, created exclusively only, same format as common.mjs, live according to server or holder, removes only its own") {
+        let support = dir("ta-lock")
+        let url = PiServerLock.url(support: support)
         let me = getpid()
         let first = PiServerLock.create(url, PiServerLock(owner: "app", holder: me, pid: nil, port: 1234))
         let second = PiServerLock.create(url, PiServerLock(owner: "pi", holder: 1, pid: nil, port: 1234))
@@ -55,106 +112,108 @@ func runTerminalAutostartChecks(binary: URL, argsLog: URL) async {
         write(#"{"owner":"pi","holder":\#(me),"pid":999998,"port":1234,"startedAt":"x"}"#, url)
         let deadServer = PiServerLock.read(url)
         let removed = PiServerLock.remove(url) { $0.owner == "pi" }
-        return first && !second && read?.owner == "app" && read?.holder == me && read?.pid == nil && read?.isLive == true && mode == 0o600
+        return url.lastPathComponent == "local-server.lock" && url.deletingLastPathComponent().path == support.path
+            && first && !second && read?.owner == "app" && read?.holder == me && read?.pid == nil && read?.isLive == true && mode == 0o600
             && notOurs && jsStarting?.pid == nil && jsStarting?.isLive == false
             && deadServer?.isLive == false   // Server dead: orphaned, even if the holder is still alive
             && removed && !fm.fileExists(atPath: url.path)
     }
 
-    check("Launch file for the terminal extension: program in Pippa.app, same arguments as the app, key only as a file, 0600, unchanged → not rewritten") {
-        let (roots, base) = try setup("ta-launch")
-        var plan = base
-        let app = roots.home.appendingPathComponent("Applications/Pippa.app/Contents/Helpers/llama-server")
-        plan.binary = app
-        let flags: Set<String> = ["--host", "--port", "--alias", "--jinja", "--ctx-size", "--parallel", "--slot-save-path", "--no-webui"]
-        let wrote = try PiLocalServer.publishLaunchFile(plan, support: roots.support, supported: flags)
-        let again = try PiLocalServer.publishLaunchFile(plan, support: roots.support, supported: flags)
+    check("Local server plan: runtime python, <Support>/omlx, stable port and key; context from memory, never above models.json") {
+        let (roots, env) = try setup("ta-plan")
+        let plan = try PiLocalServer.plan(roots: roots, modelID: ornith, physicalMemory: 16 << 30, environment: env)
+        let base = roots.support.appendingPathComponent("omlx", isDirectory: true)
+        let key = try PiInstaller.stableKey(support: roots.support)
+        let planOK = plan.python.path == URL(fileURLWithPath: env["PIPPA_MLX_RUNTIME_DIR"]!).appendingPathComponent("bin/python3").path
+            && plan.baseDirectory.path == base.path && plan.modelsDirectory.path == base.appendingPathComponent("models").path
+            && plan.settingsFile.path == base.appendingPathComponent("settings.json").path
+            && plan.port == PiInstaller.stablePort(support: roots.support) && plan.key == key
+            && plan.modelID == ornith && plan.choice.model.key == ornith && plan.choice.ctx == 16384
+            && plan.lockFile == PiServerLock.url(support: roots.support) && plan.keyFile == PiInstaller.keyFile(support: roots.support)
+        // 24 GB gets 32K; a stale 32K entry cannot enlarge the 16 GB context; a 16K entry bounds a 24 GB Mac.
+        let (wide, wideEnv) = try setup("ta-plan-32k", contextWindow: 32768)
+        let on24 = try PiLocalServer.plan(roots: wide, modelID: ornith, physicalMemory: 24 << 30, environment: wideEnv).choice.ctx
+        let on16 = try PiLocalServer.plan(roots: wide, modelID: ornith, physicalMemory: 16 << 30, environment: wideEnv).choice.ctx
+        let bounded = try PiLocalServer.plan(roots: roots, modelID: ornith, physicalMemory: 24 << 30, environment: env).choice.ctx
+        if !planOK { print("   ", plan) }
+        return planOK && on24 == 32768 && on16 == 16384 && bounded == 16384
+    }
+
+    check("Local server plan: clear failures for a missing runtime, an unknown or missing model and a port that moved") {
+        let (roots, env) = try setup("ta-plan-fail")
+        func failure(_ body: () throws -> Any) -> PiLocalServer.Failure? {
+            do { _ = try body(); return nil } catch { return error as? PiLocalServer.Failure }
+        }
+        let noRuntime = failure { try PiLocalServer.plan(roots: roots, modelID: ornith, environment: ["PIPPA_MLX_RUNTIME_DIR": dir("ta-empty-runtime").path]) }
+        let unknown = failure { try PiLocalServer.plan(roots: roots, modelID: "qwen3.5-9b-q4", environment: env) }
+        try fm.removeItem(at: roots.support.appendingPathComponent("omlx/models/\(ornith)/model.safetensors.ok"))
+        let missing = failure { try PiLocalServer.plan(roots: roots, modelID: ornith, environment: env) }
+        let port = PiInstaller.stablePort(support: roots.support)
+        let entry = PiInstaller.providerEntry(models: [PiProviderModel(id: ornith, name: "Ornith", contextWindow: 16384)],
+                                              port: port + 1, keyFile: PiInstaller.keyFile(support: roots.support))
+        try JSONSerialization.data(withJSONObject: ["providers": [PiInstaller.providerKey: entry]]).write(to: roots.modelsJSON)
+        let moved = failure { try PiLocalServer.plan(roots: roots, modelID: ornith, environment: env) }
+        return noRuntime == .runtimeMissing && unknown == .unknownModel("qwen3.5-9b-q4") && missing == .modelMissing(ornith)
+            && moved == .portMismatch(modelsJSON: port + 1, settings: port)
+    }
+
+    check("Launch file v2 for the terminal extension: runtime python, oMLX serve arguments, no key in it, 0600, unchanged → not rewritten") {
+        let (roots, env) = try setup("ta-launch")
+        let plan = try PiLocalServer.plan(roots: roots, modelID: ornith, physicalMemory: 16 << 30, environment: env)
+        let wrote = try PiLocalServer.publishLaunchFile(plan, support: roots.support)
+        let again = try PiLocalServer.publishLaunchFile(plan, support: roots.support)
         let url = PiLocalServer.launchFile(support: roots.support)
         let text = try String(contentsOf: url, encoding: .utf8)
         let json = try JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] ?? [:]
         let mode = ((try? fm.attributesOfItem(atPath: url.path)[.posixPermissions] as? NSNumber)?.intValue ?? 0) & 0o777
-        let expected = LlamaServer.arguments(choice: plan.choice, model: plan.modelFile, port: plan.port, supported: flags, alias: plan.modelID,
-                                             slotSavePath: plan.slotDirectory)
         let args = json["arguments"] as? [String] ?? []
-        return wrote && !again && mode == 0o600 && json["schemaVersion"] as? Int == 1 && json["provider"] as? String == "pippa-local"
-            && json["port"] as? Int == plan.port && json["binary"] as? String == app.path
-            && json["app"] as? String == roots.home.appendingPathComponent("Applications/Pippa.app").path
-            && json["keyFile"] as? String == PiInstaller.keyFile(support: roots.support).path && json["idleSeconds"] as? Int == 600
-            && json["logFile"] as? String == roots.support.appendingPathComponent("llama-server-pi.log").path
-            && args == expected && args.contains("--slot-save-path") && args.joined(separator: " ").contains("--host 127.0.0.1 --port \(plan.port)")
-            && !text.contains(plan.key)
-            && plan.lockFile == PiServerLock.url(support: roots.support)
+        let environment = json["environment"] as? [String: String] ?? [:]
+        let serve = args.firstIndex(of: "serve").map { Array(args[$0...]) }
+        return wrote && !again && mode == 0o600 && url.lastPathComponent == "pippa-local-server.json"
+            && json["schemaVersion"] as? Int == 2 && json["provider"] as? String == "pippa-local"
+            && json["port"] as? Int == plan.port && json["binary"] as? String == plan.python.path && json["modelID"] as? String == ornith
+            && args == plan.arguments && serve == ["serve", "--base-path", plan.baseDirectory.path, "--headless"]
+            && json["keyFile"] as? String == PiInstaller.keyFile(support: roots.support).path
+            && json["logFile"] as? String == roots.support.appendingPathComponent("local-server.log").path
+            && environment["HF_HUB_OFFLINE"] == "1"
+            && environment["HOME"] == plan.baseDirectory.appendingPathComponent("home").path   // never the person's ~/.omlx
+            && !text.contains(plan.key) && fm.fileExists(atPath: plan.settingsFile.path)
     }
 
-    await checkAsync("App starts itself: lock \"app\" with the server's PID, gone on exit; a second app with a lock → clear error, orphaned lock is replaced") {
-        let (roots, plan) = try setup("ta-own")
+    check("oMLX settings.json: port, key and model folder written (0600), the person's and oMLX's other keys stay") {
+        let (roots, env) = try setup("ta-settings")
+        let plan = try PiLocalServer.plan(roots: roots, modelID: ornith, physicalMemory: 16 << 30, environment: env)
+        try fm.createDirectory(at: plan.baseDirectory, withIntermediateDirectories: true)
+        write(#"{"server": {"port": 1, "custom": "x"}, "auth": {"api_key": "old"}, "sampling": {"temperature": 0.7}, "version": 3}"#, plan.settingsFile)
+        try fm.setAttributes([.posixPermissions: 0o644], ofItemAtPath: plan.settingsFile.path)
+        try PiLocalServer.writeServerSettings(plan)
+        let doc = try JSONSerialization.jsonObject(with: Data(contentsOf: plan.settingsFile)) as? [String: Any] ?? [:]
+        let server = doc["server"] as? [String: Any], auth = doc["auth"] as? [String: Any], model = doc["model"] as? [String: Any]
+        let mode = ((try? fm.attributesOfItem(atPath: plan.settingsFile.path)[.posixPermissions] as? NSNumber)?.intValue ?? 0) & 0o777
+        return server?["port"] as? Int == plan.port && server?["host"] as? String == "127.0.0.1" && server?["custom"] as? String == "x"
+            && auth?["api_key"] as? String == plan.key && auth?["allow_unauthenticated_inference"] as? Bool == false
+            && model?["model_dirs"] as? [String] == [plan.modelsDirectory.path]
+            && (doc["idle_timeout"] as? [String: Any])?["idle_timeout_seconds"] as? Int == PiLocalServer.idleUnloadSeconds
+            && (doc["sampling"] as? [String: Any])?["temperature"] as? Double == 0.7 && doc["version"] as? Int == 3
+            && mode == 0o600
+    }
+
+    await checkAsync("App starts its own server: an orphaned lock is replaced, lock \"app\" with the server's PID, gone after stop") {
+        guard fm.isExecutableFile(atPath: "/usr/bin/python3") else { print("    no /usr/bin/python3, skipped"); return true }
+        let script = dir("ta-own-script").appendingPathComponent("fake-omlx.py")
+        write(fakeOMLX, script)
+        let (roots, env) = try setup("ta-own", runtimeScript: "#!/bin/sh\nexec /usr/bin/python3 '\(script.path)' \"$@\"\n")
+        let plan = try PiLocalServer.plan(roots: roots, modelID: ornith, physicalMemory: 16 << 30, environment: env)
         let lock = PiServerLock.url(support: roots.support)
-        // Orphaned (processes gone): gets replaced.
         write(#"{"owner":"pi","holder":999999,"pid":999998,"port":\#(plan.port),"startedAt":"x"}"#, lock)
         let server = PiLocalServer.server(plan, logDirectory: roots.support)
-        let lease = try await server.acquireAgentLease()
+        try await server.ensureRunning()
         let held = PiServerLock.read(lock)
         let pid = await server.processID
-        await server.releaseAgentLease(lease)
         await server.stop()
-        let removed = !fm.fileExists(atPath: lock.path)
-        // Another app holds the lock (live holder, still starting): don't start alongside.
-        let other = try sleeper()
-        defer { other.terminate() }
-        _ = PiServerLock.create(lock, PiServerLock(owner: "app", holder: other.processIdentifier, pid: nil, port: plan.port))
-        var refused = false
-        do { _ = try await PiLocalServer.server(plan, logDirectory: roots.support).acquireAgentLease() } catch { refused = true }
-        let untouched = PiServerLock.read(lock)?.holder == other.processIdentifier
-        try? fm.removeItem(at: lock)
-        return held?.owner == "app" && held?.holder == getpid() && held?.pid == pid && pid != nil && removed && refused && untouched
-    }
-
-    await checkAsync("App server: if the terminal Pi uses it (lock file touched), the app unloads it only after the idle time that follows") {
-        let (roots, base) = try setup("ta-idle")
-        var plan = base
-        plan.idleSeconds = 1.0
-        let lock = PiServerLock.url(support: roots.support)
-        let server = PiLocalServer.server(plan, logDirectory: roots.support)
-        await server.releaseAgentLease(try await server.acquireAgentLease())
-        for _ in 0..<5 { try await Task.sleep(for: .milliseconds(400)); PiServerLock.touch(lock) }   // Terminal keeps asking
-        let stayed = await server.processID != nil
-        var unloaded = false
-        for _ in 0..<40 where !unloaded { try await Task.sleep(for: .milliseconds(100)); unloaded = await server.processID == nil }
-        await server.stop()
-        return stayed && unloaded && !fm.fileExists(atPath: lock.path)
-    }
-
-    await checkAsync("Terminal server is running: the app shares it (no second start), reports requests via the lock and never stops it") {
-        let (roots, plan) = try setup("ta-adopt")
-        let lock = PiServerLock.url(support: roots.support)
-        // "Terminal": the stand-in server started directly, lock as written by the extension's supervisor.
-        let initial = starts()
-        let terminal = Process()
-        terminal.executableURL = binary
-        terminal.arguments = LlamaServer.arguments(choice: plan.choice, model: plan.modelFile, port: plan.port, supported: nil, alias: plan.modelID)
-        terminal.environment = LlamaServer.environment(apiKey: plan.key)
-        terminal.standardOutput = FileHandle.nullDevice; terminal.standardError = FileHandle.nullDevice
-        try terminal.run()
-        defer { if terminal.isRunning { terminal.terminate() } }
-        _ = PiServerLock.create(lock, PiServerLock(owner: "pi", holder: terminal.processIdentifier, pid: terminal.processIdentifier, port: plan.port))
-        try fm.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -300)], ofItemAtPath: lock.path)
-        for _ in 0..<50 where starts() == initial { try await Task.sleep(for: .milliseconds(100)) }   // start of the terminal server logged
-        let before = starts()
-        let server = PiLocalServer.server(plan, logDirectory: roots.support)
-        let lease = try await server.acquireAgentLease()   // waits until the terminal server reports /health 200
-        let adopted = await server.isAdopted
-        let warm = await server.isWarm
-        let pid = await server.processID
-        let touched = ((try? fm.attributesOfItem(atPath: lock.path)[.modificationDate] as? Date) ?? .distantPast).timeIntervalSinceNow > -5
-        await server.releaseAgentLease(lease)
-        await server.stop()
-        try await Task.sleep(for: .milliseconds(200))
-        let stillRunning = terminal.isRunning
-        let lockKept = PiServerLock.read(lock)?.owner == "pi"
-        terminal.terminate()
-        try? fm.removeItem(at: lock)
-        return adopted && warm && pid == terminal.processIdentifier && starts() == before && touched && lease.endpoint.port == plan.port
-            && stillRunning && lockKept
+        let gone = await server.processID == nil && !fm.fileExists(atPath: lock.path)
+        let alive = pid.map { kill($0, 0) == 0 } ?? true
+        return held?.owner == "app" && held?.holder == getpid() && held?.pid == pid && pid != nil && gone && !alive
     }
 
     check("Installer: terminal extension to ~/.pi/agent/extensions/pippa-local-server, same → unchanged, new payload → replaced, foreign folder stays") {
@@ -183,7 +242,7 @@ func runTerminalAutostartChecks(binary: URL, argsLog: URL) async {
 
     check("Installer step \"models.json\" also installs the terminal extension; without an extension in the payload the step still succeeds") {
         let (roots, _) = try setup("ta-step")
-        let options = PiInstallOptions(model: nil, providerModels: [PiProviderModel(id: "qwen3.5-9b-q4", name: "Qwen", contextWindow: 16384)],
+        let options = PiInstallOptions(model: nil, providerModels: [PiProviderModel(id: ornith, name: "Ornith", contextWindow: 16384)],
                                        port: PiInstaller.stablePort(support: roots.support))
         let done = PiInstaller(roots: roots).perform(.provider, options).isDone
         let installed = fm.fileExists(atPath: roots.extensionsDirectory.appendingPathComponent("pippa-local-server/index.ts").path)

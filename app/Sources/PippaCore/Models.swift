@@ -1,62 +1,35 @@
 import CryptoKit
 import Foundation
 
-/// Entry from models/catalog.json (only the fields Pippa needs).
+/// Entry from Resources/catalog.json: a model on Hugging Face, every file pinned by revision, size and SHA-256.
 public struct CatalogModel: Sendable, Codable, Hashable {
     public struct File: Sendable, Codable, Hashable { public var path: String; public var size: Int64; public var sha256: String }
     public struct Pinned: Sendable, Codable, Hashable { public var revision: String; public var files: [File] }
 
+    /// Also the model's folder name, the id oMLX serves it under and the id in Pi's models.json.
     public var key: String
     public var label: String
-    public var description: String?
     public var repo: String
     public var quant: String
     public var approxBytes: Int64?
     public var memGiB: Double
+    /// Largest context Pippa gives it; `ModelSelector` lowers it on 16 GB Macs.
     public var ctx: Int
-    public var moe: Bool?
-    public var rank: Int
-    /// Pippa's default thinking level for this model in Pi (`off`, `low`, `medium`); written to Pi's
+    /// Pippa's default thinking level for this model in Pi (`off`, `medium`); written to Pi's
     /// `modelThinkingLevels` (PiModelTuning). Pi clamps it to what the model supports.
     public var thinking: String?
-    public var pending: String?
     public var pinned: Pinned?
-    public var sampling: [String: Double]?
-    public var extra: [String: JSONScalar]?
-}
-
-/// Number or string from the catalog (`extra`).
-public enum JSONScalar: Sendable, Codable, Hashable, CustomStringConvertible {
-    case number(Double), string(String), bool(Bool)
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.singleValueContainer()
-        if let b = try? c.decode(Bool.self) { self = .bool(b) }
-        else if let d = try? c.decode(Double.self) { self = .number(d) }
-        else { self = .string(try c.decode(String.self)) }
-    }
-    public func encode(to encoder: Encoder) throws {
-        var c = encoder.singleValueContainer()
-        switch self { case .number(let d): try c.encode(d); case .string(let s): try c.encode(s); case .bool(let b): try c.encode(b) }
-    }
-    public var description: String {
-        switch self {
-        case .number(let d): d == d.rounded() ? String(Int(d)) : String(d)
-        case .string(let s): s
-        case .bool(let b): b ? "true" : "false"
-        }
-    }
 }
 
 public struct ModelCatalog: Sendable, Codable {
-    public var sampling: [String: Double]
     public var models: [CatalogModel]
-    public init(sampling: [String: Double], models: [CatalogModel]) { self.sampling = sampling; self.models = models }
+    public init(models: [CatalogModel]) { self.models = models }
 
     public static func bundled() -> ModelCatalog {
         guard let url = Bundle.module.url(forResource: "catalog", withExtension: "json"),
               let data = try? Data(contentsOf: url),
               let catalog = try? JSONDecoder().decode(ModelCatalog.self, from: data) else {
-            return ModelCatalog(sampling: [:], models: [])
+            return ModelCatalog(models: [])
         }
         return catalog
     }
@@ -64,24 +37,14 @@ public struct ModelCatalog: Sendable, Codable {
     public func model(_ key: String) -> CatalogModel? { models.first { $0.key == key } }
 }
 
-/// The concrete choice: model plus server settings.
+/// The model for this Mac and the context it gets.
 public struct ModelChoice: Sendable, Hashable {
     public var model: CatalogModel
     public var ctx: Int
-    public var extra: [String: String]       // additional llama-server options (without "--")
-    public var sampling: [String: Double]
 }
 
-/// The one model setting in Pippa's settings ("Pippas Wissen"), only on Macs with 24 GB or more
-/// (`ModelSelector.offersThorough`). Plain words in the UI, never model names or quantizations.
-public enum ModelPreference: String, Codable, Sendable, CaseIterable {
-    /// The table's default (Qwen3.5 9B on 16 and 24 GB, Qwen3.6 35B-A3B Q3 from 32 GB).
-    case standard
-    /// The larger model (Qwen3.6 35B-A3B IQ3), 24 GB and up.
-    case thorough
-}
-
-/// Chosen by memory size; the only decision is "Standard" or "Gründlicher" on 24 GB and up.
+/// One model for every Mac that can run it: Apple silicon with 16 GB or more. 32K context from 24 GB, 16K on 16 GB.
+/// Smaller Macs use an online AI.
 public enum ModelSelector {
     public static var isAppleSilicon: Bool {
         #if arch(arm64)
@@ -94,113 +57,20 @@ public enum ModelSelector {
         #endif
     }
 
-    /// Memory class in GB (8, 16, 24, 32 …), from the physical bytes.
-    public static func tierGB(physicalMemory: UInt64) -> Int {
-        let gib = Double(physicalMemory) / 1_073_741_824
-        switch gib {
-        case ..<12: return 8
-        case ..<20: return 16
-        case ..<28: return 24
-        default: return 32
-        }
-    }
+    /// Below this the 9B model (5 GB weights, ~6.5 GB while answering) leaves the Mac no room.
+    public static let minimumMemoryGiB = 15.0
 
-    /// The one table of which model a Mac gets (docs/settings-simplification.md). A change is one line here.
-    /// - 8 GB → Qwen3.5 4B (the 9B needs 7 GiB, the 8 GB budget is 4.8 GiB).
-    /// - 16 and 24 GB → Qwen3.5 9B (5.7 GB download), the same measured profile: 16K context, medium thinking,
-    ///   no RAM prompt cache. Best result on the ten Pippa tasks (17 yes / 12 partial / 1 no of 30), ~8 GB peak RSS
-    ///   (docs/measurements/model-compare). 24 GB moved here from the 35B in 0.3.18: the 35B needs 17.5 GiB, and a 30K
-    ///   request took 164 s with 8.2 GiB of swap in use (docs/measurements/24gb-tier-9b-2026-10-31.md).
-    /// - 32 GB and up → Qwen3.6 35B-A3B Q3, without thinking: six of ten Pippa tasks passed
-    ///   (docs/measurements/qwen-gguf-validation-2026-10-24). The separate terminal coding profile uses medium.
-    /// - The unqualified "More thorough" IQ3 profile remains hidden.
-    /// `preference` counts only where `offersThorough` holds; below, `.thorough` falls back to the standard row.
-    /// Keys between the `table` markers are read by scripts/build-app.sh: each must be pinned in catalog.json.
-    public static func table(tier: Int, preference: ModelPreference = .standard) -> (key: String, ctx: Int, extra: [String: String]) {
-        // table:begin
-        switch (tier, preference) {
-        case (8, _): ("qwen3.5-4b-q4", 16384, [:])
-        case (16, _), (24, .standard): ("qwen3.5-9b-q4", 16384, ["ctx-checkpoints": "4", "cache-ram": "0"])
-        case (_, .thorough): ("qwen3.6-35b-a3b-iq3", 32768, [:])
-        default: ("qwen3.6-35b-a3b-q3", 32768, [:])
-        }
-        // table:end
-    }
-
-    /// Memory classes the table distinguishes (`tierGB`).
-    public static let tiers = [8, 16, 24, 32]
-
-    /// "Gründlicher" stays hidden until the 35B model has passed the side-by-side test with Pi (docs/measurements/model-compare).
-    /// Its table row stays pinned for developers (`PIPPA_PI_MODEL`); a saved choice counts as "Standard" meanwhile.
-    public static let thoroughTested = false
-
-    /// Settings show "Standard" / "Gründlicher" only on Macs with 24 GB or more, and only once `thoroughTested`.
-    public static func offersThorough(physicalMemory: UInt64) -> Bool { thoroughTested && tierGB(physicalMemory: physicalMemory) >= 24 }
-
-    /// A table model that this Mac's memory class no longer gets but a larger one does (Qwen3.6 35B-A3B Q3 on a 24 GB Mac
-    /// since 0.3.18). Setup does not keep such a model as the fallback while the table model loads (`PiSetupFlow.fallback`):
-    /// the table moved this Mac off it for memory reasons. Its file stays on disk; deleting it is the person's call.
-    public static func isForLargerMacs(_ key: String, physicalMemory: UInt64) -> Bool {
-        let own = tierGB(physicalMemory: physicalMemory)
-        func hands(_ tier: Int) -> Bool { ModelPreference.allCases.contains { table(tier: tier, preference: $0).key == key } }
-        return !hands(own) && tiers.contains { $0 > own && hands($0) }
-    }
-
-    /// Every catalog key the table can hand out. A release must have all of them pinned (PippaChecks, build-app.sh).
-    public static var tableKeys: [String] {
-        var keys: [String] = []
-        for tier in tiers {
-            for preference in ModelPreference.allCases {
-                let key = table(tier: tier, preference: preference).key
-                if !keys.contains(key) { keys.append(key) }
-            }
-        }
-        return keys
-    }
-
-    public static func choose(physicalMemory: UInt64, preference: ModelPreference = .standard, appleSilicon: Bool = isAppleSilicon,
+    public static func choose(physicalMemory: UInt64, appleSilicon: Bool = isAppleSilicon,
                               catalog: ModelCatalog = .bundled()) -> Result<ModelChoice, PippaError> {
         guard appleSilicon else {
             return .failure(.unsupportedHardware(L("Pippa needs a Mac with Apple silicon (M1 or later).", table: "Core")))
         }
-        let row = table(tier: tierGB(physicalMemory: physicalMemory), preference: preference)
-        // An unpinned table model makes the whole setup fail on purpose: a release must never ship one
-        // (scripts/pin-model.sh pins it, PippaChecks "default model is pinned" and build-app.sh refuse otherwise).
-        guard let model = catalog.model(row.key), model.pending == nil, model.pinned != nil else {
-            return .failure(.modelUnavailable)
+        let gib = Double(physicalMemory) / 1_073_741_824
+        guard gib >= minimumMemoryGiB else {
+            return .failure(.unsupportedHardware(L("Pippa’s AI on this Mac needs 16 GB of memory. Use an online AI in Settings instead.", table: "Core")))
         }
-        return .success(choice(model, ctx: row.ctx, overrides: row.extra, catalog: catalog))
-    }
-
-    static func choice(_ model: CatalogModel, ctx: Int, overrides: [String: String], catalog: ModelCatalog) -> ModelChoice {
-        // llama.cpp otherwise allows an 8 GiB in-memory prompt cache on top of the model and KV state.
-        // The disk slot cache still preserves conversations when the server unloads.
-        var extra = ["cache-ram": "0"]
-        for (k, v) in model.extra ?? [:] { extra[k] = v.description }
-        for (k, v) in overrides { extra[k] = v }
-        let sampling = catalog.sampling.merging(model.sampling ?? [:]) { $1 }
-        return ModelChoice(model: model, ctx: min(ctx, model.ctx), extra: extra, sampling: sampling)
-    }
-
-
-    /// A specific catalog model instead of the table above, only for developers and measurements (`PIPPA_PI_MODEL`,
-    /// PippaLive, spikes) and for the model already in Pi's models.json (`PiLocalServer.plan`). The app offers
-    /// no choice. If `key` is one of the table's models for this Mac, exactly its entry applies; otherwise context by memory size.
-    public static func named(_ key: String, physicalMemory: UInt64, catalog: ModelCatalog = .bundled()) -> ModelChoice? {
-        for preference in ModelPreference.allCases {
-            if case .success(let row) = choose(physicalMemory: physicalMemory, preference: preference, catalog: catalog), row.model.key == key { return row }
-        }
-        // An installed smaller model keeps its qualified profile while the larger table model is offered.
-        // More physical memory must not silently double its context or enable llama.cpp's RAM cache.
-        for tier in [8, 16] where tier <= tierGB(physicalMemory: physicalMemory) {
-            let row = table(tier: tier)
-            if row.key == key, let model = catalog.model(key), model.pinned != nil {
-                return choice(model, ctx: row.ctx, overrides: row.extra, catalog: catalog)
-            }
-        }
-        guard let model = catalog.model(key), model.pinned != nil else { return nil }
-        let small = physicalMemory < 20 * 1_073_741_824
-        return choice(model, ctx: small ? 16384 : 32768, overrides: small ? ["cache-ram": "0"] : [:], catalog: catalog)
+        guard let model = catalog.models.first, model.pinned != nil else { return .failure(.modelUnavailable) }
+        return .success(ModelChoice(model: model, ctx: min(model.ctx, gib >= 22 ? 32768 : 16384)))
     }
 }
 
@@ -235,38 +105,24 @@ public struct ModelDownloadSize: Sendable, Equatable {
 
 /// Small settings file (settings.json) in the support folder.
 public struct PippaSettings: Codable, Sendable, Equatable {
-    // Legacy `modelOverride`, `automaticChosen` and `piModel` remain ignored.
-    /// Explicitly configured pinned catalog model; nil uses the memory table. Unknown keys fall back to the table.
-    public var localModelKey: String?
-    /// Fixed llama-server port for Pi's models.json (installer, `PiInstaller.stablePort`); chosen once.
-    public var llamaPort: Int?
-    /// Minutes without a request until Pippa unloads the `pippa-local` model; `nil` = 10
-    /// (`PiLocalServer.defaultIdleMinutes`). The next request loads it again.
-    public var llamaIdleMinutes: Int?
+    /// Fixed port of the local server for Pi's models.json (`PiInstaller.stablePort`); chosen once. Stored under the
+    /// old key so an existing setup keeps its port.
+    public var serverPort: Int?
     /// Port of the former online proxy; unused since Pi talks to the service itself (kept so old settings round-trip).
     public var onlinePort: Int?
-    /// On by default: short shown text documents go straight into Pi's
-    /// message instead of via a `read_document` round (`PiShownContext.inlineShortLimit`). `nil` = on (also old
-    /// settings.json without the key); only an explicit `false` turns it off. Read via `inlinesShortText`.
+    /// On by default: short shown text documents go straight into Pi's message (`nil` = on).
     public var piInlineShortText: Bool?
-    /// "Pippas Wissen" in settings (24 GB and up), raw value of `ModelPreference`; `nil` or unknown = standard. A string,
-    /// so that an unknown value never makes the whole file unreadable (it holds the port). Read via `preference`.
-    public var modelPreference: String?
-    /// Effective value; counts only where `ModelSelector.offersThorough` holds.
-    public var preference: ModelPreference {
-        get { modelPreference.flatMap(ModelPreference.init(rawValue:)) ?? .standard }
-        set { modelPreference = newValue == .standard ? nil : newValue.rawValue }
-    }
     /// The model whose first download the person agreed to ("Set Up"): an interrupted download goes on by itself at
-    /// the next start. Cleared once that model is in use. `nil`: no consent kept.
+    /// the next start. `nil`: no consent kept.
     public var downloadConsent: String?
-    public init(llamaPort: Int? = nil, llamaIdleMinutes: Int? = nil, onlinePort: Int? = nil, piInlineShortText: Bool? = nil,
-                modelPreference: String? = nil, localModelKey: String? = nil) {
-        self.llamaPort = llamaPort; self.llamaIdleMinutes = llamaIdleMinutes; self.onlinePort = onlinePort
-        self.piInlineShortText = piInlineShortText; self.modelPreference = modelPreference
-        self.localModelKey = localModelKey
+
+    enum CodingKeys: String, CodingKey {
+        case serverPort = "llamaPort", onlinePort, piInlineShortText, downloadConsent
     }
 
+    public init(serverPort: Int? = nil, onlinePort: Int? = nil, piInlineShortText: Bool? = nil) {
+        self.serverPort = serverPort; self.onlinePort = onlinePort; self.piInlineShortText = piInlineShortText
+    }
 
     /// Change only the kept download consent (load, change, save); nothing is written when it is already so.
     public static func saveDownloadConsent(_ key: String?, to base: URL) throws {

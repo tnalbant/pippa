@@ -6,7 +6,6 @@ Pippa itself is MIT-licensed (see [LICENSE](LICENSE)). `Pippa.app` ships the thi
 |---|---|---|
 | [Pi](https://github.com/earendil-works/pi) 1.4.0 (`@earendil-works/pi-coding-agent`, `pi-agent-core`, `pi-ai`, `pi-tui`, `pi-mcp`, `pi-codemode`, `pi-telemetry`, `chord`) | The agent. Shipped as the install payload Pippa copies to `~/.pi/agent` (`Contents/Resources/pi-payload/release`) | MIT, Copyright (c) 2025 Mario Zechner. The npm packages contain no licence file, so the text is reproduced below |
 | [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk), bundled inside `@earendil-works/pi-mcp` | MCP client in Pi | MIT, Copyright (c) 2024 Anthropic, PBC; shipped in `node_modules/@earendil-works/pi-mcp/LICENSES/` |
-| [llama.cpp](https://github.com/ggml-org/llama.cpp) b11503 (`llama-server`, ggml, llama and mtmd libraries) | Runs the local language model | MIT, see below and `Contents/Resources/llama.cpp-LICENSE.txt`. Code compiled into it is listed under "Inside llama.cpp" below |
 | [fd](https://github.com/sharkdp/fd) 10.3.0 (`Contents/Helpers/fd`) | File search for Pi's `find` tool | MIT or Apache 2.0, Copyright (c) 2017-present The fd developers; see `Contents/Resources/fd-LICENSE-MIT.txt` and `fd-LICENSE-APACHE.txt` |
 | [ripgrep](https://github.com/BurntSushi/ripgrep) 14.1.1 (`Contents/Helpers/rg`) | Content search for Pi's `grep` tool | MIT or Unlicense, Copyright (c) 2015 Andrew Gallant; see `Contents/Resources/rg-LICENSE-MIT.txt` and `rg-UNLICENSE.txt` |
 | [Node.js](https://nodejs.org) 22.23.3 | Runs Pi; also copied to `~/.local/share/pi-node` for Pi in Terminal | MIT and others, see `Contents/Resources/Node-LICENSE.txt` |
@@ -18,18 +17,17 @@ Pippa itself is MIT-licensed (see [LICENSE](LICENSE)). `Pippa.app` ships the thi
 | [Bagel Fat One](https://fonts.google.com/specimen/Bagel+Fat+One) | App font for the welcome headline | SIL Open Font License 1.1, Copyright 2022 The Bagel Fat Project Authors; shipped as `OFL.txt` next to the font |
 | [Hob](https://github.com/FrigadeHQ/hob) | PDF blank detection, labels and filled copies, ported into `app/Sources/PippaCore/Tools/FormFill.swift` | MIT, Copyright (c) 2026 Frigade, see below |
 
-Language models are not part of the app or this repository. Pippa downloads them from Hugging Face only after you agree (or reuses a copy already on the Mac), and each model comes under its own licence, named with a link in the model catalogue (`app/Sources/PippaCore/Resources/catalog.json`). All installable catalogue models are currently Apache 2.0: K2 Horizon 7B by MBZUAI and IFM, the default from 16 GB on ([model card](https://huggingface.co/IFM/K2-Horizon-7B)), and the Qwen models ([Qwen licence files](https://huggingface.co/Qwen)), among them Qwen3.5 4B for 8 GB Macs and Qwen3.6 35B-A3B for "More thorough" on 24 GB and up.
+### Downloaded at setup, not bundled
 
-### Inside llama.cpp
+Pippa's AI on this Mac is not part of the app or this repository. When you set it up, Pippa downloads a Python runtime with oMLX and one language model, checks each file against a pinned SHA-256 and keeps them in `~/Library/Application Support/Pippa` (see [docs/models.md](docs/models.md)). Each comes under its own licence:
 
-The pinned llama.cpp build compiles in third-party code that carries its own notices:
-
-- [cpp-httplib](https://github.com/yhirose/cpp-httplib) (HTTP server in `llama-server`): MIT, Copyright (c) 2017 yhirose
-- [nlohmann/json](https://github.com/nlohmann/json) (JSON in llama-server and common): MIT, Copyright (c) 2013-2025 Niels Lohmann
-- [stb_image](https://github.com/nothings/stb) (image decoding in libmtmd): MIT (alternatively public domain), Copyright (c) 2017 Sean Barrett
-- YaRN RoPE scaling code in the Metal backend: MIT, Copyright (c) 2023 Jeffrey Quesnelle and Bowen Peng
-
-Each is under the MIT License, whose text is reproduced under "Pi" below with the respective copyright line.
+| Component | Use in Pippa | Licence |
+|---|---|---|
+| [oMLX](https://github.com/jundot/omlx) | Local server that runs the language model on Apple silicon | Apache 2.0 |
+| [MLX](https://github.com/ml-explore/mlx) and [mlx-lm](https://github.com/ml-explore/mlx-lm) (ml-explore) | Model inference used by oMLX | MIT, Copyright (c) Apple Inc. |
+| [CPython](https://www.python.org) 3.11 ([python-build-standalone](https://github.com/astral-sh/python-build-standalone)) | Runs oMLX | Python Software Foundation License |
+| Other Python packages oMLX depends on | Pinned in the runtime archive | Their own licences, kept in each package's `*.dist-info` folder inside the runtime |
+| [Ornith 1.5 9B, MLX 4-bit](https://huggingface.co/ornith-ai/Ornith-1.5-9B-MLX-4bit) by Ornith AI | The language model | See the model card. The MLX repository names no licence; its base model [Ornith-1.5-9B](https://huggingface.co/ornith-ai/Ornith-1.5-9B) is tagged MIT on Hugging Face |
 
 ### npm packages without a licence file
 
@@ -73,30 +71,6 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-## llama.cpp
-
-MIT License
-
-Copyright (c) 2023-2026 The ggml authors
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
 ## pi-web-access
 
 MIT License

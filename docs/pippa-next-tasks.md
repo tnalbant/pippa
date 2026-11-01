@@ -48,5 +48,5 @@ Dropped: `applescript`, `pippa_more_tools` and tool-scope, `save_skill`, `make_c
 
 - Undo for calendar entries and reminders in the receipt row (the old app had it).
 - Mail and Calendar acceptance needs a signed build or the person's clicks: a re-signed dev copy asks macOS again.
-- Model candidate: Ornith-1.5-9B (MLX, 4-bit) runs at 25–30 tokens/s in Pi on a 24 GB Mac and leaves it usable.
-  Pippa only talks to Pi, so trying it is a provider entry in models.json plus an MLX server instead of llama-server.
+- Local AI switched to oMLX with Ornith 1.5 9B (MLX, 4-bit); llama.cpp, GGUF and the model table are gone. Tasks in
+  [omlx-switch.md](omlx-switch.md).

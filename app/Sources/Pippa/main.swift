@@ -1,6 +1,6 @@
 import AppKit
 
-// Pi, llama-server and Node are children on pipes: if one dies just before a write, the write fails instead of
+// Pi, the oMLX server and Node are children on pipes: if one dies just before a write, the write fails instead of
 // SIGPIPE ending Pippa.
 signal(SIGPIPE, SIG_IGN)
 let app = NSApplication.shared
@@ -13,6 +13,11 @@ if CommandLine.arguments.dropFirst().contains("--verify-runtime") {
 if let index = CommandLine.arguments.firstIndex(of: "--ask"), CommandLine.arguments.count > index + 1 {
     let question = CommandLine.arguments[index + 1]
     Task { @MainActor in exit(await HeadlessAsk.run(question)) }
+    app.run()
+}
+// `Pippa --setup`: runs the first-run setup without the window and agrees to the download, printing each state.
+if CommandLine.arguments.dropFirst().contains("--setup") {
+    Task { @MainActor in exit(await HeadlessAsk.setup()) }
     app.run()
 }
 if let index = CommandLine.arguments.firstIndex(of: "--make-pdf") {

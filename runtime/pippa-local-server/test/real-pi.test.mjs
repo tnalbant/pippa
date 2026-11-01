@@ -1,4 +1,4 @@
-// The extension inside a real Pi (`pi -p`), fake HOME, fake llama-server. Skipped unless a Pi CLI is named:
+// The extension inside a real Pi (`pi -p`), fake HOME, fake oMLX (fake-omlx-server.mjs). Skipped unless a Pi CLI is named:
 //
 //   PIPPA_PI_CLI=<release>/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js \
 //   PIPPA_PI_NODE=<node 22> node --test runtime/pippa-local-server/test/real-pi.test.mjs
@@ -31,24 +31,31 @@ test("real Pi: plain `pi -p` with pippa-local starts the server, answers, and le
 	const port = await new Promise((resolve) => {
 		const s = createServer().listen(0, "127.0.0.1", () => { const { port } = s.address(); s.close(() => resolve(port)); });
 	});
-	const binary = join(root, "Pippa.app/Contents/Helpers/llama-server");
-	mkdirSync(join(root, "Pippa.app/Contents/Helpers"), { recursive: true });
-	writeFileSync(binary, `#!${node}\nimport(${JSON.stringify(join(here, "fake-llama-server.mjs"))});\n`);
+	// The runtime's python3, played by the fake server; oMLX's settings.json carries host, port and key.
+	const binary = join(support, "mlx-runtime/0.0.1/bin/python3");
+	mkdirSync(join(support, "mlx-runtime/0.0.1/bin"), { recursive: true });
+	writeFileSync(binary, `#!${node}\nimport(${JSON.stringify(join(here, "fake-omlx-server.mjs"))});\n`);
 	chmodSync(binary, 0o755);
-	const keyFile = join(support, "llama-key");
-	writeFileSync(keyFile, "k".repeat(64) + "\n", { mode: 0o600 });
+	const key = "k".repeat(64);
+	const keyFile = join(support, "local-server-key");
+	writeFileSync(keyFile, key + "\n", { mode: 0o600 });
+	const base = join(support, "omlx");
+	const modelID = "ornith-1.5-9b-mlx-4bit";
+	mkdirSync(join(base, "models", modelID), { recursive: true });
+	writeFileSync(join(base, "settings.json"), JSON.stringify({ server: { host: "127.0.0.1", port }, auth: { api_key: key } }), { mode: 0o600 });
+	const starts = join(root, "starts.jsonl");
 	writeFileSync(join(support, "pippa-local-server.json"), JSON.stringify({
-		schemaVersion: 1, provider: "pippa-local", port, binary, keyFile, idleSeconds: 600, modelID: "k2-horizon-7b",
-		arguments: ["--host", "127.0.0.1", "--port", String(port), "--jinja", "--alias", "k2-horizon-7b"],
+		schemaVersion: 2, provider: "pippa-local", port, binary, keyFile, modelID, logFile: join(support, "local-server.log"),
+		arguments: ["-c", "from omlx.cli import main; main()", "serve", "--base-path", base, "--headless"],
+		environment: { PATH: "/usr/bin:/bin", HF_HUB_OFFLINE: "1", OMLX_HEADLESS: "1", FAKE_OMLX_LOG: starts },
 	}));
 	writeFileSync(join(home, ".pi/agent/models.json"), JSON.stringify({ providers: { "pippa-local": {
 		baseUrl: `http://127.0.0.1:${port}/v1`, api: "openai-completions", apiKey: `!/bin/cat '${keyFile}'`,
-		models: [{ id: "k2-horizon-7b", name: "K2 Horizon 7B", contextWindow: 16384, maxTokens: 512 }],
+		models: [{ id: modelID, name: "Ornith 1.5 9B", contextWindow: 16384, maxTokens: 512 }],
 	} } }));
-	const starts = join(root, "starts.jsonl");
-	const env = { HOME: home, PATH: "/usr/bin:/bin", PI_OFFLINE: "1", PI_SKIP_VERSION_CHECK: "1", PI_TELEMETRY: "0", FAKE_LLAMA_LOG: starts };
+	const env = { HOME: home, PATH: "/usr/bin:/bin", PI_OFFLINE: "1", PI_SKIP_VERSION_CHECK: "1", PI_TELEMETRY: "0" };
 	const run = () => new Promise((resolve) => {
-		const child = execFile(node, [cli, "-p", "--provider", "pippa-local", "--model", "k2-horizon-7b", "--no-session", "say pong"],
+		const child = execFile(node, [cli, "-p", "--provider", "pippa-local", "--model", modelID, "--no-session", "say pong"],
 			{ env, cwd: root, timeout: 60_000 }, (error, stdout, stderr) => resolve({ error, stdout, stderr }));
 		child.stdin.end(); // `pi -p` reads piped stdin until EOF
 	});
@@ -61,10 +68,10 @@ test("real Pi: plain `pi -p` with pippa-local starts the server, answers, and le
 		assert.match(second.stdout, /pong/);
 		const lines = readFileSync(starts, "utf8").trim().split("\n");
 		assert.equal(lines.length, 1);
-		const lock = JSON.parse(readFileSync(join(support, "llama-server-pi.lock"), "utf8"));
+		const lock = JSON.parse(readFileSync(join(support, "local-server.lock"), "utf8"));
 		assert.equal(lock.owner, "pi");
 	} finally {
-		const lockFile = join(support, "llama-server-pi.lock");
+		const lockFile = join(support, "local-server.lock");
 		if (existsSync(lockFile)) {
 			const lock = JSON.parse(readFileSync(lockFile, "utf8"));
 			try { process.kill(lock.holder, "SIGTERM"); } catch {}

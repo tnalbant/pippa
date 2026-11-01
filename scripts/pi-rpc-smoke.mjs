@@ -31,7 +31,7 @@ const home = await mkdtemp(join(repo, ".build/pi-smoke-home-"));
 const agent = join(home, ".pi/agent");
 const work = join(home, "work");
 const sessions = join(home, "Library/Application Support/Pippa/pi-sessions");
-const keyFile = join(home, "Library/Application Support/Pippa/llama-key");
+const keyFile = join(home, "Library/Application Support/Pippa/local-server-key");
 await Promise.all([agent, work, sessions].map((d) => mkdir(d, { recursive: true })));
 await writeFile(keyFile, "smoke-key\n");
 await chmod(keyFile, 0o600);

@@ -3,10 +3,8 @@ import Foundation
 // Setup as the UI sees it, with no technical questions. Pi, Node, model folder, adopting existing models and models.json run silently;
 // the only question is the download. Errors are one sentence plus "Nochmal versuchen", technical details only in `details`.
 //
-// Order: detect → Pi → model folder → model → models.json → ready. The model step only checks and adopts (no network);
-// its answer decides which model goes into models.json: the table's model, or, while that one still has to be
-// downloaded, the model Pippa used so far (`fallback`). models.json is written before the download question either way,
-// so only the model needs checking after loading.
+// Order: detect → Pi → model folder → model → models.json → ready. The model step only checks and adopts (no network).
+// The download question covers the oMLX runtime and the model together.
 
 /// What the UI shows.
 public enum PiSetupState: Sendable, Equatable {
@@ -37,125 +35,89 @@ public struct PiSetupProblem: Sendable, Equatable {
     }
 }
 
-/// Runs the installer for a model. Blocking (cloning, SHA-256, `pi --version`): never on the main thread.
+/// Runs the installer for the model and the runtime that serves it. Blocking (SHA-256, `pi --version`): never on the main thread.
 public final class PiSetupFlow: @unchecked Sendable {
     public let installer: PiInstaller
     public let model: CatalogModel
     public let options: PiInstallOptions
+    public let runtime: MLXRuntime?
     private let download: PiInstaller.Download
-    private let catalog: ModelCatalog
-    private let physicalMemory: UInt64
     private let lock = NSLock()
     private var adopted: String?
-    private var pending: Int64?
-    private var active: String?
 
-    /// `searchRoots`: `nil` = all known places (old container, LM Studio, Ollama, Hugging Face …).
+    /// `searchRoots`: `nil` = all known places (oMLX, LM Studio, Hugging Face).
     /// `download`: a stand-in only for tests and recordings; otherwise the real ModelDownloader.
     public init(roots: PiInstallRoots, model: CatalogModel, contextWindow: Int, searchRoots: [ModelLocation]? = nil,
-                port: Int? = nil, catalog: ModelCatalog = .bundled(), physicalMemory: UInt64 = ProcessInfo.processInfo.physicalMemory,
-                download: @escaping PiInstaller.Download = PiInstaller.modelDownloader) {
+                port: Int? = nil, runtime: MLXRuntime? = nil, download: @escaping PiInstaller.Download = PiInstaller.modelDownloader) {
         installer = PiInstaller(roots: roots)
         self.model = model
-        self.catalog = catalog
-        self.physicalMemory = physicalMemory
+        self.runtime = runtime ?? MLXRuntime(support: roots.support)
         options = PiInstallOptions(model: model, modelSearchRoots: searchRoots,
                                    providerModels: [PiProviderModel(id: model.key, name: model.label, contextWindow: contextWindow)],
                                    port: port ?? PiInstaller.stablePort(support: roots.support))
         self.download = download
     }
 
-    /// The model for this Mac: the table by memory size (`ModelSelector.choose`); `preference` is the one setting
-    /// "Standard" / "Gründlicher" (24 GB and up, docs/settings-simplification.md). `override`: an explicitly configured
-    /// pinned model (`localModelKey` or `PIPPA_PI_MODEL`); invalid keys safely fall back to the table.
-    public static func choice(override: String?, preference: ModelPreference = .standard,
-                              physicalMemory: UInt64 = ProcessInfo.processInfo.physicalMemory,
+    /// The model for this Mac (`ModelSelector.choose`): Ornith on Apple silicon with 16 GB or more, else `nil`.
+    public static func choice(physicalMemory: UInt64 = ProcessInfo.processInfo.physicalMemory,
                               catalog: ModelCatalog = .bundled()) -> ModelChoice? {
-        if let override, let model = catalog.model(override), model.pinned != nil {
-            // A saved standard-model selection must use the same tested profile as a fresh setup.
-            let standard = ModelSelector.table(tier: ModelSelector.tierGB(physicalMemory: physicalMemory))
-            if override == standard.key {
-                return ModelSelector.choice(model, ctx: standard.ctx, overrides: standard.extra, catalog: catalog)
-            }
-            return ModelSelector.choice(model, ctx: min(model.ctx, 16384), overrides: [:], catalog: catalog)
-        }
-        return try? ModelSelector.choose(physicalMemory: physicalMemory, preference: preference, catalog: catalog).get()
+        try? ModelSelector.choose(physicalMemory: physicalMemory, catalog: catalog).get()
     }
 
-    /// After `prepare`: bytes still to download for `model` while the previous model keeps working (`.ready` with the
-    /// fallback in models.json). `nil`: `model` is the one in use, or there was no fallback (then `.askDownload`).
-    public var pendingDownload: Int64? { lock.withLock { pending } }
-
-    /// After `prepare`: the catalog key now in models.json (`model.key`, or the fallback's).
-    public var activeModelKey: String? { lock.withLock { active } }
-
-    /// The model Pippa used so far, kept while `model` still has to be downloaded (e.g. the previous model after the table moved
-    /// to Qwen3.5 9B, or the standard model while "Gründlicher" loads): the first `pippa-local` model in models.json that
-    /// is a pinned catalog model, verified in the model folder. Its context is capped by its current profile. Nothing is deleted.
-    /// Not a model the table now reserves for larger Macs (`ModelSelector.isForLargerMacs`, e.g. the 35B on 24 GB since
-    /// 0.3.18): the table moved this Mac off it because it swaps, so setup asks for the download instead of keeping it.
-    func fallback() -> (model: CatalogModel, provider: PiProviderModel)? {
-        guard let folder = installer.state.modelsFolder else { return nil }
-        let downloader = ModelDownloader(directory: URL(fileURLWithPath: folder, isDirectory: true))
-        let modelsJSON = installer.roots.modelsJSON
-        for id in PiInstaller.providerModelIDs(modelsJSON: modelsJSON) where id != model.key {
-            guard let previous = catalog.model(id), previous.pinned != nil, downloader.isInstalled(previous),
-                  !ModelSelector.isForLargerMacs(id, physicalMemory: physicalMemory) else { continue }
-            let limit = ModelSelector.named(id, physicalMemory: physicalMemory, catalog: catalog)?.ctx
-                ?? min(previous.ctx, 16384)
-            let context = min(PiInstaller.providerContextWindow(modelsJSON: modelsJSON, id: id) ?? limit, limit)
-            return (previous, PiProviderModel(id: previous.key, name: previous.label, contextWindow: context))
-        }
-        return nil
-    }
-
-    /// Fast, without reading or changing anything: is the AI already with another program? Then the
-    /// UI shows "Ich übernehme meine KI aus LM Studio …" instead of the question. `nil`: already done or nothing found.
+    /// Fast, without reading or changing anything: is the model already with another program? Then the
+    /// UI says "Taking over the AI from oMLX …" instead of asking. `nil`: already done or nothing found.
     public func adoptionSource() -> String? {
-        if let folder = installer.state.modelsFolder, ModelDownloader(directory: URL(fileURLWithPath: folder)).isInstalled(model) { return nil }
-        let folder = installer.state.modelsFolder.map { URL(fileURLWithPath: $0, isDirectory: true) }
-            ?? (PiInstaller.isDirectory(installer.roots.sharedModels) ? installer.roots.sharedModels : installer.roots.pippaModels)
-        let roots = installer.modelSearchRoots(folder: folder, extra: options.modelSearchRoots)
-        let found = ExistingModels.find(ModelCatalog(sampling: [:], models: [model]), roots: roots)
+        if let folder = installer.modelDirectory(model), ModelDownloader(directory: folder).isInstalled(model) { return nil }
+        let found = ExistingModels.find(model, roots: options.modelSearchRoots ?? ExistingModels.defaultRoots(home: installer.roots.home))
         return model.pinned?.files.lazy.compactMap { found[$0.sha256]?.source }.first
     }
 
-    /// Before "Load": how much more free space the download needs, by the downloader's own rule (2 GB to spare).
-    /// `nil`: enough, or unknown. Measured where the model will go once `prepare` has chosen the folder.
+    /// Before "Load": how much more free space the download needs (2 GB to spare). `nil`: enough, or unknown.
     public func spaceShortfall(remaining: Int64) -> Int64? {
-        let folder = installer.state.modelsFolder.map { URL(fileURLWithPath: $0, isDirectory: true) } ?? installer.roots.pippaModels
+        let folder = installer.state.modelsFolder.map { URL(fileURLWithPath: $0, isDirectory: true) } ?? installer.roots.support
         return ModelDownloader.spaceShortfall(available: ModelDownloader.availableSpace(at: folder), remaining: remaining)
     }
 
-    /// All without network. Stops only at the download question or an error. If the model is missing but the previous one
-    /// is there, setup is `.ready` with the previous one and `pendingDownload` says what the switch still needs.
+    /// All without network. Stops only at the download question or an error.
     public func prepare() -> PiSetupState {
         for step in [PiInstallStep.detect, .pi, .modelsFolder] {
             if case .failed(let failure) = installer.perform(step, options).outcome { return .failed(PiSetupProblem(failure)) }
         }
-        var use = options
-        var missing: Int64?
+        var missing = runtime?.remainingBytes ?? 0
+        if runtime == nil { return .failed(PiSetupProblem(.missingStep(.model))) }
+        // Also with 0 bytes left (a complete but unverified .part): the download step verifies it.
+        var modelMissing = false
         switch installer.perform(.model, options).outcome {
         case .failed(let failure): return .failed(PiSetupProblem(failure))
-        case .needsDownload(let bytes):
-            missing = bytes
-            if let previous = fallback() {
-                use = PiInstallOptions(model: previous.model, modelSearchRoots: options.modelSearchRoots,
-                                       providerModels: [previous.provider], port: options.port)
-            }
+        case .needsDownload(let bytes): missing += bytes; modelMissing = true
         case .modelReady(_, .some, let source): lock.withLock { adopted = source }
         default: break
         }
-        if case .failed(let failure) = installer.perform(.provider, use).outcome { return .failed(PiSetupProblem(failure)) }
-        lock.withLock { active = use.model?.key; pending = use.model == options.model ? nil : missing }
-        if let missing, use.model == options.model { return .askDownload(bytes: missing) }
-        if case .failed(let failure) = installer.perform(.ready, use).outcome { return .failed(PiSetupProblem(failure)) }
+        if case .failed(let failure) = installer.perform(.provider, options).outcome { return .failed(PiSetupProblem(failure)) }
+        if modelMissing || missing > 0 || runtime?.isInstalled != true { return .askDownload(bytes: missing) }
+        if case .failed(let failure) = installer.perform(.ready, options).outcome { return .failed(PiSetupProblem(failure)) }
         return .ready(adoptedFrom: lock.withLock { adopted })
     }
 
-    /// After "Load": downloads (resumable), verifies, then the rest as in `prepare`.
+    /// After "Load": runtime, then the model (both resumable and verified), then the rest as in `prepare`.
+    /// Progress runs over both by their sizes.
     public func download(progress: @escaping @Sendable (Double, TimeInterval?) -> Void) async -> PiSetupState {
-        let result = await installer.downloadModel(model, using: download, progress: progress)
+        let runtimeBytes = Double(runtime?.remainingBytes ?? 0)
+        let modelBytes = Double(model.approxBytes ?? 1)
+        let share = runtimeBytes / max(1, runtimeBytes + modelBytes)
+        if let runtime, !runtime.isInstalled {
+            do { try await runtime.install { progress($0 * share, nil) } }
+            catch let error as PippaError {
+                if case .notEnoughSpace(let bytes) = error { return .failed(PiSetupProblem(.notEnoughSpace(bytes: bytes))) }
+                if case .checksumMismatch = error { return .failed(PiSetupProblem(.downloadDamaged)) }
+                return .failed(PiSetupProblem(.downloadFailed(error.localizedDescription)))
+            } catch {
+                return .failed(PiSetupProblem(.downloadFailed(error.localizedDescription)))
+            }
+        }
+        let result = await installer.downloadModel(model, using: download) { fraction, remaining in
+            progress(share + fraction * (1 - share), remaining)
+        }
         if case .failed(let failure) = result.outcome { return .failed(PiSetupProblem(failure)) }
         return prepare()
     }

@@ -1,5 +1,6 @@
 import AppKit
 import CoreText
+import CryptoKit
 import Foundation
 import PippaCore
 import SQLite3
@@ -131,221 +132,131 @@ check("Case: only the same file counts as a pure rename") {
 
 // MARK: - Model choice
 
-/// Memory budget for Apple Silicon (rule from the former pi-local installer): what a table model may need.
-func budgetGiB(physicalMemory: UInt64) -> Double {
-    let ram = Double(physicalMemory) / 1_073_741_824
-    return ram <= 12 ? ram * 0.6 : min(ram * 0.75, ram - 6)
+let GB: UInt64 = 1 << 30
+let ornithKey = "ornith-1.5-9b-mlx-4bit"
+
+/// A catalog model from given files (path → content), each pinned with its real size and SHA-256.
+func fakeCatalogModel(key: String = "fake-1b-mlx", repo: String = "fixture-org/Fake-1B-MLX", files: [String: Data]) -> CatalogModel {
+    let pinned = files.keys.sorted().map { path -> [String: Any] in
+        let data = files[path]!
+        return ["path": path, "size": data.count, "sha256": SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()]
+    }
+    let json: [String: Any] = ["key": key, "label": "Fake 1B", "repo": repo, "quant": "MLX 4-bit", "memGiB": 1, "ctx": 4096,
+                               "pinned": ["revision": "test", "files": pinned]]
+    return try! JSONDecoder().decode(CatalogModel.self, from: JSONSerialization.data(withJSONObject: json))
 }
 
-let GB: UInt64 = 1 << 30
-/// The bundled catalog, with a stand-in pin for table models that are not pinned yet (only so the table itself can be
-/// checked; "Default model is pinned" checks the real pins).
-let tableCatalog: ModelCatalog = {
-    var catalog = ModelCatalog.bundled()
-    for index in catalog.models.indices where catalog.models[index].pinned == nil && ModelSelector.tableKeys.contains(catalog.models[index].key) {
-        catalog.models[index].pending = nil
-        let json = #"{"revision": "check", "files": [{"path": "stand-in.gguf", "size": 1, "sha256": "\#(String(repeating: "0", count: 64))"}]}"#
-        catalog.models[index].pinned = try? JSONDecoder().decode(CatalogModel.Pinned.self, from: Data(json.utf8))
-    }
-    return catalog
-}()
-func pick(_ gb: UInt64, _ preference: ModelPreference = .standard) -> ModelChoice? {
-    try? ModelSelector.choose(physicalMemory: gb * GB, preference: preference, appleSilicon: true, catalog: tableCatalog).get()
-}
-check("Default model is pinned: every table model has revision, path, size and SHA256 (scripts/pin-model.sh)") {
+check("Catalog: exactly one model, Ornith 1.5 9B, every file pinned by revision, size and SHA-256") {
     let catalog = ModelCatalog.bundled()
-    let unpinned = ModelSelector.tableKeys.filter { key in
-        guard let model = catalog.model(key), model.pending == nil, let pinned = model.pinned, !pinned.files.isEmpty,
-              pinned.revision.range(of: "^[0-9a-f]{40}$", options: .regularExpression) != nil else { return true }
-        return !pinned.files.allSatisfy { $0.size > 0 && $0.sha256.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil }
-    }
-    if !unpinned.isEmpty { print("   not pinned: \(unpinned.joined(separator: ", ")) → scripts/pin-model.sh <key> <hf-repo>") }
-    return unpinned.isEmpty
+    guard catalog.models.count == 1, let model = catalog.models.first, model.key == ornithKey,
+          let pinned = model.pinned, !pinned.files.isEmpty,
+          pinned.revision.range(of: "^[0-9a-f]{40}$", options: .regularExpression) != nil else { return false }
+    let paths = pinned.files.map(\.path)
+    return pinned.files.allSatisfy { $0.size > 0 && $0.sha256.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil }
+        && Set(paths).count == paths.count && paths.contains("model.safetensors") && paths.contains("config.json")
+        && model.approxBytes == pinned.files.reduce(0) { $0 + $1.size }
+        && model.thinking == "medium"
 }
-check("Model: 8 GB → qwen3.5-4b-q4, also with \"More thorough\" saved (no choice below 24 GB)") {
-    pick(8)?.model.key == "qwen3.5-4b-q4" && pick(8, .thorough)?.model.key == "qwen3.5-4b-q4"
-        && !ModelSelector.offersThorough(physicalMemory: 8 * GB)
+check("Model: 8 GB → no local AI (online AI instead); Intel → not supported") {
+    let small: Bool = { if case .failure(.unsupportedHardware) = ModelSelector.choose(physicalMemory: 8 * GB, appleSilicon: true) { return true }; return false }()
+    let intel: Bool = { if case .failure(.unsupportedHardware) = ModelSelector.choose(physicalMemory: 32 * GB, appleSilicon: false) { return true }; return false }()
+    return small && intel && PiSetupFlow.choice(physicalMemory: 8 * GB) == nil
 }
-check("Model: 32 and 64 GB → qwen3.6-35b-a3b-q3, ctx 32768, thinking off; \"More thorough\" → qwen3.6-35b-a3b-iq3") {
-    [32, 64].allSatisfy { gb in
-        let c = pick(UInt64(gb))
-        return c?.model.key == "qwen3.6-35b-a3b-q3" && c?.ctx == 32768 && c?.model.thinking == "off"
-            && c?.extra["cache-ram"] == "1024" && c?.extra["ctx-checkpoints"] == "4"
-            && pick(UInt64(gb), .thorough)?.model.key == "qwen3.6-35b-a3b-iq3"
-            && ModelSelector.offersThorough(physicalMemory: UInt64(gb) * GB) == ModelSelector.thoroughTested
-    }
+check("Model: 16 GB → Ornith with 16K context, 24 GB and more → 32K") {
+    let c16 = try? ModelSelector.choose(physicalMemory: 16 * GB, appleSilicon: true).get()
+    let c24 = try? ModelSelector.choose(physicalMemory: 24 * GB, appleSilicon: true).get()
+    let c64 = try? ModelSelector.choose(physicalMemory: 64 * GB, appleSilicon: true).get()
+    return c16?.model.key == ornithKey && c16?.ctx == 16384
+        && c24?.model.key == ornithKey && c24?.ctx == 32768 && c64?.ctx == 32768
 }
-check("Model: the 35B is for 32 GB and up only; 24 GB keeps no fallback to it, smaller and own models stay usable") {
-    ModelSelector.isForLargerMacs("qwen3.6-35b-a3b-q3", physicalMemory: 24 * GB)
-        && ModelSelector.isForLargerMacs("qwen3.6-35b-a3b-q3", physicalMemory: 16 * GB)
-        && !ModelSelector.isForLargerMacs("qwen3.6-35b-a3b-q3", physicalMemory: 32 * GB)
-        && !ModelSelector.isForLargerMacs("qwen3.5-9b-q4", physicalMemory: 24 * GB)
-        && !ModelSelector.isForLargerMacs("qwen3.6-35b-a3b-iq3", physicalMemory: 24 * GB)
-        && !ModelSelector.isForLargerMacs("k2-horizon-7b", physicalMemory: 24 * GB)
-        && ModelSelector.isForLargerMacs("qwen3.5-9b-q4", physicalMemory: 8 * GB)
-}
-check("Model: an unpinned table model is unavailable (never a download without a SHA256)") {
-    var catalog = tableCatalog
-    if let index = catalog.models.firstIndex(where: { $0.key == "qwen3.5-9b-q4" }) { catalog.models[index].pinned = nil }
+check("Model: an unpinned model is unavailable (never a download without a SHA-256)") {
+    var catalog = ModelCatalog.bundled()
+    guard !catalog.models.isEmpty else { return false }
+    catalog.models[0].pinned = nil
     if case .failure(.modelUnavailable) = ModelSelector.choose(physicalMemory: 16 * GB, appleSilicon: true, catalog: catalog) { return true }
     return false
 }
-check("Model: Intel → not supported") {
-    if case .failure(.unsupportedHardware) = ModelSelector.choose(physicalMemory: 32 * GB, appleSilicon: false) { return true }
-    return false
-}
-check("Model: table only; `named` only for measurements and models.json (both table rows keep their settings)") {
-    let auto = pick(16)
-    let same = ModelSelector.named("qwen3.5-9b-q4", physicalMemory: 16 * GB, catalog: tableCatalog)
-    let thorough = ModelSelector.named("qwen3.6-35b-a3b-iq3", physicalMemory: 24 * GB, catalog: tableCatalog)
-    let other = ModelSelector.named("k2-horizon-7b", physicalMemory: 16 * GB, catalog: tableCatalog)
-    return same == auto && thorough == pick(24, .thorough) && other?.model.key == "k2-horizon-7b" && other?.ctx == 16384
-        && other?.extra["cache-ram"] == "0"
-        && ModelSelector.named("gibt-es-nicht", physicalMemory: 16 * GB) == nil
-}
-check("Existing models: matching name, wrong content is not adopted") {
+check("Existing models: matching name and size, wrong content is not adopted") {
     let home = dir("existing-wrong")
     let payload = Data((0..<4096).map { UInt8($0 % 13) })
-    let hash = String(repeating: "a", count: 64)
-    let json = """
-    {"sampling": {}, "models": [
-      {"key": "a", "label": "A", "repo": "r/a", "quant": "q", "memGiB": 1, "ctx": 4096, "rank": 1,
-       "pinned": {"revision": "x", "files": [{"path": "a.gguf", "size": \(payload.count), "sha256": "\(hash)"}]}}]}
-    """
-    let catalog = try JSONDecoder().decode(ModelCatalog.self, from: Data(json.utf8))
-    let lms = home.appendingPathComponent(".lmstudio/models")
-    try fm.createDirectory(at: lms, withIntermediateDirectories: true)
-    try payload.write(to: lms.appendingPathComponent("a.gguf"))
-    guard let found = ExistingModels.find(catalog, roots: ExistingModels.defaultRoots(home: home))[hash] else { return false }
+    var model = fakeCatalogModel(files: ["model.safetensors": payload])
+    model.pinned!.files[0].sha256 = String(repeating: "a", count: 64)
+    let folder = home.appendingPathComponent(".omlx/models/Fake-1B-MLX")
+    try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+    try payload.write(to: folder.appendingPathComponent("model.safetensors"))
+    guard let found = ExistingModels.find(model, roots: ExistingModels.defaultRoots(home: home))[model.pinned!.files[0].sha256] else { return false }
     let models = dir("existing-wrong-models")
     let d = ModelDownloader(directory: models)
-    let adopted = try d.adopt(catalog.model("a")!.pinned!.files[0], from: found.url)
+    let adopted = try d.adopt(model.pinned!.files[0], from: found.url)
     let left = try fm.contentsOfDirectory(atPath: models.path)
     return !adopted && left.isEmpty && fm.fileExists(atPath: found.url.path)
 }
 await checkAsync("Existing models: no download without consent after a failed adoption") {
     let home = dir("existing-no-consent")
     let payload = Data((0..<4096).map { UInt8($0 % 17) })
-    let json = """
-    {"sampling": {}, "models": [
-      {"key": "a", "label": "A", "repo": "r/a", "quant": "q", "memGiB": 1, "ctx": 4096, "rank": 1,
-       "pinned": {"revision": "x", "files": [{"path": "a.gguf", "size": \(payload.count), "sha256": "\(String(repeating: "b", count: 64))"}]}}]}
-    """
-    let catalog = try JSONDecoder().decode(ModelCatalog.self, from: Data(json.utf8))
-    let lms = home.appendingPathComponent(".lmstudio/models")
-    try fm.createDirectory(at: lms, withIntermediateDirectories: true)
-    try payload.write(to: lms.appendingPathComponent("a.gguf"))
-    let found = ExistingModels.find(catalog, roots: ExistingModels.defaultRoots(home: home))
+    var model = fakeCatalogModel(files: ["model.safetensors": payload])
+    model.pinned!.files[0].sha256 = String(repeating: "b", count: 64)
+    let folder = home.appendingPathComponent(".lmstudio/models/fixture-org/Fake-1B-MLX")
+    try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+    try payload.write(to: folder.appendingPathComponent("model.safetensors"))
+    let found = ExistingModels.find(model, roots: ExistingModels.defaultRoots(home: home))
     let models = dir("existing-no-consent-models")
     let d = ModelDownloader(directory: models)
     let rejected = LockedBox<[String]>([])
     do {
-        try await d.download(catalog.model("a")!, existing: found, allowNetwork: false, rejected: { sha in rejected.mutate { $0.append(sha) } }) { _, _ in }
+        try await d.download(model, existing: found, allowNetwork: false, rejected: { sha in rejected.mutate { $0.append(sha) } }) { _, _ in }
         return false
     } catch is ModelDownloader.AdoptionFailed {}
     // Likewise with no file found and no consent: nothing from the network.
-    do { try await d.download(catalog.model("a")!, allowNetwork: false) { _, _ in }; return false }
+    do { try await d.download(model, allowNetwork: false) { _, _ in }; return false }
     catch is ModelDownloader.AdoptionFailed {}
     let contents = try fm.contentsOfDirectory(atPath: models.path)
-    return rejected.value == [String(repeating: "b", count: 64)] && contents.isEmpty
-}
-check("Existing models: llama.cpp name only with exactly the repo prefix") {
-    let home = dir("existing-llamacpp")
-    let size = 2048
-    let json = """
-    {"sampling": {}, "models": [
-      {"key": "a", "label": "A", "repo": "owner/a-GGUF", "quant": "q", "memGiB": 1, "ctx": 4096, "rank": 1,
-       "pinned": {"revision": "x", "files": [{"path": "a.gguf", "size": \(size), "sha256": "\(String(repeating: "c", count: 64))"}]}}]}
-    """
-    let catalog = try JSONDecoder().decode(ModelCatalog.self, from: Data(json.utf8))
-    let cache = home.appendingPathComponent("Library/Caches/llama.cpp")
-    try fm.createDirectory(at: cache, withIntermediateDirectories: true)
-    try Data(count: size).write(to: cache.appendingPathComponent("old_a.gguf"))
-    let roots = ExistingModels.defaultRoots(home: home)
-    guard ExistingModels.find(catalog, roots: roots).isEmpty else { return false }
-    try Data(count: size).write(to: cache.appendingPathComponent("owner_a-GGUF_a.gguf"))
-    return ExistingModels.find(catalog, roots: roots).first?.value.source == "llama.cpp"
+    return found.count == 1 && rejected.value == [String(repeating: "b", count: 64)] && contents.isEmpty
 }
 check("Download URL as in installer/hf.mjs") {
-    ModelDownloader.url(repo: "unsloth/Qwen3.5-4B-GGUF", revision: "e87f176479d0855a907a41277aca2f8ee7a09523", path: "Qwen3.5-4B-Q4_K_M.gguf").absoluteString
-        == "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/e87f176479d0855a907a41277aca2f8ee7a09523/Qwen3.5-4B-Q4_K_M.gguf"
+    ModelDownloader.url(repo: "ornith-ai/Ornith-1.5-9B-MLX-4bit", revision: "a48173b246ac705be75c05bedf1a0666db522d53", path: "model.safetensors").absoluteString
+        == "https://huggingface.co/ornith-ai/Ornith-1.5-9B-MLX-4bit/resolve/a48173b246ac705be75c05bedf1a0666db522d53/model.safetensors"
 }
-check("Server arguments: local only, key only in the environment, jinja, catalogue values") {
-    let c = pick(16)!
-    let args = LlamaServer.arguments(choice: c, model: URL(fileURLWithPath: "/m.gguf"), port: 9000, supported: nil)
-    let s = args.joined(separator: " ")
-    let k2Choice = ModelSelector.named("k2-horizon-7b", physicalMemory: 16 * GB, catalog: tableCatalog)!
-    let k2 = LlamaServer.arguments(choice: k2Choice, model: URL(fileURLWithPath: "/k2.gguf"), port: 9000, supported: nil).joined(separator: " ")
-    let env = LlamaServer.environment(apiKey: "geheim-k", base: ["PATH": "/usr/bin"])
-    return s.contains("--host 127.0.0.1") && !s.contains("--api-key") && !s.contains("geheim-k")
-        && env["LLAMA_API_KEY"] == "geheim-k" && env["PATH"] == "/usr/bin" && s.contains("--jinja") && s.contains("--ctx-size 16384")
-        && s.contains("--ctx-checkpoints 4") && s.contains("--cache-ram 0") && s.contains("--top-k 20") && s.contains("--no-webui")
-        && s.contains("--reasoning off") && !s.contains("--chat-template-kwargs")
-        && k2.contains("--top-k 0") && k2.contains(#"--chat-template-kwargs {"reasoning_effort":"low","tool_call_format":"xml"}"#)
-}
-
-check("Model: 16 GB → qwen3.5-9b-q4, ctx 16384, ctx-checkpoints 4, cache-ram 0; no \"More thorough\"") {
-    let c = pick(16)
-    return c?.model.key == "qwen3.5-9b-q4" && c?.ctx == 16384 && c?.extra["ctx-checkpoints"] == "4" && c?.extra["cache-ram"] == "0"
-        && pick(16, .thorough)?.model.key == "qwen3.5-9b-q4" && !ModelSelector.offersThorough(physicalMemory: 16 * GB)
-        && (c?.model.memGiB ?? 99) <= budgetGiB(physicalMemory: 16 * GB)
-}
-check("Model: K2 Horizon 7B does not fit 8 GB; low thinking via the template, XML tool calls") {
-    let k2 = tableCatalog.model("k2-horizon-7b")
-    return (k2?.memGiB ?? 0) > budgetGiB(physicalMemory: 8 * GB)
-        && k2?.extra?["chat-template-kwargs"]?.description == #"{"reasoning_effort":"low","tool_call_format":"xml"}"#
-}
-check("Model: 24 GB → the 16 GB profile (qwen3.5-9b-q4, ctx 16384, medium, ctx-checkpoints 4, cache-ram 0); \"More thorough\" → qwen3.6-35b-a3b-iq3 within the memory budget") {
-    let c = pick(24), t = pick(24, .thorough)
-    return c == pick(16) && c?.model.key == "qwen3.5-9b-q4" && c?.ctx == 16384 && c?.model.thinking == "medium"
-        && c?.extra["cache-ram"] == "0" && c?.extra["ctx-checkpoints"] == "4"
-        && ModelSelector.offersThorough(physicalMemory: 24 * GB) == ModelSelector.thoroughTested
-        && t?.model.key == "qwen3.6-35b-a3b-iq3" && t?.ctx == 32768
-        && (t?.model.memGiB ?? 99) <= budgetGiB(physicalMemory: 24 * GB)
-}
-await checkAsync("Existing models: LM Studio, Ollama, Hugging Face detected, adopted without network, source stays") {
+await checkAsync("Existing models: <root>/<name>, <root>/<org>/<name> and the Hugging Face snapshot (symlinks resolved) are found; adopted without network, source stays") {
     let home = dir("existing-home")
-    let payload = Data((0..<65_536).map { UInt8($0 % 251) })
-    let probe = home.appendingPathComponent("probe")
-    try payload.write(to: probe)
-    let hash = try ModelDownloader.sha256(of: probe)
-    let json = """
-    {"sampling": {}, "models": [
-      {"key": "a", "label": "A", "repo": "r/a", "quant": "q", "memGiB": 1, "ctx": 4096, "rank": 1,
-       "pinned": {"revision": "x", "files": [{"path": "sub/a.gguf", "size": \(payload.count), "sha256": "\(hash)"}]}}]}
-    """
-    let catalog = try JSONDecoder().decode(ModelCatalog.self, from: Data(json.utf8))
-    let model = catalog.model("a")!
+    let weights = Data((0..<65_536).map { UInt8($0 % 251) })
+    let config = Data(#"{"model_type": "fake"}"#.utf8)
+    let model = fakeCatalogModel(files: ["model.safetensors": weights, "config.json": config])
+    let hash = model.pinned!.files.first { $0.path == "model.safetensors" }!.sha256
     let roots = ExistingModels.defaultRoots(home: home)
-    guard ExistingModels.find(catalog, roots: roots).isEmpty else { return false }
-    // LM Studio: name as on Hugging Face; a same-size file with a different name doesn't count.
-    let lms = home.appendingPathComponent(".lmstudio/models/r/a-GGUF")
+    guard ExistingModels.find(model, roots: roots).isEmpty else { return false }
+    // oMLX: <root>/<repo name>; a file of the same size under another name does not count.
+    let omlx = home.appendingPathComponent(".omlx/models/Fake-1B-MLX")
+    try fm.createDirectory(at: omlx, withIntermediateDirectories: true)
+    try Data(repeating: 7, count: weights.count).write(to: omlx.appendingPathComponent("other.safetensors"))
+    try weights.write(to: omlx.appendingPathComponent("model.safetensors"))
+    let byName = ExistingModels.find(model, roots: roots)
+    guard byName[hash]?.source == "oMLX", byName[hash]?.url.lastPathComponent == "model.safetensors", byName.count == 1 else { return false }
+    // LM Studio: <root>/<org>/<name>.
+    let lms = home.appendingPathComponent(".lmstudio/models/fixture-org/Fake-1B-MLX")
     try fm.createDirectory(at: lms, withIntermediateDirectories: true)
-    try Data(repeating: 7, count: payload.count).write(to: lms.appendingPathComponent("b.gguf"))
-    try payload.write(to: lms.appendingPathComponent("a.gguf"))
-    let found = ExistingModels.find(catalog, roots: roots)
-    guard found[hash]?.source == "LM Studio", found[hash]?.url.lastPathComponent == "a.gguf" else { return false }
-    // Ollama: named by content.
-    let ollama = home.appendingPathComponent(".ollama/models/blobs")
-    try fm.createDirectory(at: ollama, withIntermediateDirectories: true)
-    try payload.write(to: ollama.appendingPathComponent("sha256-\(hash)"))
-    guard ExistingModels.find(catalog, roots: roots.filter { $0.source == "Ollama" })[hash] != nil else { return false }
-    // Hugging Face: snapshots/…/a.gguf is a symlink to blobs/<sha256>.
-    let hub = home.appendingPathComponent(".cache/huggingface/hub/models--r--a")
+    try weights.write(to: lms.appendingPathComponent("model.safetensors"))
+    try config.write(to: lms.appendingPathComponent("config.json"))
+    let byOrg = ExistingModels.find(model, roots: roots.filter { $0.source == "LM Studio" })
+    guard byOrg.count == 2, byOrg[hash]?.url.path == lms.appendingPathComponent("model.safetensors").path else { return false }
+    // Hugging Face: snapshots/<rev>/model.safetensors is a symlink to blobs/<sha256>; the blob itself is found.
+    let hub = home.appendingPathComponent(".cache/huggingface/hub/models--fixture-org--Fake-1B-MLX")
     try fm.createDirectory(at: hub.appendingPathComponent("blobs"), withIntermediateDirectories: true)
-    try fm.createDirectory(at: hub.appendingPathComponent("snapshots/x"), withIntermediateDirectories: true)
-    try payload.write(to: hub.appendingPathComponent("blobs/\(hash)"))
-    try fm.createSymbolicLink(atPath: hub.appendingPathComponent("snapshots/x/a.gguf").path, withDestinationPath: "../../blobs/\(hash)")
-    guard ExistingModels.find(catalog, roots: roots.filter { $0.source == "Hugging Face" })[hash] != nil else { return false }
+    try fm.createDirectory(at: hub.appendingPathComponent("snapshots/abc123"), withIntermediateDirectories: true)
+    try weights.write(to: hub.appendingPathComponent("blobs/\(hash)"))
+    try fm.createSymbolicLink(atPath: hub.appendingPathComponent("snapshots/abc123/model.safetensors").path, withDestinationPath: "../../blobs/\(hash)")
+    let cached = ExistingModels.find(model, roots: roots.filter { $0.source == "Hugging Face" })[hash]
+    guard cached?.url.resolvingSymlinksInPath().path == hub.appendingPathComponent("blobs/\(hash)").resolvingSymlinksInPath().path,
+          cached?.url.lastPathComponent == hash else { return false }
     // Adopt instead of download: nothing is missing, no network needed, the source stays.
+    let found = ExistingModels.find(model, roots: roots.filter { $0.source == "LM Studio" })
     let d = ModelDownloader(directory: dir("existing-models"))
-    let size = Int64(payload.count)
+    let size = Int64(weights.count + config.count)
     guard d.downloadSize(model, existing: found) == ModelDownloadSize(total: size, remaining: 0, existing: size, existingSource: "LM Studio"),
           !d.isInstalled(model) else { return false }
-    try await d.download(model, existing: found) { _, _ in }
-    let source = lms.appendingPathComponent("a.gguf")
-    let sourceData = try Data(contentsOf: source)
-    return d.isInstalled(model) && sourceData == payload && d.downloadSize(model)?.remaining == 0
+    try await d.download(model, existing: found, allowNetwork: false) { _, _ in }
+    let sourceData = try Data(contentsOf: lms.appendingPathComponent("model.safetensors"))
+    return d.isInstalled(model) && sourceData == weights && d.downloadSize(model)?.remaining == 0
 }
 
 // MARK: - Reading
@@ -443,11 +354,6 @@ check("OCR: columns (label left, amount right) become lines again") {
     ]
     let lines = TextReader.lineRows(pieces)
     return lines == ["Ibuprofen 400 akut 5,95", "SUMME EUR 23,45", "Bar 30,00"]
-}
-check("Models folder via PIPPA_MODELS_DIR") {
-    let base = URL(fileURLWithPath: "/x/Support")
-    return PiLocalServer.modelsDirectory(base: base).path == "/x/Support/models"
-        && PiLocalServer.modelsDirectory(base: base, environment: ["PIPPA_MODELS_DIR": "/scratch/m"]).path == "/scratch/m"
 }
 
 // MARK: - Mail and scripts (read only, no real apps)

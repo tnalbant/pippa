@@ -25,7 +25,7 @@ Drop files on Pippa or bring her up with ⌃⌥ Space (she lives in the menu bar
 
 <p align="center"><a href="https://github.com/tschnorpfeil/pippa/releases/latest/download/Pippa.dmg"><b>Download Pippa.dmg</b></a> (under 100 MB, signed and notarized) · <a href="https://heypippa.app/en/">Website</a> · <a href="https://github.com/tschnorpfeil/pippa/releases/latest">What's new</a></p>
 
-<p align="center"><sub>Apple silicon (M1 or later), macOS 15 or later. One PDF from photos works right away. For the rest, Pippa picks the AI that fits your Mac and asks before downloading it: about 2.7 GB with 8 GB of memory, 5.7 GB with 16 to 24 GB, 16.8 GB with 32 GB or more (<a href="#will-it-run-on-my-mac">details</a>). If LM Studio, Ollama or Hugging Face already has the same file, she uses it instead of downloading it again. Prefer an online AI? Sign in with ChatGPT or add your own key.</sub></p>
+<p align="center"><sub>Apple silicon (M1 or later), macOS 15 or later. One PDF from photos works right away. For the rest, her AI on your Mac needs 16 GB of memory; she asks before downloading it, about 5.4 GB (<a href="#will-it-run-on-my-mac">details</a>). If oMLX, LM Studio or Hugging Face already has the same model, she uses it instead of downloading it again. Smaller Mac, or prefer an online AI? Sign in with ChatGPT or add your own key.</sub></p>
 
 <p align="center"><img src="docs/images/demo-letter.gif" width="960" alt="Scripted website demo with made-up files: asked when notice is due before moving out at the end of March, Pippa answers 'By December 31', explains the three-month notice period and quotes the passage from the lease"><br>
 <sub>Scripted demo from an earlier version of the website, with made-up files. Not a live AI session.</sub></p>
@@ -61,15 +61,15 @@ More, with examples and limits: [What Pippa can do](docs/what-pippa-can-do.md).
 
 You need a Mac with **Apple silicon (M1 or later)** and **macOS 15 or later**. Intel Macs are not supported.
 
-One PDF from photos and scans works without any AI download. For everything else, Pippa picks her AI based on your Mac's memory and asks before downloading it. With an online AI switched on, she works without the download.
+One PDF from photos and scans works without any AI download. For everything else, Pippa uses one AI on your Mac, Ornith 1.5 9B, and asks before downloading it. With an online AI switched on, she works without the download.
 
-| Your Mac's memory | Pippa's AI download |
+| Your Mac's memory | Pippa's AI on your Mac |
 |---|---|
-| 8 GB | About 2.7 GB |
-| 16, 18 or 24 GB | About 5.7 GB |
-| 32 GB or more | About 16.8 GB |
+| Less than 16 GB | None; use an online AI (ChatGPT or your own key) |
+| 16 or 18 GB | Download about 5.4 GB, shorter context |
+| 24 GB or more | Download about 5.4 GB |
 
-Leave some extra disk space for the app and your results. If the same file is already on your Mac from LM Studio, Ollama or Hugging Face, Pippa uses it instead of downloading it again. Which AI each Mac gets, and why: [Pippa's local AI](docs/models.md).
+Leave some extra disk space for the app and your results. If the same model is already on your Mac from oMLX, LM Studio or Hugging Face, Pippa uses it instead of downloading it again. Which AI, and why: [Pippa's local AI](docs/models.md).
 
 ## Good to know
 
@@ -83,7 +83,7 @@ Leave some extra disk space for the app and your results. If the same file is al
 
 ## Build from source
 
-You need an Apple silicon Mac with macOS 15 or later, the Command Line Tools with Swift 6 (`xcode-select --install`) and `cmake`. Xcode is not needed.
+You need an Apple silicon Mac with macOS 15 or later, and the Command Line Tools with Swift 6 (`xcode-select --install`). Xcode is not needed.
 
 ```sh
 scripts/build-app.sh                        # dist/Pippa.app
@@ -94,6 +94,6 @@ Architecture, checks and releases: [Developing Pippa](docs/development.md). Befo
 
 ## Credits and license
 
-Built on [Pi](https://github.com/earendil-works/pi), [llama.cpp](https://github.com/ggml-org/llama.cpp), [pi-web-access](https://github.com/nicobailon/pi-web-access), [Node.js](https://nodejs.org), [Sparkle](https://sparkle-project.org) and the open [Qwen](https://huggingface.co/Qwen) models. Full list: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Built on [Pi](https://github.com/earendil-works/pi), [oMLX](https://github.com/jundot/omlx) and [MLX](https://github.com/ml-explore/mlx), [pi-web-access](https://github.com/nicobailon/pi-web-access), [Node.js](https://nodejs.org), [Sparkle](https://sparkle-project.org) and the open [Ornith](https://huggingface.co/ornith-ai/Ornith-1.5-9B-MLX-4bit) model. Full list: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-[MIT licensed](LICENSE), © 2026 Tobias Schnorpfeil. Pippa is an independent project, not affiliated with Apple, Microsoft, OpenAI, Anthropic, Alibaba Cloud or Earendil Works. Mac and macOS are trademarks of Apple Inc.
+[MIT licensed](LICENSE), © 2026 Tobias Schnorpfeil. Pippa is an independent project, not affiliated with Apple, Microsoft, OpenAI, Anthropic, Ornith AI or Earendil Works. Mac and macOS are trademarks of Apple Inc.

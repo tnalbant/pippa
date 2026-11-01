@@ -48,7 +48,6 @@
 "Pippa couldn't start her Mac tools. Quit Pippa and open her again." = "Pippa couldn't start her Mac tools. Quit Pippa and open her again.";
 "Pippa couldn’t move herself." = "Pippa couldn’t move herself.";
 "Pippa isn't set up yet. Open Settings to finish setting up her AI." = "Pippa isn't set up yet. Open Settings to finish setting up her AI.";
-"Pippa needs a Mac with Apple silicon (M1 or later)." = "Pippa needs a Mac with Apple silicon (M1 or later).";
 "Pippa’s AI" = "Pippa’s AI";
 "Pippa’s AI runs on this Mac. It needs a one-time download of %@." = "Pippa’s AI runs on this Mac. It needs a one-time download of %@.";
 "Preparing files" = "Preparing files";
@@ -127,3 +126,4 @@
 "That didn’t work" = "That didn’t work";
 "Working…" = "Working…";
 "%lld s" = "%lld s";
+"The AI on this Mac didn’t start. Try again in a moment." = "The AI on this Mac didn’t start. Try again in a moment.";

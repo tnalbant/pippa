@@ -47,9 +47,11 @@ final class SetupModel: ObservableObject {
             roots = PiInstallRoots(support: Pippa.supportDirectory, payload: payload)
         }
         let saved = PippaSettings.load(from: roots.support)
-        guard let choice = PiSetupFlow.choice(override: env["PIPPA_PI_MODEL"] ?? saved.localModelKey) else {
-            state = .failed(PiSetupProblem(message: T("Pippa needs a Mac with Apple silicon (M1 or later).", table: "App"),
-                                           details: "No catalog model fits this Mac", canRetry: false))
+        let choice: ModelChoice
+        switch ModelSelector.choose(physicalMemory: ProcessInfo.processInfo.physicalMemory) {
+        case .success(let fits): choice = fits
+        case .failure(let error):
+            state = .failed(PiSetupProblem(message: error.localizedDescription, details: "No local model fits this Mac", canRetry: false))
             return
         }
         self.roots = roots

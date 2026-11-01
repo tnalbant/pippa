@@ -3,9 +3,10 @@
 //
 // Pi itself never starts model servers, so without Pippa running, `pi` with provider `pippa-local` failed with
 // "Connection error". Now, right before a request goes to that provider, this extension checks `/health` and, if
-// nothing answers, starts llama-server exactly as Pippa would (pippa-local-server.json, written by Pippa) through a
-// detached supervisor that unloads it after the same idle time. One lock file in Pippa's support folder keeps the app
-// and terminal from ever running two servers; the app adopts a server started here (LlamaServer, `lockFile`).
+// nothing answers, starts oMLX exactly as Pippa would (pippa-local-server.json, written by Pippa) through a detached
+// supervisor. oMLX unloads the model by itself when idle, so the server may simply keep running. One lock file in
+// Pippa's support folder keeps the app and terminal from ever running two servers; the app uses a server started here
+// (OMLXServer answers to it through /health).
 //
 // Hooks: `before_provider_request` (awaited by Pi before the HTTP request, also for each tool turn) and
 // `session_before_compact` (compaction calls the model without that hook). Other providers: nothing happens.

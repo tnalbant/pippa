@@ -92,6 +92,8 @@ ok "Info.plist + en/de: texts for Calendar, Reminders, Apple Events, Contacts, P
 [[ -x "$APP/Contents/Helpers/node" ]] || fail "bundled Node runtime missing"
 # fd and rg for Pi's find and grep (next to Node, first in Pi's PATH).
 for tool in fd rg; do [[ -x "$APP/Contents/Helpers/$tool" ]] || fail "bundled $tool missing"; done
+# The local AI (oMLX runtime and model) is downloaded at setup; nothing of the old llama.cpp engine ships.
+[[ ! -e "$APP/Contents/Helpers/llama-server" ]] || fail "old llama-server still in Contents/Helpers"
 WEB="$APP/Contents/Resources/pippa-web"
 for path in index.ts package-lock.json node_modules/pi-web-access/dist/index.js; do
   [[ -f "$WEB/$path" ]] || fail "pippa-web/$path missing (web access)"
@@ -117,18 +119,8 @@ done
 [[ ! -e "$APP/Contents/Resources/pippa-guard" ]] || fail "old guard (Contents/Resources/pippa-guard) still in the bundle"
 ok "Pippa's Pi extensions in Contents/Resources/pippa-tools"
 expect_entitlements "$APP/Contents/Helpers/node" "Helpers/node" "com.apple.security.cs.allow-jit com.apple.security.cs.disable-library-validation"
-expect_entitlements "$APP/Contents/Helpers/llama-server" "Helpers/llama-server" "-"
 expect_entitlements "$APP/Contents/Helpers/fd" "Helpers/fd" "-"
 expect_entitlements "$APP/Contents/Helpers/rg" "Helpers/rg" "-"
-# llama-server is built by build-app.sh: static (only system libraries) and with Pippa's K2 Horizon patch.
-LLAMA_BIN="$APP/Contents/Helpers/llama-server"
-if otool -L "$LLAMA_BIN" | awk 'NR > 1 { print $1 }' | grep -qv '^/\(usr/lib\|System/Library\)/'; then
-  fail "llama-server links libraries outside the system (otool -L): $(otool -L "$LLAMA_BIN" | awk 'NR > 1 { print $1 }' | grep -v '^/\(usr/lib\|System/Library\)/' | tr '\n' ' ')"
-fi
-llama_strings="$(strings -a "$LLAMA_BIN")"
-[[ "$llama_strings" == *'</ifm|think_faster>'* && "$llama_strings" == *'</ifm|think_fast>'* ]] ||
-  fail "llama-server lacks the K2 Horizon end tags (app/Packaging/llama-patches not applied?)"
-ok "llama-server: static, only system libraries, K2 Horizon think-tag patch included"
 native_executables=()
 while IFS= read -r -d '' file; do
   if [[ "$file" != *.node ]] && file -b "$file" | grep -q 'Mach-O.*executable'; then native_executables+=("$file"); fi
@@ -136,7 +128,7 @@ done < <(find "$APP/Contents/Resources/pi-payload" "$APP/Contents/Resources/pipp
 for file in ${native_executables[@]+"${native_executables[@]}"}; do
   expect_entitlements "$file" "${file#"$APP/"}" "-"
 done
-signed_helpers=("$APP/Contents/Helpers/node" "$APP/Contents/Helpers/llama-server" "$APP/Contents/Helpers/fd" "$APP/Contents/Helpers/rg" ${native_executables[@]+"${native_executables[@]}"})
+signed_helpers=("$APP/Contents/Helpers/node" "$APP/Contents/Helpers/fd" "$APP/Contents/Helpers/rg" ${native_executables[@]+"${native_executables[@]}"})
 while IFS= read -r -d '' file; do signed_helpers+=("$file"); done < <(find "$APP/Contents/Resources/pi-payload" "$APP/Contents/Resources/pippa-web" -type f -name '*.node' -print0)
 for file in "${signed_helpers[@]}"; do
   codesign --verify --strict "$file" 2>/dev/null || fail "${file#"$APP/"} invalidly signed"
@@ -144,7 +136,7 @@ for file in "${signed_helpers[@]}"; do
   [[ "$helper_team" == "$team" ]] || fail "${file#"$APP/"}: team $helper_team, app $team"
   if ((DEVELOPER_ID)) && [[ "$file" != *.node ]]; then has_runtime "$file" || fail "${file#"$APP/"} without Hardened Runtime"; fi
 done
-ok "helpers without sandbox: node (JIT, own add-ons), llama-server and ${#native_executables[@]} esbuild binaries without entitlements; ${#signed_helpers[@]} Mach-O signed by the app's team"
+ok "helpers without sandbox: node (JIT, own add-ons), fd, rg and ${#native_executables[@]} esbuild binaries without entitlements; ${#signed_helpers[@]} Mach-O signed by the app's team"
 
 # Pi install payload (PiInstaller): pinned release in layout releases-v1 plus npm.
 PAYLOAD="$APP/Contents/Resources/pi-payload"
@@ -226,7 +218,7 @@ then
 fi
 if ((RUNTIME)); then
   grep -q '^pippa_bundle_ok ' "$WORK/probe.log" || fail "bundle does not know the runtime probe, or it is incomplete"
-  ok "original bundle: resources, skills, llama-server, Pi/Node, native add-on and esbuild ($(grep '^pippa_bundle_ok ' "$WORK/probe.log"))"
+  ok "original bundle: resources, skills, Pi/Node, native add-on and esbuild ($(grep '^pippa_bundle_ok ' "$WORK/probe.log"))"
   # The original signature must still be valid after the run.
   codesign --verify --deep --strict "$APP" || fail "app signature invalid after runtime probe"
 fi
