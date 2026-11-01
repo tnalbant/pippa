@@ -1,7 +1,7 @@
 # Pippa's local AI
 
 Pippa has no model picker. She chooses one local AI for your Mac from its memory, tells you the download size and
-asks before downloading it. Photo and PDF jobs, Tidy Up and the morning overview work before that download.
+asks before downloading it. With an online AI switched on, she works without that download.
 
 This page is for the curious. The [README](../README.md#will-it-run-on-my-mac) has the short version.
 
@@ -32,20 +32,20 @@ The source of truth is `ModelSelector.table` in
 - **8 GB:** the 9B needs about 7 GiB of memory, more than Pippa allows herself on an 8 GB Mac (about 4.8 GiB), so
   these Macs get the 4B.
 - **16 GB:** Qwen3.5 9B replaced K2 Horizon 7B after a side-by-side test with Pi: more tasks done, fewer invented facts,
-  faster answers and better German ([comparison](measurements/model-compare/README.md), in German).
+  faster answers and better German ([comparison](archive/measurements/model-compare/README.md), in German).
 - **24 GB:** since 0.3.18, the same Qwen3.5 9B profile as 16 GB. The 35B it replaced needs 17.5 GiB of the Mac's
   24 GB; with other apps open, a long request took almost three minutes with more than 8 GiB of swap in use. The 9B peaks at about
   8 GB and had the best results in the side-by-side test
-  ([decision record](measurements/24gb-tier-9b-2026-10-31.md)). It still has to pass a check on a busy 24 GB Mac
+  ([decision record](archive/measurements/24gb-tier-9b-2026-10-31.md)). It still has to pass a check on a busy 24 GB Mac
   before the release.
 - **32 GB and more:** Qwen3.6 35B-A3B without thinking. In Pippa's ten-task check it passed
   six tasks, as many as Saluki 27B, the model it was compared with, at about half its median task time (34.5 s
-  versus 69.9 s; [GGUF follow-up](measurements/qwen-gguf-validation-2026-10-24/README.md)). Medium thinking passed only three, so it
+  versus 69.9 s; [GGUF follow-up](archive/measurements/qwen-gguf-validation-2026-10-24/README.md)). Medium thinking passed only three, so it
   is not the default.
 
 These are small test suites, not quality guarantees. Local AI can miss details or get facts wrong; check important
 names, amounts and dates against the original. The full reasoning is in
-[Settings simplification](settings-simplification.md#the-model-is-fixed-by-hardware).
+[Settings simplification](archive/settings-simplification.md#the-model-is-fixed-by-hardware).
 
 ## The hidden "More thorough" option
 
@@ -81,12 +81,6 @@ models or other quantizations of the same model don't count, so Pippa still down
 
 Her model folder is `~/models` if that folder already exists (the shared folder Pi suggests), otherwise
 `~/Library/Application Support/Pippa/models`.
-
-## Apple Intelligence
-
-Apple Intelligence is optional. On macOS 26, when it is turned on, Pippa uses Apple's on-device model for a few quick
-jobs: suggestions for a document, the first line of a letter, short text selections and sorting unclear files while
-tidying. Without it, these jobs fall back to simpler rules or to Pippa's own AI. Pippa never needs it.
 
 ## Online AI instead
 

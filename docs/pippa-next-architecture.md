@@ -1,7 +1,7 @@
 # Pippa next: a native Mac front end for Pi
 
-Status: proposal, 2026-11-01. Replaces the plans in `next-level-plan-2026-10-30.md`, `pippa-next-evolution-2026-10-21.md`
-and `roadmap-0.4.md` if accepted.
+Status: proposal, 2026-11-01. Replaces the plans in [archive/](archive/) (`next-level-plan-2026-10-30.md`,
+`pippa-next-evolution-2026-10-21.md`, `roadmap-0.4.md`) if accepted. Where things stand: [ROADMAP.md](ROADMAP.md).
 
 ## Why
 

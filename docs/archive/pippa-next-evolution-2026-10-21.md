@@ -99,13 +99,13 @@ Keep Pi as the general coordinator. Extend Pippa's existing execution infrastruc
 
 ### A. Tell the truth about actions
 
-Use one result vocabulary from executor to tool response to persisted task to UI: not dispatched, running, confirmed, partial, failed before effect, and uncertain after dispatch. The branch now corrects failure wording in [PippaPiLaunch.swift](../app/Sources/PiRPC/PippaPiLaunch.swift), classifies missing native replies as uncertain, and preserves available backups after shell failure or Stop. Carry these distinctions into durable task recovery. An error alone never establishes that no change occurred.
+Use one result vocabulary from executor to tool response to persisted task to UI: not dispatched, running, confirmed, partial, failed before effect, and uncertain after dispatch. The branch now corrects failure wording in [PippaPiLaunch.swift](../../app/Sources/PiRPC/PippaPiLaunch.swift), classifies missing native replies as uncertain, and preserves available backups after shell failure or Stop. Carry these distinctions into durable task recovery. An error alone never establishes that no change occurred.
 
-Retain native target IDs and verify postconditions where APIs permit. [PippaMCPWrite.swift](../app/Sources/PippaCore/MCP/PippaMCPWrite.swift) currently drops useful created-item identity from some results. The UI should make the result inspectable, and Pi should receive the same authoritative state.
+Retain native target IDs and verify postconditions where APIs permit. [PippaMCPWrite.swift](../../app/Sources/PippaCore/MCP/PippaMCPWrite.swift) currently drops useful created-item identity from some results. The UI should make the result inspectable, and Pi should receive the same authoritative state.
 
 ### B. Persist enough state to recover safely
 
-Reuse [Executor.swift](../app/Sources/PippaCore/Executor.swift), which already has a durable journal, file fingerprints, native external-operation methods and recovery foundations. Record task/step identity, authorized scope, source fingerprint/version, stable destination account/calendar/list identity, intended operation, dispatch state and native result before advancing the task. Permission recovery must detect a changed source or ambiguous destination before resuming. Avoid persisting unnecessary document content.
+Reuse [Executor.swift](../../app/Sources/PippaCore/Executor.swift), which already has a durable journal, file fingerprints, native external-operation methods and recovery foundations. Record task/step identity, authorized scope, source fingerprint/version, stable destination account/calendar/list identity, intended operation, dispatch state and native result before advancing the task. Permission recovery must detect a changed source or ambiguous destination before resuming. Avoid persisting unnecessary document content.
 
 Distinguish a retry of the same step from an explicitly requested new action. Equal arguments alone do not imply the same intent. Reconcile unfinished writes after process loss or restart before replaying them. If an API cannot uniquely identify the outcome, preserve uncertainty and offer inspection; do not claim universal exactly-once behavior across macOS APIs.
 
@@ -115,7 +115,7 @@ The existing [NativeReceiptContext](../app/Sources/PippaCore/NativeReceiptContex
 
 ### C. Know what can actually run
 
-The branch now connects the pinned Pi MCP implementation and verifies all 11 native tools before a fresh Pi process receives user work. [PippaMCPService.endpoint](../app/Sources/Pippa/App/PippaMCPService.swift) throws typed failures rather than silently leaving Pi without native tools; timeout and Stop clean up admission. Direct native utilities remain usable independently. Extend this foundation to schema compatibility, task-specific app availability and actionable permission state, with a precise repair for the capability the task needs.
+The branch now connects the pinned Pi MCP implementation and verifies all 11 native tools before a fresh Pi process receives user work. [PippaMCPService.endpoint](../../app/Sources/Pippa/App/PippaMCPService.swift) throws typed failures rather than silently leaving Pi without native tools; timeout and Stop clean up admission. Direct native utilities remain usable independently. Extend this foundation to schema compatibility, task-specific app availability and actionable permission state, with a precise repair for the capability the task needs.
 
 A shared catalog should declare accepted input, required capabilities, effects, verification and recovery. Use it for suggestions, task admission and selective tool exposure. Preserve the current Pi lifecycle and loop-guard tests. Bound repeated failures, but retain meaningful progress and provide a clear recovery rather than merely terminating the answer.
 
@@ -148,7 +148,7 @@ The [Rakazo source assessment](measurements/rakazo-assessment-2026-10-21.md) sup
 - Explicit, small, reversible actions should execute without redundant conversational approval.
 - Include Pi's built-in `read`, `edit` and `write` paths in scope enforcement. The shell sandbox does not cover every executor. Start with the routes needed by the first workflow and extend policy coverage before advertising broader guarantees.
 - Consequential, ambiguous or bulk changes need a concrete preview. OS permission grants are not authorization for every future operation.
-- Mail remains draft-only. Native tools, shell app access, Shortcuts and future GUI actions must enforce that promise. Prompt wording is insufficient; the broad `apps` grant in [shell.ts](../runtime/pippa-tools/shell.ts) needs a constrained replacement for ordinary workflows.
+- Mail remains draft-only. Native tools, shell app access, Shortcuts and future GUI actions must enforce that promise. Prompt wording is insufficient; the broad `apps` grant in [shell.ts](../../runtime/pippa-tools/shell.ts) needs a constrained replacement for ordinary workflows.
 - Keep external sending, purchases and permanent deletion outside the initial product contract. A future scope change needs an explicit product decision and enforceable policy.
 - Treat document, webpage, email and tool-returned text as data. It must not expand tool authority, authorize network access, or redirect private content elsewhere. Exercise these boundaries with planted-instruction fixtures, including after permissions have already been granted.
 - Prefer typed native APIs and scoped adapters. Use App Intents or known Shortcuts where they can preserve scope and verify the result. General Accessibility/click/type execution comes later, with exact app/window identity, fresh state and tested postconditions.

@@ -1,6 +1,6 @@
 # Model comparison K2 Horizon 7B vs. Qwen3.5-9B (harness)
 
-Results and method notes: `docs/measurements/model-compare/README.md`.
+Results and method notes: `docs/archive/measurements/model-compare/README.md`.
 
 | File | What |
 |---|---|
@@ -20,8 +20,8 @@ H=$PWD/dist/model-compare-home; mkdir -p $H; HOME=$H CFFIXED_USER_HOME=$H swift 
 S=$PWD/dist/sf/pippa/dist/tool-search-home; mkdir -p $S; HOME=$S CFFIXED_USER_HOME=$S swift scripts/quality/make-search-corpus.swift
 python3 scripts/quality/mcp-schema.py > .build/mcp-tools.json
 CFFIXED_USER_HOME=$H PIPPA_MC_SEARCH_HOME=$S PIPPA_MC_LLAMA=<patched llama-server> \
-  .build/pi-payload/bin/node scripts/quality/model-compare/run-all.mjs docs/measurements/model-compare/raw 3 ABC
-.build/pi-payload/bin/node scripts/quality/model-compare/summarize.mjs docs/measurements/model-compare
+  .build/pi-payload/bin/node scripts/quality/model-compare/run-all.mjs docs/archive/measurements/model-compare/raw 3 ABC
+.build/pi-payload/bin/node scripts/quality/model-compare/summarize.mjs docs/archive/measurements/model-compare
 ```
 
 Models are read from `~/pi-bench-models` (`PIPPA_MC_MODELS`), SHA256 equal to the catalog pins.
@@ -60,7 +60,7 @@ claims. The summary requires all 90 runs unless `--partial` is explicitly suppli
 `PIPPA_MC_OMIT_CACHE_TAG=1` is only for a separate prompt-sensitivity check: it omits the cache-busting prefix.
 Those runs may reuse existing cached prompts and must not be pooled with the controlled timing matrix.
 
-See `docs/measurements/omlx-compare-2026-10-23/protocol.md` for the exact setup, rubric and limitations.
+See `docs/archive/measurements/omlx-compare-2026-10-23/protocol.md` for the exact setup, rubric and limitations.
 
 ## Pippa prompt and declaration regression comparison
 

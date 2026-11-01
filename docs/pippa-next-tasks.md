@@ -29,8 +29,10 @@ Dropped: `applescript`, `pippa_more_tools` and tool-scope, `save_skill`, `make_c
       front-app chip, cards, stop, permissions on demand
 - [x] First run: one card (download for this Mac, or online AI); settings: AI, permissions, updates
 - [x] Delete old UI, routers, LocalEngine, SourceFidelity sentence removal, snapshot harness, old checks
-- [ ] Checks: behavior only; CI split (fast PR gate)
-- [ ] Docs: development.md, README; one ROADMAP; measurements archived
+- [ ] Checks: behavior only
+- [x] CI split: fast PR gate (`ci.yml`); real Pi, web access, macOS 15 and the app build by hand and on release tags
+      (`heavy.yml`)
+- [x] Docs: development.md, README; one [ROADMAP](ROADMAP.md); old plans and measurements in [archive/](archive/)
 - [ ] Acceptance: the five tasks in the plan
 
 ## Open

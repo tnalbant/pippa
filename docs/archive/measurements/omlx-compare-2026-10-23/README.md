@@ -67,6 +67,6 @@ On this evidence, **Qwen remains the stronger Pippa baseline for correctness**. 
 - [Review notes](grades.json), [protocol and rubric](protocol.md), [validation](validation.json).
 - [Model details and hashes](model-details.json), [run metadata](metadata.json), [source hashes](source-hashes.json).
 - The local `raw/` archive contains initial request payloads, Pi events, final answers, usage and Qwen timing logs. User-specific home/repository paths are replaced by `<home>` / `<repo>` in saved evidence; credentials are not retained.
-- Reproduction instructions: [model-comparison harness](../../../scripts/quality/model-compare/README.md). Only benchmark tooling and measurement artifacts were changed; no production model selection or saved tuning was changed.
+- Reproduction instructions: [model-comparison harness](../../../../scripts/quality/model-compare/README.md). Only benchmark tooling and measurement artifacts were changed; no production model selection or saved tuning was changed.
 
 Raw response streams and diagnostic attempts are retained locally in the validation archive and are not part of this release source. Published summaries and grades describe the measured outcomes.

@@ -11,7 +11,7 @@ Journal transitions use short SQLite transactions and monotonic revisions. Pendi
 
 **Enforced drafting scope.** Draft/letter skills launch Pi with an immutable, app-selected scope: three local file readers plus eight native readers. Native writers remain registered but hidden. An independent tool-call guard rejects shell, writes, memory changes, web lookup and native mutations, and the app's native dispatch gate enforces the same restriction. Scope changes replace the Pi process. Before user work, read-only extension commands attest registration and active scope without calling a model.
 
-Standard tasks retain broader file/network abilities. Generic shell app-control grants are removed, common app-automation utilities are refused and sandboxed Apple Events remain denied. Pi's direct RPC shell bypass is disabled. This is not a universal no-send confinement guarantee for arbitrary standard-mode code with approved network access. See [the documented action boundary](../development.md#architecture).
+Standard tasks retain broader file/network abilities. Generic shell app-control grants are removed, common app-automation utilities are refused and sandboxed Apple Events remain denied. Pi's direct RPC shell bypass is disabled. This is not a universal no-send confinement guarantee for arbitrary standard-mode code with approved network access. See [the documented action boundary](../../development.md#architecture).
 
 **Immediate native work.** Setup offers Photos/PDFs before model download consent. Native results expose Open, Save, Show in Finder and supported Undo. A failed Save retains the exact artifact and receipt. An explicit retry retains the ordered source selection and permits a deliberately repaired input; it never runs automatically. Result caveats persist with the specific artifact, including after reopening.
 
@@ -51,7 +51,7 @@ The attached-source correction now records exact pre-generation text and success
 
 The exact German long-attachment retest passed: **LINDE-9361, EUR 47.30, 6 November 2026**, in **3.898 seconds** after model readiness. The prompt exposed 3,412 UTF-8 bytes; no additional reader was needed, the source was unchanged, and review found no missing evidence. Local report: `.build/release-model-smoke-Ht83tT/report.json`. Focused source regressions passed **21/21**, existing R6 checks passed **21/21** outside the sandbox, and the full app compiled. A sandbox-only R6 run could not reproduce short-PDF text extraction; the unrestricted synthetic run passed unchanged. This restricted-reader probe is not a full-app success-rate measurement or physical 8 GiB performance evidence.
 
-Packaging is performed from the clean commit containing this assessment. `scripts/release.sh` verifies the signed bundle, notarized DMG, update signature and Gatekeeper result, and records the exact source commit and asset hashes under `dist/releases/<tag>/`. The same four native-readiness scenarios can run against the packaged Node, Pi and extension files using the command in [development checks](../development.md#checks). Package validation establishes the shipped runtime path, not the live TCC acceptance gates below.
+Packaging is performed from the clean commit containing this assessment. `scripts/release.sh` verifies the signed bundle, notarized DMG, update signature and Gatekeeper result, and records the exact source commit and asset hashes under `dist/releases/<tag>/`. The same four native-readiness scenarios can run against the packaged Node, Pi and extension files using the command in [development checks](../../development.md#checks). Package validation establishes the shipped runtime path, not the live TCC acceptance gates below.
 
 ## Remaining release acceptance
 
@@ -65,4 +65,4 @@ Packaging is performed from the clean commit containing this assessment. `script
 - The planned 450-run held-out model/hardware/language matrix and observed-user pilot gate the staged hero-workflow success and retention claims in the evolution plan. They are separate from this release's compatibility and known-defect checks; this assessment makes no such success or retention claim.
 - Broader native recovery, safe cross-route permission resume, reusable routines and editable scoped memory remain later roadmap work. Recovery in this candidate covers `reminder_add`; an unresolved absence can remain blocked, and explicit past-date retries conservatively fail validation while preserving the original completion record.
 
-Release notes: [0.3.12](../releases/0.3.12.md). Sequence and product gates: [evolution plan](../pippa-next-evolution-2026-10-21.md).
+Release notes: [0.3.12](../../releases/0.3.12.md). Sequence and product gates: [evolution plan](../pippa-next-evolution-2026-10-21.md).

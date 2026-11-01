@@ -1,7 +1,7 @@
 <p align="center"><img src="site/icon-512.png" width="112" height="112" alt="Pippa's app icon: three wobbly blue rings on a light tile"></p>
 <h1 align="center">Pippa</h1>
 <p align="center"><b>The AI assistant that actually gets things done.</b><br>
-Free for the Mac: photos to one PDF, letters explained, folders tidied. Her AI runs on your Mac.</p>
+Free for the Mac: letters explained, photos to one PDF, mail drafts and appointments. Her AI runs on your Mac.</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/macOS-15%2B-000000?logo=apple&logoColor=white" alt="macOS 15 or later">
@@ -13,19 +13,19 @@ Free for the Mac: photos to one PDF, letters explained, folders tidied. Her AI r
   <a href="https://github.com/tschnorpfeil/pippa/releases/latest"><img src="https://img.shields.io/github/v/release/tschnorpfeil/pippa?label=release&display_name=release" alt="Latest release"></a>
 </p>
 
-Cloud assistants read your documents on their servers, and most local AI apps stop at a chat window. Pippa hands back finished results, and the first ones need no AI download:
+Cloud assistants read your documents on their servers, and most local AI apps stop at a chat window. Pippa works with your Mac and hands back finished results:
 
-- **Ready to send.** Photos and scans become one PDF in your order; she checks that every page made it in and shows whether it fits the size limit you set (say, 10 MB). No AI download needed.
-- **Letter explained.** What a German letter wants from you, by when, and the sentence that says so. A PDF or a phone photo works. Ask, and the deadline goes into Reminders. Check amounts and dates against the original. Answers may be in German.
-- **Downloads tidied.** See the new folders before anything moves. Changed your mind? Undo.
+- **Letter explained.** What a letter wants from you, by when, and the sentence that says so. A PDF or a phone photo works. Ask, and the deadline goes into Reminders or Calendar. Check amounts and dates against the original.
+- **Ready to send.** Photos and scans become one PDF in your order; she checks that every page made it in and can aim for a size limit you set (say, 10 MB). Drop them and press **One PDF**: that works without any AI download.
+- **Found and sorted.** Files by what's in them, the newest version first. Ask her to rename or move them; a file she removes goes to the Trash, never deleted for good.
 
-Also: reply drafts in Mail (you send them; she never does), Calendar entries, reminders, file search and Excel totals.
+Also: unsent reply drafts in Mail (you send them; she never does), Calendar entries, reminders, photos from your library and the web after she asks you.
 
-Drop files on Pippa or bring her up with ⌃⌥ Space (she lives in the menu bar), then pick a job or just ask.
+Drop files on Pippa or bring her up with ⌃⌥ Space (she lives in the menu bar), then just ask. Each conversation stays in the sidebar for later.
 
 <p align="center"><a href="https://github.com/tschnorpfeil/pippa/releases/latest/download/Pippa.dmg"><b>Download Pippa.dmg</b></a> (under 100 MB, signed and notarized) · <a href="https://heypippa.app/en/">Website</a> · <a href="https://github.com/tschnorpfeil/pippa/releases/latest">What's new</a></p>
 
-<p align="center"><sub>Apple silicon (M1 or later), macOS 15 or later. Photo and PDF jobs work right away. For the rest, Pippa picks the AI that fits your Mac and asks before downloading it: about 2.7 GB with 8 GB of memory, 5.7 GB with 16 to 24 GB, 16.8 GB with 32 GB or more (<a href="#will-it-run-on-my-mac">details</a>). If LM Studio, Ollama or Hugging Face already has the same file, she uses it instead of downloading it again. Prefer an online AI? Sign in with ChatGPT or add your own key.</sub></p>
+<p align="center"><sub>Apple silicon (M1 or later), macOS 15 or later. One PDF from photos works right away. For the rest, Pippa picks the AI that fits your Mac and asks before downloading it: about 2.7 GB with 8 GB of memory, 5.7 GB with 16 to 24 GB, 16.8 GB with 32 GB or more (<a href="#will-it-run-on-my-mac">details</a>). If LM Studio, Ollama or Hugging Face already has the same file, she uses it instead of downloading it again. Prefer an online AI? Sign in with ChatGPT or add your own key.</sub></p>
 
 <p align="center"><img src="docs/images/demo-letter.gif" width="960" alt="Scripted website demo with made-up files: asked when notice is due before moving out at the end of March, Pippa answers 'By December 31', explains the three-month notice period and quotes the passage from the lease"><br>
 <sub>Scripted demo from an earlier version of the website, with made-up files. Not a live AI session.</sub></p>
@@ -38,10 +38,10 @@ Keep ChatGPT if you like it: Pippa can use your subscription as her online AI.
 
 | | Pippa | ChatGPT & Claude apps | Local AI chat apps | Apple Intelligence |
 |---|---|---|---|---|
-| What you get back | One PDF, a tidied folder, a reminder, an unsent Mail draft | Answers; some modes also work on your files | Mostly chat answers; a few also edit files | Rewrites, summaries and Shortcuts actions you build |
-| First useful result | Photo and PDF jobs right after install, before any AI download | After you sign in | After an AI download | On by default on supported Macs, once Apple's download has finished |
+| What you get back | One PDF, a moved file, a reminder, an unsent Mail draft | Answers; some modes also work on your files | Mostly chat answers; a few also edit files | Rewrites, summaries and Shortcuts actions you build |
+| First useful result | One PDF from your photos right after install; the rest after a one-time AI download, or right away with an online AI | After you sign in | After an AI download | On by default on supported Macs, once Apple's download has finished |
 | Where your letter is read | On your Mac by default; online AI only if you turn it on | On the provider's servers | On your computer by default | On the device, or on Apple's Private Cloud Compute |
-| German letters and deadlines | Tuned for German letters; quotes the sentence behind each deadline | Capable, once you upload the letter | General-purpose chat | General summaries |
+| Letters and deadlines | Quotes the sentence behind each deadline | Capable, once you upload the letter | General-purpose chat | General summaries |
 | Mail, Calendar, Reminders | Unsent Mail drafts, Calendar events, reminders | Through connectors, mostly to online accounts | Varies; a few draft mail or add events | Built into Apple's apps |
 | Cost, account, code | Free, no account, open source (MIT) | Account needed; paid plans for more; closed source | Mostly free, no account; many open source | Included with supported Macs; closed source |
 
@@ -49,12 +49,11 @@ Keep ChatGPT if you like it: Pippa can use your subscription as her online AI.
 
 ## What she can do
 
-- **Files and PDFs:** one PDF from photos and scans, smaller PDFs and photos, JPG or PNG copies, text from images and PDFs, and Tidy Up with a preview and Undo. None of this needs the AI download.
-- **Letters and documents:** what a letter wants and by when, with the passage that says so; questions about PDFs, Word files and photos of documents; shorter or clearer text, and checklists from your notes.
-- **Mail, Calendar and Reminders:** reply text for the message you selected in Mail, or an unsent draft in Mail for you to review and send; appointments and reminders, added when you ask.
-- **Excel:** check a total and find rows it leaves out, without changing the sheet; turn a stack of invoices into one spreadsheet with totals.
-- **Finding things:** files by what's in them, photos in your library, and the web after she asks you.
-- **Morning overview (optional):** today's appointments and due reminders at a time you choose. It stays off until you turn it on.
+- **Files and PDFs:** one PDF from photos and scans, aimed at a size limit if you give one; files found by what's in them; renaming, moving and sorting into folders, with the Trash instead of deleting.
+- **Letters and documents:** what a letter wants and by when, with the passage that says so; questions about PDFs, Word files, spreadsheets and photos of documents; summaries, shorter or clearer text, checklists from your notes.
+- **Mail, Calendar and Reminders:** find and read mails and their attachments, write an unsent draft in Mail for you to review and send; read your calendar and reminders, and add appointments and reminders when you ask.
+- **Finding things:** files on your Mac and in iCloud Drive, photos in your library, and the web after she asks you.
+- **Remembering:** a short list of facts you tell her about yourself, such as your doctor's name. You can ask her to forget them.
 
 More, with examples and limits: [What Pippa can do](docs/what-pippa-can-do.md).
 
@@ -62,7 +61,7 @@ More, with examples and limits: [What Pippa can do](docs/what-pippa-can-do.md).
 
 You need a Mac with **Apple silicon (M1 or later)** and **macOS 15 or later**. Intel Macs are not supported.
 
-Photo and PDF jobs work without any AI download. For everything else, Pippa picks her AI based on your Mac's memory and asks before downloading it:
+One PDF from photos and scans works without any AI download. For everything else, Pippa picks her AI based on your Mac's memory and asks before downloading it. With an online AI switched on, she works without the download.
 
 | Your Mac's memory | Pippa's AI download |
 |---|---|
@@ -70,14 +69,14 @@ Photo and PDF jobs work without any AI download. For everything else, Pippa pick
 | 16, 18 or 24 GB | About 5.7 GB |
 | 32 GB or more | About 16.8 GB |
 
-Leave some extra disk space for the app and your results. If the same file is already on your Mac from LM Studio, Ollama or Hugging Face, Pippa uses it instead of downloading it again. Apple Intelligence is optional: on macOS 26, when it is turned on, Pippa lets Apple Intelligence handle a few quick jobs, such as short text selections and sorting unclear files while tidying. Which AI each Mac gets, and why: [Pippa's local AI](docs/models.md).
+Leave some extra disk space for the app and your results. If the same file is already on your Mac from LM Studio, Ollama or Hugging Face, Pippa uses it instead of downloading it again. Which AI each Mac gets, and why: [Pippa's local AI](docs/models.md).
 
 ## Good to know
 
 - **Local AI can miss details.** Check important names, amounts and dates against the original. If Pippa gets something wrong, [open an issue](https://github.com/tschnorpfeil/pippa/issues) with the version, what you asked and what happened, using made-up examples.
-- **Letter help is tuned for German.** Letter and deadline detection is built for German documents.
-- **Undo covers supported file changes,** such as tidying, moves and edited files. If you change those files elsewhere afterwards, a safe restore may not be possible.
-- **She acts when you ask.** If you ask her to add a reminder or move a file, she does it without asking again. Tidy Up shows a preview first; for anything else, check the result.
+- **Answers may be in German.** Pippa's own abilities for letters and deadlines are written in German.
+- **Nothing is deleted for good.** A file she removes goes to the Trash, and moves never overwrite another file.
+- **She acts when you ask.** If you ask her to add a reminder or move a file, she does it without asking again. The card under her answer shows what she actually did; check the result.
 - **She runs outside the App Sandbox** so she can work with your folders and Mac apps; a sandboxed app couldn't. macOS still asks before she reaches Documents, Calendar or Photos. Details: [Privacy and permissions](docs/privacy-and-permissions.md).
 - **Updates arrive inside the app.** Pippa checks daily and installs when you quit or after a while without input, never in the middle of your work.
 - **Uninstall:** [how to remove Pippa and her files](docs/privacy-and-permissions.md#remove-pippa).
@@ -97,4 +96,4 @@ Architecture, checks and releases: [Developing Pippa](docs/development.md). Befo
 
 Built on [Pi](https://github.com/earendil-works/pi), [llama.cpp](https://github.com/ggml-org/llama.cpp), [pi-web-access](https://github.com/nicobailon/pi-web-access), [Node.js](https://nodejs.org), [Sparkle](https://sparkle-project.org) and the open [Qwen](https://huggingface.co/Qwen) models. Full list: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-[MIT licensed](LICENSE), © 2026 Tobias Schnorpfeil. Pippa is an independent project, not affiliated with Apple, Microsoft, OpenAI, Anthropic, Alibaba Cloud or Earendil Works. Mac and macOS are trademarks of Apple Inc.; Excel is a trademark of Microsoft Corporation.
+[MIT licensed](LICENSE), © 2026 Tobias Schnorpfeil. Pippa is an independent project, not affiliated with Apple, Microsoft, OpenAI, Anthropic, Alibaba Cloud or Earendil Works. Mac and macOS are trademarks of Apple Inc.

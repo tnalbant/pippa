@@ -57,4 +57,4 @@ Native Mail acceptance remains open and is documented as an unverified limit for
 
 The signed reminder integration test closes the defined instrumented process-boundary cases; ordinary shipped-app interactions, native Calendar observations for this exact release, and end-to-end agent/provider success remain separate. No claim about product-wide success rate, user retention or an observed-user pilot follows from these finite checks.
 
-Release notes: [0.3.13](../releases/0.3.13.md).
+Release notes: [0.3.13](../../releases/0.3.13.md).
