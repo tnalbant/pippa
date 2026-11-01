@@ -1,0 +1,113 @@
+# The slow parts that the fast gate (ci.yml) leaves out: Pippa's runtime against the real, pinned Pi, web access
+# (pi-web-access in the real Pi), compatibility on macOS 15 itself, and optionally an ad-hoc signed Pippa.app.
+# Runs only by hand and on release tags, never on pull requests.
+name: Heavy checks
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      app:
+        description: 'Build Pippa.app and upload it as an artifact'
+        type: boolean
+        default: false
+
+concurrency:
+  group: heavy-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  real-pi:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # the app's build number counts commits
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Select latest Xcode
+        run: |
+          X=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          sudo xcode-select -s "$X/Contents/Developer"
+          swift --version
+      - name: Pinned Pi release
+        run: |
+          mkdir -p .build/pi-release
+          cp app/Packaging/pi-release/package.json app/Packaging/pi-release/package-lock.json .build/pi-release/
+          (cd .build/pi-release && npm ci --ignore-scripts --no-fund --no-audit --loglevel=error)
+      - name: Pi extension tests in the pinned Pi (runtime/pippa-tools)
+        run: |
+          export PIPPA_PI_CLI="$PWD/.build/pi-release/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js"
+          node --experimental-strip-types --test runtime/pippa-tools/*.test.mjs 2>&1 | tail -n 200
+        shell: bash -o pipefail {0}
+      - name: Terminal autostart in the pinned Pi (runtime/pippa-local-server)
+        run: |
+          export PIPPA_PI_CLI="$PWD/.build/pi-release/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js"
+          node --experimental-strip-types --test runtime/pippa-local-server/test/autostart.test.mjs runtime/pippa-local-server/test/real-pi.test.mjs 2>&1 | tail -n 200
+        shell: bash -o pipefail {0}
+      - name: Web access tests (runtime/pippa-web, pi-web-access in the real Pi)
+        working-directory: runtime/pippa-web
+        run: npm ci --ignore-scripts && npm test 2>&1 | tail -n 200
+        shell: bash -o pipefail {0}
+      - name: Pippa.app (ad-hoc signed)
+        if: inputs.app
+        run: |
+          scripts/build-app.sh
+          ditto -c -k --keepParent dist/Pippa.app dist/Pippa.zip
+      - uses: actions/upload-artifact@v4
+        if: inputs.app
+        with:
+          name: Pippa-app
+          path: dist/Pippa.zip
+          retention-days: 14
+
+  # Runtime compatibility on macOS 15 itself, without Apple Foundation Models.
+  # This hosted VM does not certify physical 8/16 GB Macs or real application permission dialogs.
+  macos15:
+    runs-on: macos-15
+    timeout-minutes: 40
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    defaults:
+      run:
+        shell: bash -eo pipefail {0}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify actual macOS 15 and Apple silicon
+        run: |
+          mkdir -p .build/macos15-acceptance/reports
+          python3 - <<'PY' | tee .build/macos15-acceptance/reports/host.txt
+          import platform, subprocess
+          version = subprocess.check_output(["sw_vers", "-productVersion"], text=True).strip()
+          machine = platform.machine()
+          assert version.split(".")[0] == "15", f"Expected actual macOS 15, got {version}"
+          assert machine == "arm64", f"Expected Apple silicon, got {machine}"
+          print(f"Runtime: macOS {version}, {machine}")
+          print("No model is installed for this workflow.")
+          print("Hosted VM evidence does not cover physical memory tiers or real TCC permission decisions.")
+          PY
+          test -d "$DEVELOPER_DIR"
+          xcodebuild -version | tee -a .build/macos15-acceptance/reports/host.txt
+          swift --version | tee -a .build/macos15-acceptance/reports/host.txt
+          xcrun --sdk macosx --show-sdk-version | tee -a .build/macos15-acceptance/reports/host.txt
+      - name: Build all targets against the supported runtime
+        id: build
+        run: swift build --package-path app --scratch-path .build/macos15-swift 2>&1 | tee .build/macos15-acceptance/reports/build.log
+      - name: Native checks with production OCR
+        timeout-minutes: 15
+        run: swift run --skip-build --package-path app --scratch-path .build/macos15-swift PippaChecks 2>&1 | tee .build/macos15-acceptance/reports/native.log
+      - name: Pi RPC protocol checks
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: swift run --skip-build --package-path app --scratch-path .build/macos15-swift PiRPCChecks 2>&1 | tee .build/macos15-acceptance/reports/rpc.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos15-acceptance-${{ github.sha }}
+          path: .build/macos15-acceptance/reports
+          retention-days: 14

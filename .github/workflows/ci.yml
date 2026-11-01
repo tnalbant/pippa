@@ -1,6 +1,6 @@
-# Builds and checks Pippa on a real Mac (Apple silicon).
-# On every pull request, every push to main and by hand; by hand with *app* ticked it also uploads Pippa.app.
-# Only changes to docs/, site/ or Markdown at the top level skip it (skills are Markdown too, so `*.md`, not `**/*.md`).
+# Fast gate on a real Mac (Apple silicon): what a pull request must pass, nothing that needs the real Pi or a model.
+# On every pull request and push to main; changes to docs/, site/ or Markdown at the top level skip it
+# (skills are Markdown too, so `*.md`, not `**/*.md`). The heavy parts are in heavy.yml.
 name: CI
 
 on:
@@ -9,12 +9,6 @@ on:
     paths-ignore: ['docs/**', 'site/**', '*.md']
   pull_request:
     paths-ignore: ['docs/**', 'site/**', '*.md']
-  workflow_dispatch:
-    inputs:
-      app:
-        description: 'Build Pippa.app and upload it as an artifact'
-        type: boolean
-        default: true
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
@@ -27,7 +21,7 @@ permissions:
 jobs:
   checks:
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
         with:
@@ -45,7 +39,7 @@ jobs:
           X=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
           sudo xcode-select -s "$X/Contents/Developer"
           swift --version
-      - name: Translations and release scripts
+      - name: Translations and script tests
         run: |
           python3 scripts/check-strings.py
           python3 -m unittest discover -s scripts/tests -p 'test_*.py'
@@ -64,34 +58,11 @@ jobs:
         shell: bash -o pipefail {0}
       - name: Pi RPC protocol checks
         run: swift run --package-path app PiRPCChecks
-      - name: Web access tests (runtime/pippa-web, pi-web-access in the real Pi)
-        working-directory: runtime/pippa-web
-        run: npm ci --ignore-scripts && npm test 2>&1 | tail -n 200
-        shell: bash -o pipefail {0}
-      - name: Pi extension tests (runtime/pippa-tools, also in the pinned Pi)
+      - name: Runtime tests without the real Pi
+        # The real-Pi tests (real-pi-*.test.mjs, Pi-dependent parts of shell.test.mjs) skip themselves without
+        # PIPPA_PI_CLI; heavy.yml runs them.
         run: |
-          mkdir -p .build/pi-release
-          cp app/Packaging/pi-release/package.json app/Packaging/pi-release/package-lock.json .build/pi-release/
-          (cd .build/pi-release && npm ci --ignore-scripts --no-fund --no-audit --loglevel=error)
-          export PIPPA_PI_CLI="$PWD/.build/pi-release/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js"
-          node --experimental-strip-types --test runtime/pippa-tools/*.test.mjs 2>&1 | tail -n 200
+          node --experimental-strip-types --test $(ls runtime/pippa-tools/*.test.mjs | grep -v '/real-pi-') 2>&1 | tail -n 200
+          node --test runtime/pippa-auth/pi-auth.test.mjs 2>&1 | tail -n 200
+          node --experimental-strip-types --test runtime/pippa-local-server/test/autostart.test.mjs 2>&1 | tail -n 200
         shell: bash -o pipefail {0}
-      - name: ChatGPT sign-in helper tests (runtime/pippa-auth)
-        run: node --test runtime/pippa-auth/pi-auth.test.mjs 2>&1 | tail -n 200
-        shell: bash -o pipefail {0}
-      - name: Terminal autostart tests (runtime/pippa-local-server, also with the pinned Pi)
-        run: |
-          export PIPPA_PI_CLI="$PWD/.build/pi-release/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js"
-          node --experimental-strip-types --test runtime/pippa-local-server/test/autostart.test.mjs runtime/pippa-local-server/test/real-pi.test.mjs 2>&1 | tail -n 200
-        shell: bash -o pipefail {0}
-      - name: Pippa.app (ad-hoc signed)
-        if: inputs.app
-        run: |
-          scripts/build-app.sh
-          ditto -c -k --keepParent dist/Pippa.app dist/Pippa.zip
-      - uses: actions/upload-artifact@v4
-        if: inputs.app
-        with:
-          name: Pippa-app
-          path: dist/Pippa.zip
-          retention-days: 14
