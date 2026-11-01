@@ -26,8 +26,7 @@ const repo = join(here, "../..");
 const web = join(repo, "runtime/pippa-web/index.ts");
 
 /** Characters of system text (without `<cwd>`) and non-MCP tool declarations; MCP adds at most 3,600 (Swift).
- * save_skill (skill-save.ts) added 480 (2026-10-28: 6,334 → 6,814), its description for the person's dialog 36 more
- * (2026-10-29: 6,850); each skill the person saves adds ~300 more. */
+ * 2026-10-29: 6,850 with applescript, move_to_trash and save_skill, which are gone since. */
 const BUDGET = 6_880;
 
 test("real Pi: the first request stays within Pippa's budget, with no skills section", {
@@ -60,7 +59,7 @@ test("real Pi: the first request stays within Pippa's budget, with no skills sec
 		PIPPA_WEB_DIR: join(root, "web"), PIPPA_MEMORY_FILE: join(root, "memory.md"), PIPPA_USER_SKILLS_DIR: join(root, "skills") };
 	// The person saved no skill yet: Pi starts with the empty folder and still sends no skills section.
 	mkdirSync(join(root, "skills"));
-	const extensions = ["pippa-policy.ts", "pippa-tools.ts", "pippa-assist.ts", "pippa-memory.ts", "pippa-context.ts"].map((f) => join(here, f)).concat(web);
+	const extensions = ["pippa-tools.ts", "pippa-assist.ts", "pippa-memory.ts"].map((f) => join(here, f)).concat(web);
 	const child = spawn(node, [cli, "--mode", "rpc", "--no-session", "--no-context-files", "--no-approve",
 		"--no-skills", "--skill", join(repo, "runtime/pippa-skills"), "--skill", join(root, "skills"), ...extensions.flatMap((e) => ["--extension", e]),
 		"--tools", tools, "--system-prompt", prompt, "--provider", "pippa-local", "--model", "m"], { cwd: work, env, stdio: ["pipe", "pipe", "pipe"] });
@@ -97,7 +96,8 @@ test("real Pi: the first request stays within Pippa's budget, with no skills sec
 	assert.ok(text.startsWith("Du bist Pippa"), "Pippa's own prompt replaces Pi's");
 	assert.ok(!text.includes("<skills>") && !text.includes("<available_skills>"),
 		"every bundled skill is button-only (disable-model-invocation) and none is saved yet, so no skills section");
-	assert.deepEqual(names, ["applescript", "bash", "fetch_content", "list_folder", "move_files", "move_to_trash", "read", "remember", "save_skill", "search_files", "web_search", "write"]);
+	// Names the app's launch list still carries for dropped tools (applescript, save_skill, …) are simply not registered.
+	assert.deepEqual(names, ["bash", "fetch_content", "list_folder", "move_files", "read", "remember", "search_files", "web_search", "write"]);
 	assert.ok(size <= BUDGET, `first request: ${size} characters of prompt and tool declarations, budget ${BUDGET}`);
 	console.log(`first request: ${size} of ${BUDGET} characters (without MCP)`);
 });

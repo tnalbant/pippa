@@ -11,7 +11,6 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import { DRAFT_TOOLS, DRAFT_LAUNCH_TOOLS, POLICY_COMMAND } from "./pippa-policy.ts";
 import { READINESS_COMMAND, REQUIRED_TOOLS } from "./pippa-mcp.ts";
 
 const payload = process.env.PIPPA_PI_PAYLOAD;
@@ -23,14 +22,14 @@ const extensionsDirectory = process.env.PIPPA_PI_EXTENSIONS_DIR || here;
 // Read the production allowlist so this test also catches changes to dynamic MCP wildcard activation.
 const launchSource = await readFile(join(here, "../../app/Sources/PiRPC/PippaPiLaunch.swift"), "utf8");
 const productionTools = [...launchSource.match(/public static let tools = \[([\s\S]*?)\]/)[1].matchAll(/"([^"]+)"/g)].map((match) => match[1]);
-const pippaExtensions = ["pippa-policy.ts", "pippa-tools.ts", "pippa-assist.ts", "pippa-memory.ts", "pippa-context.ts", "pippa-mcp.ts"];
+const pippaExtensions = ["pippa-tools.ts", "pippa-assist.ts", "pippa-memory.ts", "pippa-mcp.ts"];
 const preparationSchema = { type: "object", additionalProperties: false, required: ["paths"], properties: {
 	paths: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 50 },
 	quality: { enum: ["original", "balanced", "compact"] }, size_limit_mb: { enum: [5, 10, 20] },
 } };
 
 
-for (const scenario of ["ready", "draft-only", "collision", "missing-file-preparation", "authentication-failure", "file-preparation-enums", "scoped-documents"]) {
+for (const scenario of ["ready", "collision", "missing-file-preparation", "authentication-failure", "file-preparation-enums"]) {
 	test(`real Pi native admission: ${scenario}, ${scenario === "file-preparation-enums" ? "then enum-only MCP arguments reach the tool" : "with no provider request"}`, {
 		skip: !cli && "PIPPA_PI_PAYLOAD or PIPPA_PI_CLI not set", timeout: 25_000,
 	}, async () => {
@@ -46,7 +45,7 @@ for (const scenario of ["ready", "draft-only", "collision", "missing-file-prepar
 		const server = createServer((req, res) => {
 			if (req.url !== "/mcp") {
 				providerRequests++;
-				if (!["file-preparation-enums", "scoped-documents"].includes(scenario)) { res.writeHead(500); res.end(); return; }
+				if (scenario !== "file-preparation-enums") { res.writeHead(500); res.end(); return; }
 				let body = "";
 				req.on("data", (chunk) => { body += chunk; });
 				req.on("end", () => {
@@ -56,7 +55,7 @@ for (const scenario of ["ready", "draft-only", "collision", "missing-file-prepar
 						model: "test", choices: [{ index: 0, delta, finish_reason }] })}\n\n`;
 					if (providerRequests === 1) {
 						res.write(chunk({ role: "assistant", tool_calls: [{ index: 0, id: "prepare_fixture", type: "function",
-							function: { name: scenario === "scoped-documents" ? "pippa_more_tools" : "mcp__pippa__prepare_files", arguments: JSON.stringify(scenario === "scoped-documents" ? {} : preparationInput) } }] }, null));
+							function: { name: "mcp__pippa__prepare_files", arguments: JSON.stringify(preparationInput) } }] }, null));
 						res.write(chunk({}, "tool_calls"));
 					} else { res.write(chunk({ role: "assistant", content: "Fixture PDF prepared." }, "stop")); }
 					res.end("data: [DONE]\n\n");
@@ -107,10 +106,10 @@ for (const scenario of ["ready", "draft-only", "collision", "missing-file-prepar
 				await writeFile(join(work, ".pi/mcp.json"), configured);
 			}
 			child = spawn(node, [cli, "--mode", "rpc", "--no-session", "--no-context-files", "--no-approve", "--no-skills", "--no-extensions",
-				...pippaExtensions.flatMap((name) => ["--extension", join(extensionsDirectory, name)]), "--tools", (scenario === "draft-only" ? DRAFT_LAUNCH_TOOLS : productionTools).join(","),
+				...pippaExtensions.flatMap((name) => ["--extension", join(extensionsDirectory, name)]), "--tools", productionTools.join(","),
 				"--provider", "pippa-local", "--model", "test"], {
 				cwd: work, env: { HOME: root, PATH: process.env.PATH, PI_CODING_AGENT_DIR: agent,
-					PIPPA_ACTION_POLICY: scenario === "draft-only" ? "draftOnly" : "standard", PIPPA_MCP_URL: `${base}/mcp`, PIPPA_MCP_TOKEN: token, PI_OFFLINE: "1", PI_SKIP_VERSION_CHECK: "1", PI_TELEMETRY: "0" },
+					PIPPA_MCP_URL: `${base}/mcp`, PIPPA_MCP_TOKEN: token, PI_OFFLINE: "1", PI_SKIP_VERSION_CHECK: "1", PI_TELEMETRY: "0" },
 				stdio: ["pipe", "pipe", "pipe"],
 			});
 			let stderr = "", buffer = "", serial = 0;
@@ -153,44 +152,27 @@ for (const scenario of ["ready", "draft-only", "collision", "missing-file-prepar
 			if (!unavailable) {
 				assert.ok(discoveries > 0);
 				assert.deepEqual(receipts[0].data.registeredTools, REQUIRED_TOOLS);
-				assert.deepEqual(receipts[0].data.tools, scenario === "draft-only" ? DRAFT_TOOLS.filter((name) => name.startsWith("mcp__")) : REQUIRED_TOOLS);
-				assert.ok(commands.data.commands.some((entry) => entry.name === POLICY_COMMAND && entry.source === "extension"));
-				await command("prompt", { message: `/${POLICY_COMMAND} ${nonce}` });
-				const scope = entries.find((entry) => entry.customType === POLICY_COMMAND).data;
-				assert.equal(scope.status, "ready");
-				assert.equal(scope.policy, scenario === "draft-only" ? "draftOnly" : "standard");
-				if (scenario === "draft-only") assert.deepEqual(new Set(scope.tools), new Set(DRAFT_TOOLS));
-				assert.equal(providerRequests, 0);
+				assert.deepEqual(receipts[0].data.tools, REQUIRED_TOOLS);
 			}
 			if (scenario === "collision") {
 				assert.equal(await readFile(join(agent, "mcp.json"), "utf8"), configured);
 				assert.equal(await readFile(join(work, ".pi/mcp.json"), "utf8"), configured);
 				assert.equal(existsSync(marker), false, "unrelated configured stdio server must never start");
 			}
-			if (["file-preparation-enums", "scoped-documents"].includes(scenario)) {
+			if (scenario === "file-preparation-enums") {
 				let timer;
 				try {
 					const finished = new Promise((resolve, reject) => { settled = { resolve, reject };
 						timer = setTimeout(() => reject(new Error(`No enum-schema completion: ${stderr}`)), 8_000); });
-					await command("prompt", { message: scenario === "scoped-documents" ? "Summarize this document." : "Prepare the fixture PDFs/photos in the specified order, balanced quality and a 5 MB goal." });
+					await command("prompt", { message: "Prepare the fixture PDFs/photos in the specified order, balanced quality and a 5 MB goal." });
 					assert.equal((await finished).aborted, false);
 				} finally { clearTimeout(timer); settled = undefined; }
 				assert.equal(providerRequests, 2, "one scripted tool call and one final response");
-                if (scenario === "scoped-documents") {
-                    const names = (i) => providerBodies[i].tools.map(tool => tool.function.name);
-                    assert.deepEqual(new Set(names(0)), new Set(["read", "search_files", "list_folder", "mcp__pippa__read_document", "pippa_more_tools"]));
-                    assert.ok(names(1).includes("mcp__pippa__mail_draft"));
-                    assert.ok(names(1).includes("write"));
-                    assert.equal(nativeCalls.length, 0, "expanding declarations does not perform a native action");
-                    await command("prompt", { message: `/${READINESS_COMMAND} ${randomUUID()}` });
-                    assert.equal(entries.filter(entry => entry.customType === READINESS_COMMAND).at(-1).data.status, "ready");
-                } else {
 				const declared = providerBodies[0].tools.find((tool) => tool.function.name === "mcp__pippa__prepare_files").function.parameters;
 				assert.deepEqual(declared.properties.quality.enum, preparationSchema.properties.quality.enum);
 				assert.deepEqual(declared.properties.size_limit_mb.enum, preparationSchema.properties.size_limit_mb.enum);
 				assert.deepEqual(nativeCalls.map(({ name, arguments: args }) => ({ name, arguments: args })),
 					[{ name: "prepare_files", arguments: preparationInput }], "MCP forwards ordered paths and enum arguments unchanged");
-                }
 			}
 		} finally {
 			if (child && child.exitCode === null && child.signalCode === null) { child.kill("SIGKILL"); await new Promise((resolve) => child.once("exit", resolve)); }

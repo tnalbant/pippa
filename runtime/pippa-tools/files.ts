@@ -1,5 +1,6 @@
 /** File helpers for Pippa's narrow file tools (pippa-tools.ts). */
-import { rename, stat } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdir, rename, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
@@ -118,4 +119,39 @@ export async function moveOne(rawFrom: string, rawTo: string, cwd: string) {
 	if (!(await exists(dirname(to)))) throw new Error(`The folder ${dirname(to)} does not exist. Nothing was changed.`);
 	await rename(from, to);
 	return { content: [{ type: "text", text: `Moved to ${to}.` }], details: { from, to } };
+}
+
+/** `to: "trash"` in `move_files`: the macOS Trash, not a file named "trash". */
+export function isTrash(to: unknown): boolean {
+	return typeof to === "string" && to.trim().toLowerCase() === "trash";
+}
+
+/** The Mac's trash via /usr/bin/trash (macOS 15+, FileManager.trashItem; no Finder automation, no system prompt).
+ * For tests: `PIPPA_TRASH_DIR` instead of the real trash. Returns the location inside the trash. */
+export async function moveToTrash(path: string): Promise<string | undefined> {
+	const fake = process.env.PIPPA_TRASH_DIR;
+	if (fake) {
+		const dir = join(fake, `${Date.now()}`);
+		await mkdir(dir, { recursive: true });
+		const target = join(dir, basename(path));
+		await rename(path, target);
+		return target;
+	}
+	// Absolute path (starts with "/"): can never be read as an option; /usr/bin/trash has no "--".
+	const output = await new Promise<string>((done, fail) => {
+		execFile("/usr/bin/trash", ["-v", path], { timeout: 30_000 }, (error, stdout, stderr) => {
+			if (error) fail(new Error(String(stderr || error.message).trim().split("\n").pop() || "trash failed"));
+			else done(`${stdout}\n${stderr}`);
+		});
+	});
+	return output.match(/Moved ".*" to "(.*)"\s*$/m)?.[1];
+}
+
+/** `move_files` with `to: "trash"`: one file or folder to the Trash, never deleted for good. `details.to` is its place
+ * in the Trash (for undo), when the system names it. */
+export async function trashOne(rawFrom: string, cwd: string) {
+	const from = resolvePath(rawFrom, cwd);
+	if (!(await exists(from))) throw new Error(`Not found: ${from}`);
+	const to = await moveToTrash(from);
+	return { content: [{ type: "text", text: `Moved ${from} to the Trash.` }], details: { from, trash: true, ...(to ? { to } : {}) } };
 }

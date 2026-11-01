@@ -53,6 +53,13 @@ export function shortenParameters(payload: any): any {
 	return changed ? { ...payload, tools } : undefined;
 }
 
+/** The smallest cap `resultLimit` ever gives. */
+export const SMALLEST_RESULT_LIMIT = 6_000;
+
+/** Characters a `search_files` or `list_folder` result may take: always under the smallest cap, so `capResult` never
+ * cuts their JSON (facts.mjs `fitting` drops whole entries instead). */
+export const FACT_RESULT_CHARS = 5_500;
+
 /**
  * Characters one tool result may bring into the conversation, from the model's context window: three quarters of a
  * character per token of context, so a single result takes about a quarter of the window at most
@@ -60,7 +67,7 @@ export function shortenParameters(payload: any): any {
  */
 export function resultLimit(contextWindow: unknown): number {
 	const window = Number(contextWindow) > 0 ? Number(contextWindow) : 16_384;
-	return Math.min(24_000, Math.max(6_000, Math.round(window * 0.75)));
+	return Math.min(24_000, Math.max(SMALLEST_RESULT_LIMIT, Math.round(window * 0.75)));
 }
 
 /**

@@ -1,4 +1,4 @@
-// Helps for small models (pippa-assist.ts) without Pi and without a model: a stand-in `pi` takes the handlers, the
+// Loop brake, date line and safety net (pippa-assist.ts) without Pi and without a model: a stand-in `pi` takes the handlers, the
 // tests call `tool_call` and `tool_result` like Pi itself.
 //
 //   node --experimental-strip-types --test runtime/pippa-tools/assist.test.mjs
@@ -157,21 +157,6 @@ test("file preparation does not duplicate a verified result, while a requested c
 	assert.equal(await run.call("new-order", tool, { ...input, paths: [...input.paths].reverse() }, { content }), undefined);
 });
 
-test("rejected document reads are bounded even though Pi skips tool_result; a corrected tool still works", async () => {
-	const run = loopHarness();
-	const input = { path: "/fake/invoice.pdf" };
-	assert.match((await run.call("first", "read", input)).reason, /mcp__pippa__read_document/);
-	assert.equal(await run.call("corrected", "mcp__pippa__read_document", input), undefined);
-	assert.match((await run.call("retry", "read", input)).reason, /mcp__pippa__read_document/);
-	for (let i = 0; i < 3; i++) {
-		assert.match((await run.call(`repeat${i}`, "read", input)).reason, /already failed 2 times/);
-	}
-	assert.equal(run.aborted, 1);
-	assert.equal(run.entries.filter((entry) => entry.type === "pippa-loop-stop").length, 1);
-	await run.handlers.agent_start({});
-	assert.match((await run.call("new-answer", "read", input)).reason, /mcp__pippa__read_document/);
-});
-
 test("unknown tools and invalid arguments cannot bypass the loop brake before tool_call", async () => {
 	for (const [tool, input] of [["invented_tool", { query: "invoice" }], ["read", { wrong_path: "/fake/invoice.txt" }]]) {
 		const run = loopHarness();
@@ -191,16 +176,6 @@ test("executed results count once, and distinct invalid calls consume the same o
 	await run.handlers.agent_start({});
 	for (let i = 0; i < MAX_CALLS + 3; i++) await run.call(`invalid${i}`, `invented_${i}`, {}, { validates: false });
 	assert.equal(run.aborted, 1);
-});
-
-test("read on a document is sent to read_document; text files and other tools pass", async () => {
-	const { documentForRead } = await import("./pippa-assist.ts");
-	assert.match(documentForRead("read", { path: "/x/Rechnung Elektro.pdf" }), /mcp__pippa__read_document/);
-	assert.match(documentForRead("read", { path: "Scan.JPG" }), /read_document/);
-	assert.match(documentForRead("read", { path: "a/Brief.docx" }), /read_document/);
-	assert.equal(documentForRead("read", { path: "termine.txt" }), undefined);
-	assert.equal(documentForRead("read", { path: "notizen.md" }), undefined);
-	assert.equal(documentForRead("mcp__pippa__read_document", { path: "a.pdf" }), undefined);
 });
 
 test('call budget: different calls still stop after MAX_CALLS per answer, then the answer ends; a new answer starts fresh', async () => {
@@ -262,10 +237,12 @@ test('verified search results are signalled only for search_files, not model-wri
 
 test('files a folder listing or shell command showed become pippa-listed-files', async () => {
  const { listedFiles } = await import('./pippa-assist.ts');
- const listing='/Users/remi/projects/Kinderbuch:\nBilder/\nKinderbuch_35cm_Gesamt.pdf (3.5 MB, 2026-09-01)\nNotiz (alt) (1 KB, 2026-01-02)\nohne-info\n… and 3 more';
- assert.deepEqual(listedFiles('list_folder',[{type:'text',text:listing}]),
-  ['/Users/remi/projects/Kinderbuch/Kinderbuch_35cm_Gesamt.pdf','/Users/remi/projects/Kinderbuch/Notiz (alt)','/Users/remi/projects/Kinderbuch/ohne-info']);
- assert.deepEqual(listedFiles('list_folder',[{type:'text',text:'/x is empty.'}]),[]);
+ const k='/Users/remi/projects/Kinderbuch';
+ const listing=JSON.stringify({folder:k,total:4,entries:[{name:'Bilder',path:k+'/Bilder',kind:'folder'},
+  {name:'Kinderbuch_35cm_Gesamt.pdf',path:k+'/Kinderbuch_35cm_Gesamt.pdf',kind:'file',newest:true},{name:'Notiz (alt)',path:k+'/Notiz (alt)',kind:'file'}],left_out:1});
+ assert.deepEqual(listedFiles('list_folder',[{type:'text',text:listing}]),[k+'/Kinderbuch_35cm_Gesamt.pdf',k+'/Notiz (alt)']);
+ assert.deepEqual(listedFiles('list_folder',[{type:'text',text:JSON.stringify({folder:'/x',total:0,entries:[]})}]),[]);
+ assert.deepEqual(listedFiles('list_folder',[{type:'text',text:'not json'}]),[]);
  assert.deepEqual(listedFiles('bash',[{type:'text',text:'/a/b.pdf\n/a/c/\nrelative.txt'}],'find /a -name "*.pdf"'),['/a/b.pdf']);
  assert.deepEqual(listedFiles('bash',[{type:'text',text:'b.pdf\nc.pdf'}],'ls -1 "/a/x y"'),['/a/x y/b.pdf','/a/x y/c.pdf']);
  assert.deepEqual(listedFiles('bash',[{type:'text',text:'-rw-r--r-- 1 b.pdf'}],'ls -la /a'),[]);
@@ -278,17 +255,17 @@ test('files a folder listing or shell command showed become pippa-listed-files',
  assert.equal(entries.filter(e=>e.type==='pippa-search-result').length,0);
 });
 
-test('loop stop preserves the search truncation flag with exactly 200 returned files', async () => {
+test('loop stop preserves that a search left files out', async () => {
  const handlers={},entries=[];
   assist({ registerTool: () => {}, on:(name,fn)=>handlers[name]=fn,getAllTools:()=>tools,appendEntry:(type,data)=>entries.push({type,data})});
  const ctx={abort:()=>{}};
  const input={query:'Steuer'};
  for(const truncated of [true,false]){
   await handlers.agent_start({});
-  const files=truncated?Array.from({length:200},(_,i)=>({path:`/fake/Documents/${i}.pdf`})) : [];
+  const files=truncated?Array.from({length:20},(_,i)=>({path:`/fake/Documents/${i}.pdf`})) : [];
   for(let i=0;i<7;i++){
    const event={toolName:'search_files',input,toolCallId:`cap-${truncated}-${i}`};
-   if(!await handlers.tool_call(event,ctx))await handlers.tool_result({...event,isError:false,content:[{type:'text',text:JSON.stringify({files,truncated})}]},ctx);
+   if(!await handlers.tool_call(event,ctx))await handlers.tool_result({...event,isError:false,content:[{type:'text',text:JSON.stringify({files,total:files.length+(truncated?180:0),...(truncated?{left_out:180}:{})})}]},ctx);
   }
   const stop=entries.filter(x=>x.type==='pippa-loop-stop').at(-1).data;
   assert.equal(stop.files.length,files.length);assert.equal(stop.truncated,truncated);
@@ -368,14 +345,10 @@ test("what an answer changed is told to the app from the tools' own results, so 
 	assert.deepEqual(changesOf("write", undefined, true, { file: "/u/new.txt", created: true }), [], "failed: no confirmed new file to remove");
 	assert.deepEqual(changesOf("move_files", { moved: [{ from: "/d/a.pdf", to: "/d/X/a.pdf" }], failed: [] }, false), [{ kind: "move", from: "/d/a.pdf", to: "/d/X/a.pdf" }]);
 	assert.deepEqual(changesOf("move_files", { from: "/d/a.pdf", to: "/e/a.pdf" }, false), [{ kind: "move", from: "/d/a.pdf", to: "/e/a.pdf" }]);
-	assert.deepEqual(changesOf("move_to_trash", { path: "/d/a.pdf", trashedTo: "/T/a.pdf" }, false), [{ kind: "trash", from: "/d/a.pdf", to: "/T/a.pdf" }]);
-	assert.deepEqual(changesOf("move_to_trash", { path: "/d/a.pdf" }, false), [], "unknown place in the Trash: nothing to take back");
+	assert.deepEqual(changesOf("move_files", { from: "/d/a.pdf", to: "/T/a.pdf", trash: true }, false), [{ kind: "trash", from: "/d/a.pdf", to: "/T/a.pdf" }]);
+	assert.deepEqual(changesOf("move_files", { from: "/d/a.pdf", trash: true }, false), [], "unknown place in the Trash: nothing to take back");
 	assert.deepEqual(changesOf("bash", { pippaKept: [{ file: "/u/a.txt", copy: "/b/a.txt" }] }, false), [{ kind: "restore", file: "/u/a.txt", copy: "/b/a.txt" }]);
 	assert.deepEqual(changesOf("bash", { pippaKept: [{ file: "/u/a.txt", copy: "/b/a.txt" }] }, true), [{ kind: "restore", file: "/u/a.txt", copy: "/b/a.txt" }]);
 	assert.deepEqual(changesOf("write", {}, true, { file: "/u/a.txt", copy: "/b/a.txt" }), [{ kind: "restore", file: "/u/a.txt", copy: "/b/a.txt" }]);
 	assert.deepEqual(changesOf("read", {}, false), []);
-	// A saved skill (skill-save.ts) is a new file: undo moves its SKILL.md to the Trash.
-	assert.deepEqual(changesOf("save_skill", { pippaSkill: "saved", file: "/s/x/SKILL.md" }, false), [{ kind: "create", file: "/s/x/SKILL.md" }]);
-	assert.deepEqual(changesOf("save_skill", { pippaSkill: "not_saved" }, true), []);
-	assert.deepEqual(changesOf("save_skill", { pippaSkill: "saved", file: "/s/x/SKILL.md" }, true), [], "an error proves no saved file");
 });

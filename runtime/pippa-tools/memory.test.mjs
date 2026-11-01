@@ -1,9 +1,9 @@
-// Pippa's memory (pippa-memory.ts) and quiet context care (pippa-context.ts) without Pi and without a model: a stand-in
+// Pippa's memory (pippa-memory.ts) without Pi and without a model: a stand-in
 // `pi` takes the handlers and tools, the tests call them like Pi itself.
 //
 //   node --experimental-strip-types --test runtime/pippa-tools/memory.test.mjs
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -12,7 +12,6 @@ const here = fileURLToPath(new URL(".", import.meta.url));
 await mkdir(join(here, "../../.build"), { recursive: true });
 const root = await mkdtemp(join(here, "../../.build/pippa-memory-test-"));
 const memory = await import("./pippa-memory.ts");
-const context = await import("./pippa-context.ts");
 
 function standIn() {
 	const handlers = {}, tools = {};
@@ -92,81 +91,6 @@ test("extension: section read once per session and unchanged after remember; too
 	delete process.env.PIPPA_MEMORY_FILE;
 });
 
-test("context: handover from the last summary or the last question and answer, shortened", () => {
-	const lines = (...entries) => entries.map((e) => JSON.stringify(e)).join("\n");
-	const user = (text) => ({ type: "message", message: { role: "user", content: [{ type: "text", text }] } });
-	const assistant = (text) => ({ type: "message", message: { role: "assistant", content: [{ type: "thinking", thinking: "hm" }, { type: "text", text }] } });
-	assert.equal(context.handoverFrom(lines({ type: "session", id: "x" })), undefined);
-	const plain = context.handoverFrom(lines({ type: "session" }, user("Was steht im Brief?"), assistant("Du musst 84,20 € bis 31.10. zahlen.")));
-	assert.equal(plain, "Last question: Was steht im Brief?\nLast answer: Du musst 84,20 € bis 31.10. zahlen.");
-	const summarized = context.handoverFrom(lines(user("alt"), { type: "compaction", summary: "Brief der Stadtwerke, 84,20 € bis 31.10." }, user("Und der Termin?"), assistant("Am Montag um 9.")));
-	assert.match(summarized, /^Brief der Stadtwerke[\s\S]*Last question: Und der Termin\?\nLast answer: Am Montag um 9\.$/);
-	const long = context.handoverFrom(lines(user("x".repeat(5000)), assistant("y".repeat(5000))));
-	assert.ok(long.length <= context.HANDOVER_CHARS, `${long.length}`);
-	assert.ok(context.handoverFrom("not json\n" + lines(user("ok"))), "broken lines are skipped");
-});
-
-test("context: previous session only if recent, never the current one", async () => {
-	const dir = join(root, "sessions");
-	await mkdir(dir, { recursive: true });
-	const old = join(dir, "1_old.jsonl"), recent = join(dir, "2_recent.jsonl"), current = join(dir, "3_current.jsonl");
-	for (const f of [old, recent, current]) await writeFile(f, "{}\n");
-	const now = Date.now();
-	await utimes(old, new Date(now - 13 * 3_600_000), new Date(now - 13 * 3_600_000));
-	await utimes(recent, new Date(now - 3_600_000), new Date(now - 3_600_000));
-	await utimes(current, new Date(now), new Date(now));
-	assert.equal(await context.previousSession(dir, current, now), recent);
-	await utimes(recent, new Date(now - 14 * 3_600_000), new Date(now - 14 * 3_600_000));
-	assert.equal(await context.previousSession(dir, current, now), undefined, "older than 12 hours: no handover");
-	assert.equal(await context.previousSession(join(root, "missing"), undefined, now), undefined);
-});
-
-test("context: handover only in a fresh session, fixed for the session", async () => {
-	const dir = join(root, "handover");
-	await mkdir(dir, { recursive: true });
-	const before = join(dir, "1_before.jsonl"), now = join(dir, "2_now.jsonl");
-	await writeFile(before, JSON.stringify({ type: "message", message: { role: "user", content: "Rechnung vom Klempner?" } }) + "\n");
-	const pi = standIn();
-	context.default(pi);
-	let entries = [];
-	const ctx = { sessionManager: { getSessionDir: () => dir, getSessionFile: () => now, getEntries: () => entries } };
-	const turn = async () => { const event = { systemPromptOptions: { sections: {} } }; await pi.emit("before_agent_start", event, ctx); return event.systemPromptOptions.sections; };
-	await pi.emit("session_start", { reason: "startup" }, ctx);
-	const first = await turn();
-	assert.match(first.earlier, /previous conversation[\s\S]*Last question: Rechnung vom Klempner\?/);
-	await writeFile(before, JSON.stringify({ type: "message", message: { role: "user", content: "anders" } }) + "\n");
-	assert.equal((await turn()).earlier, first.earlier, "fixed for the session");
-	entries = [{ type: "message", message: { role: "user", content: "schon da" } }];
-	await pi.emit("session_start", { reason: "startup" }, ctx);
-	assert.equal((await turn()).earlier, undefined, "a resumed conversation needs no handover");
-});
-
-test("context: compacts after a quiet pause when at least 60 % full, not while busy, not when aborted", async () => {
-	process.env.PIPPA_COMPACT_IDLE_MS = "10";
-	const wait = () => new Promise((done) => setTimeout(done, 40));
-	const run = async ({ tokens, idle = true, pending = false, aborted = false, interrupt = false }) => {
-		const pi = standIn();
-		context.default(pi);
-		const calls = [];
-		const ctx = { isIdle: () => idle, hasPendingMessages: () => pending, getContextUsage: () => ({ tokens, contextWindow: 16384, percent: null }),
-			compact: (options) => calls.push(options) };
-		await pi.emit("agent_settled", { aborted }, ctx);
-		if (interrupt) await pi.emit("agent_start", {}, ctx);
-		await wait();
-		return calls;
-	};
-	const calls = await run({ tokens: 10_000 });
-	assert.equal(calls.length, 1);
-	assert.match(calls[0].customInstructions, /everyday helper conversation/);
-	assert.equal((await run({ tokens: 9_000 })).length, 0, "below 60 %");
-	assert.equal((await run({ tokens: null })).length, 0, "unknown size");
-	assert.equal((await run({ tokens: 12_000, idle: false })).length, 0, "Pi still busy");
-	assert.equal((await run({ tokens: 12_000, pending: true })).length, 0, "queued message");
-	assert.equal((await run({ tokens: 12_000, aborted: true })).length, 0, "the person pressed Stop");
-	assert.equal((await run({ tokens: 12_000, interrupt: true })).length, 0, "the person asked again meanwhile");
-	delete process.env.PIPPA_COMPACT_IDLE_MS;
-});
-
 test("extension without PIPPA_MEMORY_FILE (trial runs): facts stay in the process, no file is touched", async () => {
 	delete process.env.PIPPA_MEMORY_FILE;
 	const pi = standIn();
@@ -178,35 +102,3 @@ test("extension without PIPPA_MEMORY_FILE (trial runs): facts stay in the proces
 	assert.match(event.systemPromptOptions.sections.memory, /Lives in Köln/);
 });
 
-test("context: summaries without thinking; the level comes back after the summary or before the next answer", async () => {
-	const pi = standIn();
-	let level = "medium";
-	pi.getThinkingLevel = () => level;
-	pi.setThinkingLevel = (next) => { level = next; };
-	context.default(pi);
-	await pi.emit("session_before_compact", {}, {});
-	assert.equal(level, "off");
-	await pi.emit("session_compact", {}, {});
-	assert.equal(level, "medium");
-	await pi.emit("session_before_compact", {}, {});
-	assert.equal(level, "off", "a stopped or failed summary sends no session_compact");
-	await pi.emit("before_agent_start", { systemPromptOptions: { sections: {} } }, {});
-	assert.equal(level, "medium");
-	level = "off";
-	await pi.emit("session_before_compact", {}, {});
-	await pi.emit("session_compact", {}, {});
-	assert.equal(level, "off", "a level the person set to off stays off");
-});
-
-test("context: a handover puts the summary's facts first and leaves out preferences and empty sections", () => {
-	const summary = "## Goal\nBrief der Stadtwerke verstehen\n\n## Constraints & Preferences\n- User prefers detailed explanations\n\n"
-		+ "## Progress\n### Done\n- [x] Nebenkosten erklärt\n\n## Key Decisions\n- (none)\n\n## Critical Context\n- Nachzahlung 84,20 € bis 31.10., Frau Schmitz\n";
-	const ordered = context.handoverSummary(summary);
-	assert.match(ordered, /^## Critical Context\n- Nachzahlung 84,20 € bis 31\.10\., Frau Schmitz\n## Goal\nBrief/);
-	assert.doesNotMatch(ordered, /prefers|Key Decisions/);
-	assert.equal(context.handoverSummary("Plain summary."), "Plain summary.");
-	const long = summary.replace("## Progress", "## Progress\n" + "- [x] erledigt\n".repeat(200));
-	const handover = context.handoverFrom(JSON.stringify({ type: "compaction", summary: long }));
-	assert.match(handover, /84,20 € bis 31\.10\./, "the facts survive the shortening");
-	assert.match(context.EVERYDAY_SUMMARY, /language of the conversation/);
-});

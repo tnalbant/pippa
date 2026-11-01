@@ -1,35 +1,27 @@
 /**
- * Small helps that keep a small local model on track, and a quiet safety net. No permissions: Pi runs every tool
- * without asking; this file steers and keeps old versions; the shell's limits are in shell.ts. Loaded by Pippa next to its file tools:
+ * Small helps around Pi's tool loop and a quiet safety net. No permissions: Pi runs every tool without asking; the
+ * shell's limits are in shell.ts. Loaded by Pippa next to its file tools:
  *
  *   pi --mode rpc --extension …/pippa-tools.ts --extension …/pippa-assist.ts
  *
- * - `read` on a PDF, Word file, image, mail or spreadsheet is sent to Pippa's document reader (`read_document`): `read`
- *   returns raw bytes, and K2 ran out of context mid-answer reading a PDF that way.
  * - Loop brake: small models repeat the very same call (K2 sent the same failing reminder_add 20 times, read one file
  *   200 times, added the same reminder four times). Per answer an identical call that already failed twice, an
  *   identical change already running, completed or dispatched with an uncertain outcome, or any identical call run
- *   four times is stopped; after three stops the
- *   answer ends (session entry `pippa-loop-stop`, so Pippa can tell it apart from the person's Stop).
- *   Execution events also cover unknown tools, invalid arguments and blocked calls, which skip Pi's tool hooks.
- * - Call budget: a model can also wander without repeating itself (Qwen3.5 9B listed every folder and read all 21 PDFs
- *   when the search came back empty: 48 calls, 4 minutes, a wrong total). After `MAX_CALLS` tool calls in one answer
- *   every further call is stopped with the request to answer now; the measured tasks needed at most 14.
+ *   four times is stopped; after three stops the answer ends (session entry `pippa-loop-stop`, so Pippa can tell it
+ *   apart from the person's Stop). Execution events also cover unknown tools, invalid arguments and blocked calls,
+ *   which skip Pi's tool hooks.
+ * - Call budget: after `MAX_CALLS` tool calls in one answer every further call is stopped (Qwen3.5 9B once made 48
+ *   calls in 4 minutes); the measured tasks needed at most 14.
  * - File search results: `search_files` results become a session entry `pippa-search-result`, so Pippa shows the
  *   files found from the tool's output, never from the model's prose. Files that `list_folder` listed or `bash`
- *   printed as full paths become `pippa-listed-files`; Pippa shows those the answer names (opened folder, `find`).
+ *   printed as full paths become `pippa-listed-files`.
  * - Today's date: each new message starts with "[2026-10-09, Friday]". The system prompt has no date so it stays the
- *   same (prompt cache); without one K2 searched the weather for a wrong "tomorrow". The line is saved with the
- *   message, so earlier turns never change. ISO date, no sentence: the answer follows the question's language.
- * - Safety net, without asking: Pi runs every tool, and the people using Pippa have no Git and often no Time Machine.
- *   Before `edit` or `write` changes an existing file, a copy goes to Pippa's backup folder (APFS clone, free on the
- *   same disk) and the tool result says where, so "mach das rückgängig" can copy it back; copies older than
- *   `BACKUP_DAYS` go. `bash` runs in a sandbox (shell.ts): no deleting for good, and the internet, other apps and
- *   writing in the person's folders only after their OK.
+ *   same (prompt cache). The line is saved with the message, so earlier turns never change.
+ * - Safety net, without asking: before `edit` or `write` changes an existing file, a copy goes to Pippa's backup
+ *   folder (APFS clone, free on the same disk) and the tool result says where; copies older than `BACKUP_DAYS` go.
  * - Undo: every change the app can take back (an old version kept, a new file, a move, the Trash) becomes a session
  *   entry `pippa-change`; the app keeps them in its journal, so "Rückgängig" under the answer undoes them.
  */
-import { installToolScope } from "./tool-scope.mjs";
 import { constants } from "node:fs";
 import { access, copyFile, mkdir, readdir, rm, stat, utimes } from "node:fs/promises";
 import { basename, isAbsolute, join, dirname, resolve } from "node:path";
@@ -37,20 +29,9 @@ import { homedir } from "node:os";
 
 type ExtensionAPI = any;
 
-/** Files Pi's `read` only returns as raw bytes (or as an image the local model cannot see). */
-const DOCUMENT_TYPES = /\.(pdf|docx?|pages|rtf|odt|xlsx?|numbers|key|pptx?|eml|emlx|msg|png|jpe?g|heic|heif|tiff?|gif|webp|bmp)$/i;
-
 const NATIVE_CHANGES = new Set(["mcp__pippa__calendar_add", "mcp__pippa__reminder_add", "mcp__pippa__mail_draft", "mcp__pippa__prepare_files"]);
 /** Tools that change something: successful or uncertain changes are not repeated in one answer. */
-const CHANGES = new Set(["write", "edit", "move_files", "move_to_trash", "save_skill", ...NATIVE_CHANGES]);
-
-/** `read` on a document: the reason that sends Pi to Pippa's document reader instead (text, OCR for scans). */
-export function documentForRead(tool: string, input: any): string | undefined {
-	if (tool !== "read") return undefined;
-	const path = String(input?.path ?? input?.file_path ?? "");
-	if (!DOCUMENT_TYPES.test(path)) return undefined;
-	return `Not read: '${path.split("/").pop()}' is a document (PDF, Word, image, mail or spreadsheet); read gives raw bytes. Call mcp__pippa__read_document with the same path instead.`;
-}
+const CHANGES = new Set(["write", "edit", "move_files", ...NATIVE_CHANGES]);
 
 /** Tool calls per answer before Pi is told to answer with what it has (docs/measurements/model-compare). */
 export const MAX_CALLS = 20;
@@ -126,16 +107,15 @@ export function searchFiles(content: any[]): string[] {
 	}
 }
 
-/** Files a folder listing or a shell command showed: `list_folder`'s "folder:" plus "name (size, date)" lines,
- * otherwise full paths on their own line. Folders ("name/") stay out. */
+/** Files a folder listing or a shell command showed: `list_folder`'s file entries, otherwise full paths on their own
+ * line. Folders stay out. */
 export function listedFiles(tool: string, content: any[], command = ""): string[] {
 	const text = (content ?? []).filter((p) => p?.type === "text").map((p) => String(p.text ?? "")).join("\n");
 	if (tool === "list_folder") {
-		const [head, ...lines] = text.split("\n");
-		const folder = head.match(/^(\/.*):$/)?.[1];
-		if (!folder) return [];
-		return lines.filter((l) => l && !l.endsWith("/") && !/^… and \d+ more$/.test(l))
-			.map((l) => `${folder.replace(/\/$/, "")}/${l.replace(/ \([^()]*, \d{4}-\d\d-\d\d\)$/, "")}`);
+		try {
+			const entries = JSON.parse(text)?.entries;
+			return Array.isArray(entries) ? entries.filter((e: any) => e?.kind === "file" && typeof e?.path === "string").map((e: any) => e.path) : [];
+		} catch { return []; }
 	}
 	// `ls /folder` or `ls ~/folder` (no long format): plain names below that folder.
 	const ls = command.match(/^\s*ls((?:\s+-[A-Za-z1]+)*)\s+(["']?)((?:\/|~\/)[^"'|;&<>`$]*?)\2\s*$/);
@@ -233,22 +213,19 @@ export function changesOf(tool: string, details: any, isError: boolean, before?:
 	}
 	if ((tool === "edit" || tool === "write") && before?.copy) return [{ kind: "restore", file: before.file, copy: before.copy }];
 	if (isError) return [];
-	if (tool === "save_skill" && details?.pippaSkill === "saved" && typeof details?.file === "string") return [{ kind: "create", file: details.file }];
 	if ((tool === "edit" || tool === "write") && before) {
 		return before.created ? [{ kind: "create", file: before.file }] : [];
 	}
 	if (tool === "move_files") {
 		const moved: any[] = Array.isArray(details?.moved) ? details.moved : details?.from && details?.to ? [details] : [];
-		return moved.filter((m) => typeof m?.from === "string" && typeof m?.to === "string").map((m) => ({ kind: "move", from: m.from, to: m.to }));
-	}
-	if (tool === "move_to_trash" && typeof details?.path === "string" && typeof details?.trashedTo === "string") {
-		return [{ kind: "trash", from: details.path, to: details.trashedTo }];
+		// The Trash: undo needs the place inside it; without one there is nothing to take back.
+		return moved.filter((m) => typeof m?.from === "string" && typeof m?.to === "string")
+			.map((m) => ({ kind: m.trash === true ? "trash" : "move", from: m.from, to: m.to }));
 	}
 	return [];
 }
 
 export default function (pi: ExtensionAPI) {
-	installToolScope(pi);
 	const backups = backupDirectory();
 	const kept = new Map<string, { file: string; copy?: string; created?: boolean }>();
 	if (backups) void pruneBackups(backups);
@@ -307,8 +284,6 @@ export default function (pi: ExtensionAPI) {
 		const loop = attempt(event, ctx);
 		if (loop) return { block: true, reason: NATIVE_CHANGES.has(tool)
 			? JSON.stringify({ done: false, status: "not_dispatched", dispatched: false, tell: loop }) : loop };
-		const document = documentForRead(tool, event.input);
-		if (document) return { block: true, reason: document };
 		if (tool === "bash") commands.set(event.toolCallId, String(event.input?.command ?? ""));
 		if (backups && (tool === "edit" || tool === "write")) {
 			const file = targetPath(event.input?.path ?? event.input?.file_path, ctx?.cwd ?? process.cwd());
@@ -343,14 +318,15 @@ export default function (pi: ExtensionAPI) {
 			for (const path of searchFiles(event.content)) if (found.size < 201) found.add(path);
 			try {
 				const text = (event.content ?? []).filter((p: any) => p?.type === "text").map((p: any) => p.text).join("\n");
-				truncated ||= JSON.parse(text).truncated === true;
+				const result = JSON.parse(text);
+				truncated ||= result.truncated === true || Number(result.left_out) > 0;
 			} catch { /* Plain mdfind results have no structured truncation flag. */ }
 		}
 		outcome(event.toolCallId, event.isError === true, nativeChangeOutcome(event.toolName, event.content, event.isError === true));
 		const changes = changesOf(event.toolName, event.details, event.isError === true, backup);
 		if (changes.length) pi.appendEntry("pippa-change", { v: 1, changes });
 		if (backup?.copy) {
-			const note = `The previous version of ${basename(backup.file)} is kept at ${backup.copy}. To undo, copy it back over ${backup.file}.`;
+			const note = `The previous version of ${basename(backup.file)} is kept at ${backup.copy}.`;
 			return { content: [...(event.content ?? []), { type: "text", text: note }] };
 		}
 		return undefined;

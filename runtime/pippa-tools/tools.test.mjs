@@ -99,3 +99,21 @@ test("move_files with from/to: rename or move one item, never overwriting", asyn
 	await assert.rejects(moveOne("Mietvertrag.pdf", "Ablage", dir), /already exists/);
 	await assert.rejects(moveOne("fehlt.pdf", "neu.pdf", dir), /Not found/);
 });
+
+test("move_files to \"trash\": into the Trash (never deleted), with the place for undo; only that exact word", async () => {
+	const { isTrash, trashOne } = await import("./files.ts");
+	const { existsSync, writeFileSync } = await import("node:fs");
+	const dir = await mkdtemp(join(root, "trash-"));
+	writeFileSync(join(dir, "alt.pdf"), "x");
+	process.env.PIPPA_TRASH_DIR = join(dir, ".Trash");
+	try {
+		const result = await trashOne("alt.pdf", dir);
+		assert.equal(existsSync(join(dir, "alt.pdf")), false);
+		assert.equal(result.details.from, join(dir, "alt.pdf"));
+		assert.equal(result.details.trash, true);
+		assert.ok(existsSync(result.details.to), "the file is in the Trash, not gone");
+		await assert.rejects(trashOne("alt.pdf", dir), /Not found/);
+	} finally { delete process.env.PIPPA_TRASH_DIR; }
+	assert.ok(isTrash("trash") && isTrash(" Trash "));
+	assert.ok(!isTrash("trash.txt") && !isTrash("~/trash") && !isTrash(undefined));
+});

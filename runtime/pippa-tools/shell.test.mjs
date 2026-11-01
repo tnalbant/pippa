@@ -152,16 +152,10 @@ test("tool: asks once per answer before going online; no means not run; without 
 		"no one to ask: not run");
 });
 
-test("tool: draft-only shell and standard app automation are refused without execution or approval", async () => {
+test("tool: app automation is refused without execution or approval", async () => {
 	let runs = 0, asks = 0;
 	const create = () => ({ name: "bash", execute: async () => { runs++; return { content: [] }; } });
 	const ctx = { ...plain("/fixture"), hasUI: true, ui: { confirm: async () => { asks++; return true; } } };
-	const draft = shellTool(create, { available: () => true, env: { PIPPA_ACTION_POLICY: "draftOnly" } }).definition("/fixture");
-	for (const command of ["echo safe", "python3 -c 'print(1)'", "env PIPPA_ACTION_POLICY=standard open mailto:x@example.test"]) {
-		const result = await draft.execute("draft", { command }, undefined, undefined, ctx);
-		assert.equal(result.details.pippaExecution, "not_dispatched");
-		assert.equal(result.isError, true);
-	}
 	const normal = shellTool(create, { available: () => true, env: {} }).definition("/fixture");
 	for (const command of ["osascript -e 'tell application \"Mail\" to send outgoing message 1'", "open mailto:x@example.test",
 		"/usr/bin/shortcuts run Send", "automator Send.workflow", "env /usr/bin/osascript send.scpt"]) {
