@@ -8,6 +8,13 @@ if CommandLine.arguments.dropFirst().contains("--verify-runtime") {
     do { try BundleVerification.run(); exit(0) }
     catch { FileHandle.standardError.write(Data("Bundle verification failed: \(error)\n".utf8)); exit(1) }
 }
+// Development and acceptance runs: `Pippa --ask "question"` asks through the same Pi path as the window and prints
+// what happens (steps, answer, cards) instead of showing it.
+if let index = CommandLine.arguments.firstIndex(of: "--ask"), CommandLine.arguments.count > index + 1 {
+    let question = CommandLine.arguments[index + 1]
+    Task { @MainActor in exit(await HeadlessAsk.run(question)) }
+    app.run()
+}
 // First launch from the disk image or Downloads: offer once to move to Applications.
 if AppMover.runIfNeeded() { exit(0) }
 let delegate = AppDelegate()

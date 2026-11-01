@@ -400,7 +400,6 @@ public enum ConversationStoreError: LocalizedError, Sendable {
     public func retainedResultFiles() -> [URL] {
         archive.conversations.flatMap(\.messages).flatMap { $0.actions?.cards ?? [] }.flatMap { card -> [URL] in
             if case .preparedFiles(let prepared) = card { return prepared.files }
-            if case .filledForm(let form) = card { return [form.file] }
             return []
         }
     }

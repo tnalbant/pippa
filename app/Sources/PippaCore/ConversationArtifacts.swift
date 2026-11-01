@@ -67,15 +67,6 @@ public struct ConversationArtifacts: Equatable, Sendable {
             let taskResult: Bool = message.role == .assistant && message.receipt != nil && items.isEmpty && noticeOnly
             var preparedJobs = Set<UUID>()
             for card in cards {
-                // A chart card: its title, shown in the conversation (it has no file of its own).
-                if case .chart(let chart) = card {
-                    let title = chart.title.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !title.isEmpty {
-                        add(Made(id: "chart:" + message.id.uuidString + ":" + title, kind: .chart, title: title, file: nil,
-                                 preparedCard: nil, receipt: nil, messageID: message.id, date: message.timestamp))
-                    }
-                    continue
-                }
                 guard case .preparedFiles(let prepared) = card else { continue }
                 preparedJobs.insert(prepared.jobID)
                 for file in prepared.files {

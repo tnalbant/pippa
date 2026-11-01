@@ -129,7 +129,7 @@ final class PiSession {
         await fresh.setUIHandler { request in await Confirmations.ask(request) }
         do {
             try await fresh.start()
-            try await fresh.verifyNativeTools(actionPolicy: .standard)
+            try await fresh.verifyNativeTools()
         } catch {
             PippaMCPService.invalidateEndpoint()
             await fresh.shutdown()
