@@ -1,0 +1,228 @@
+/*
+  Settings.strings (de): German (full translation)
+  Module Pippa, looked up with T("…", table: "Settings").
+  Key = the English text itself. Format: "English key" = "Translation";
+  Placeholders %@ / %d / %lld; positional %1$@ / %2$@ when German needs another order.
+  Every key must exist in en.lproj and de.lproj. Check: python3 scripts/check-strings.py
+  Convention: docs/development.md, section "Localization".
+*/
+
+"Provider" = "Anbieter";
+"OpenAI-compatible" = "OpenAI-kompatibel";
+"Server address" = "Basis-URL";
+"Address of your server" = "Adresse deines Servers";
+"Model ID" = "Modell-ID";
+"API key" = "API-Schlüssel";
+"Test and Save" = "Testen und speichern";
+"Saved · leave empty to keep it" = "Gespeichert · leer lassen zum Beibehalten";
+"Enter API key" = "API-Schlüssel eingeben";
+"Key saved in your macOS Keychain" = "Schlüssel im macOS-Schlüsselbund gespeichert";
+"Key will be saved in your macOS Keychain" = "Schlüssel wird im macOS-Schlüsselbund gespeichert";
+"Model ID from your OpenAI account" = "Modell-ID aus deinem OpenAI-Konto";
+"Model ID from your Anthropic account" = "Modell-ID aus deinem Anthropic-Konto";
+"Model ID on your server" = "Modell-ID deines Servers";
+"Please enter a valid server address." = "Bitte gib eine gültige Basis-URL ein.";
+"This online connection needs an API key." = "Für diese externe Verbindung brauchst du einen API-Schlüssel.";
+"Connection tested and saved." = "Verbindung getestet und gespeichert.";
+"Connection and key removed. Pippa works on this Mac again." = "Verbindung und Schlüssel entfernt. Pippa verwendet wieder ihre KI auf diesem Mac.";
+"Call Pippa" = "Pippa rufen";
+"Open at login" = "Mit dem Mac starten";
+"That didn’t work just now. Is Pippa in your Applications folder?" = "Ging gerade nicht. Liegt Pippa im Ordner „Programme“?";
+"Pippa’s AI" = "Pippas KI";
+"Load Now" = "Jetzt laden";
+"Cancel" = "Abbrechen";
+"Try Again" = "Erneut versuchen";
+"%@ (Default)" = "%@ (Standard)";
+"Open System Settings" = "Systemeinstellungen öffnen";
+"%lld%%" = "%lld %%";
+"Pippa loads her AI once. After that, everything runs on your Mac." = "Pippa lädt einmalig ihre KI. Danach rechnet alles auf deinem Mac.";
+"Later" = "Später";
+"Tidying up and overviews already work without it. You can load it any time." = "Aufräumen und Übersichten gehen schon ohne. Laden kannst du jederzeit.";
+"Change date (%@)" = "Datum %@, ändern";
+"Deadlines" = "Fristen";
+"Found one deadline." = "Eine Frist gefunden.";
+"Found %lld deadlines." = "%lld Fristen gefunden.";
+"Close" = "Schließen";
+"Date missing" = "Datum fehlt";
+"calculated, please check" = "ausgerechnet, bitte prüfen";
+"“%@”" = "„%@“";
+"Add…" = "Eintragen …";
+"Add Deadline" = "Frist eintragen";
+"Reminder" = "Erinnerung";
+"Calendar" = "Kalender";
+"please check" = "bitte prüfen";
+"There’s no date in the text. Choose one yourself." = "Im Text steht kein Datum. Wähl selbst eins.";
+"No Thanks" = "Lieber nicht";
+"Add" = "Eintragen";
+"I calculated this date." = "Das Datum habe ich ausgerechnet.";
+"Title" = "Titel";
+"%@ at 9:00" = "%@, 9:00";
+"Reminders" = "Erinnerungen";
+"all-\nday" = "ganz-\ntägig";
+"Alert: %@ at 9:00" = "Hinweis: %@, 9:00";
+"I’m not allowed into your calendar yet." = "Ich darf noch nicht in deinen Kalender.";
+"I’m not allowed into your reminders yet." = "Ich darf noch nicht in deine Erinnerungen.";
+"I’m not allowed into Mail yet." = "Ich darf noch nicht in Mail.";
+"To add the deadline to your reminders, I need your permission. Your Mac will ask you in a moment." = "Damit ich die Frist in deine Erinnerungen schreiben kann, fragt dein Mac gleich, ob ich darf.";
+"To add the deadline to your calendar, I need your permission. Your Mac will ask you in a moment." = "Damit ich die Frist in deinen Kalender schreiben kann, fragt dein Mac gleich, ob ich darf.";
+"To read the selected mail, I need your permission. Your Mac will ask you in a moment. I read it; I send nothing without asking you." = "Damit ich die ausgewählte Mail lesen kann, fragt dein Mac gleich, ob ich darf. Ich lese sie; ohne dein Okay schicke ich nichts.";
+"Just a quick question." = "Kurz eine Frage.";
+"No problem. If you like, you can allow it in System Settings under Privacy & Security." = "Kein Problem. Wenn du magst, erlaubst du es in den Systemeinstellungen unter Datenschutz & Sicherheit.";
+"Allow…" = "Erlauben …";
+"Drop photos or a document on me." = "Zieh Fotos oder ein Dokument auf mich.";
+"I can make one PDF from your photos, right here on your Mac." = "Ich mache aus deinen Fotos eine PDF, direkt auf deinem Mac.";
+"Choose Files…" = "Dateien auswählen…";
+"Get Started" = "Los geht’s";
+"Forget" = "Vergessen";
+"Learned actions forgotten." = "Gemerkte Aktionen vergessen.";
+"I couldn’t forget the learned actions. Please try again." = "Ich konnte die gemerkten Aktionen nicht vergessen. Versuch es bitte noch einmal.";
+"I couldn’t read the learned actions. Please open Settings again." = "Ich konnte die gemerkten Aktionen nicht lesen. Öffne die Einstellungen bitte noch einmal.";
+"I can’t access the learned actions right now." = "Ich kann gerade nicht auf die gemerkten Aktionen zugreifen.";
+
+// Existing models on this Mac
+
+/* R4: Einrichtung ohne technische Fragen (Views/PiSetupViews.swift, App/PiSetupController.swift). Beispiele wie die Website (site/index.html, site/en/index.html). */
+"Pippa is getting ready" = "Pippa macht sich bereit";
+"I’m taking over my AI from %@, without extra space …" = "Ich übernehme meine KI aus %@, ohne extra Platz …";
+"I’m setting myself up …" = "Ich richte mich ein …";
+"I’m checking my AI and setting it up …" = "Ich prüfe meine KI und richte sie ein …";
+"Pippa is setting up her AI meanwhile …" = "Pippa richtet nebenbei ihre KI ein …";
+"Pippa is loading her AI" = "Pippa lädt ihre KI";
+"I’m loading my AI …" = "Ich lade meine KI …";
+"Hi, I’m Pippa" = "Hallo, ich bin Pippa";
+"Details" = "Details";
+"Hide Details" = "Details ausblenden";
+"Details shown" = "Details sichtbar";
+"Details hidden" = "Details ausgeblendet";
+"I’m ready" = "Ich bin bereit";
+"I’m using the AI that was already in %@, without extra space." = "Ich nutze die KI, die schon in %@ lag, ohne extra Platz.";
+"What I can do for you" = "Was ich für dich tun kann";
+"Previous Example" = "Vorheriges Beispiel";
+"Next Example" = "Nächstes Beispiel";
+"%1$lld of %2$lld" = "%1$lld von %2$lld";
+"A letter from your landlord." = "Ein Brief vom Finanzamt.";
+"I tell you in plain words what it says, what you need to do and by when, and show you the passage it comes from." = "Ich sage dir in einfachen Worten, was drinsteht, was zu tun ist und bis wann, und zeige dir die Stelle im Brief.";
+"An email that needs an answer." = "Eine Mail, die eine Antwort braucht.";
+"If someone suggests a time, I check your calendar and draft the reply. You send it yourself." = "Schlägt jemand einen Termin vor, schaue ich in deinen Kalender und schreibe die Antwort als Entwurf. Abschicken tust du selbst.";
+"Three photos, one PDF." = "Drei Fotos, ein PDF.";
+"Drag your phone photos onto me and I make one PDF from them. That works without the internet." = "Zieh deine Handyfotos auf mich, und ich mache ein PDF daraus. Das geht ohne Internet.";
+"The overflowing Downloads folder." = "Der volle Downloads-Ordner.";
+"I sort invoices, photos and installers into folders. If something isn’t right, Undo puts it back." = "Ich sortiere Rechnungen, Fotos und Installationsdateien in Ordner. Passt etwas nicht, holst du es mit „Rückgängig“ zurück.";
+"Pippa needs a Mac with Apple silicon (M1 or later)." = "Pippa braucht einen Mac mit Apple-Chip (M1 oder neuer).";
+"Try again" = "Erneut versuchen";
+
+/* R10: eigener Online-Dienst und KI-Wahl im RPC-Weg */
+"Your conversations and what you show Pippa go to your online AI. Your key stays in your macOS Keychain." = "Deine Gespräche und was du Pippa zeigst, gehen an deine Online-KI. Dein Schlüssel bleibt in deinem macOS-Schlüsselbund.";
+
+/* Vereinfachte Einstellungen (docs/settings-simplification.md) */
+"Online AI" = "Online-KI";
+"Use my own online AI" = "Meine eigene Online-KI nutzen";
+"Remove" = "Entfernen";
+"Saving first sends one short test message. No files and nothing from your conversations." = "Beim Speichern geht zuerst eine kurze Testnachricht raus. Keine Dateien und nichts aus deinen Gesprächen.";
+"Standard (fast, %@)" = "Standard (schnell, %@)";
+"More thorough (%@)" = "Gründlicher (%@)";
+"A new AI is ready to load. Until then, Pippa keeps working with the one she has." = "Eine neue KI ist bereit zum Laden. Bis dahin arbeitet Pippa mit ihrer bisherigen KI.";
+"Keep Loading in the Background" = "Im Hintergrund weiterladen";
+
+/* Schriftgröße */
+"Text size" = "Schriftgröße";
+"Makes all text in Pippa larger." = "Macht alle Schrift in Pippa größer.";
+"Normal" = "Normal";
+"Large" = "Groß";
+"Extra large" = "Sehr groß";
+"Use ChatGPT for conversations?" = "ChatGPT für Gespräche verwenden?";
+"Use ChatGPT" = "ChatGPT verwenden";
+"Your conversation and everything Pippa reads for it will be sent to OpenAI. You can switch back to the AI on this Mac at any time." = "Deine Unterhaltung und alles, was Pippa dafür liest, wird an OpenAI geschickt. Du kannst jederzeit zur KI auf diesem Mac zurückwechseln.";
+"ChatGPT (your subscription)" = "ChatGPT (dein Abo)";
+"Sign in with ChatGPT" = "Mit ChatGPT anmelden";
+"Sign in in your browser. Pippa waits here." = "Melde dich im Browser an. Pippa wartet hier.";
+"Sign Out" = "Abmelden";
+"On · conversations go to OpenAI (%@)." = "An · Gespräche gehen an OpenAI (%@).";
+"Signed in. Off: Pippa uses the AI on this Mac." = "Angemeldet. Aus: Pippa nutzt die KI auf diesem Mac.";
+"Uses your ChatGPT subscription instead of the AI on this Mac. You sign in in your browser." = "Nutzt dein ChatGPT-Abo statt der KI auf diesem Mac. Die Anmeldung läuft in deinem Browser.";
+"This sign-in isn’t a ChatGPT subscription." = "Diese Anmeldung ist kein ChatGPT-Abo.";
+"Another sign-in is still open. Close it and try again." = "Eine andere Anmeldung ist noch offen. Schließe sie und versuche es noch einmal.";
+"The sign-in didn’t work just now. Please try again." = "Die Anmeldung hat gerade nicht geklappt. Bitte versuche es noch einmal.";
+"You’re on a phone hotspot right now. Better load on Wi-Fi." = "Du bist gerade im Handy-Hotspot. Lade lieber im WLAN.";
+
+/* Settings redesign: privacy banner, groups with icons, online AI folded away */
+"Your conversations go to %@" = "Deine Gespräche gehen an %@";
+"Everything stays on your Mac" = "Alles bleibt auf deinem Mac";
+"Pippa only goes online for downloads, updates and web searches. Under each answer you see what was searched." = "Ins Internet geht Pippa nur für Downloads, Updates und Websuchen. Unter der Antwort siehst du, wonach sie gesucht hat.";
+"Your files stay on your Mac. You can switch back below at any time." = "Deine Dateien bleiben auf deinem Mac. Unten kannst du jederzeit zurückschalten.";
+"Everyday" = "Bedienung";
+"Opens Pippa from anywhere." = "Öffnet Pippa, egal wo du bist.";
+"Pippa is there as soon as your Mac is on." = "Pippa ist da, sobald dein Mac an ist.";
+"Permissions" = "Erlaubnisse";
+"Allowed" = "Erlaubt";
+"Will ask" = "Fragt vorher";
+"What Pippa remembers" = "Was Pippa sich merkt";
+"Favourite suggestions" = "Lieblingsvorschläge";
+"Pippa notes which suggestions you pick, so the right ones come first. Only on this Mac, for up to a year. Forgetting keeps your conversations and files." = "Pippa merkt sich, welche Vorschläge du nimmst, damit die passenden zuerst kommen. Nur auf diesem Mac, höchstens ein Jahr. Vergessen lässt Gespräche und Dateien in Ruhe.";
+"Use an online AI (optional)" = "Online-KI nutzen (optional)";
+"Only if you already have ChatGPT or your own AI account. Pippa doesn’t need it." = "Nur wenn du schon ChatGPT oder ein eigenes KI-Konto hast. Pippa braucht das nicht.";
+"For your own OpenAI or Anthropic account. When it’s on, your conversations go there." = "Für dein eigenes OpenAI- oder Anthropic-Konto. Ist es an, gehen deine Gespräche dorthin.";
+"Option + Space" = "Option + Leertaste";
+"Control + Option + Space" = "Control + Option + Leertaste";
+"Control + Shift + Space" = "Control + Shift + Leertaste";
+"Control + Option + P" = "Control + Option + P";
+"Pippa %@" = "Pippa %@";
+"Runs on your Mac, also without internet." = "Läuft auf deinem Mac, auch ohne Internet.";
+"Ready" = "Bereit";
+
+/* What Pippa may do (PermissionViews.swift) */
+"Desktop, Documents and Downloads" = "Schreibtisch, Dokumente und Downloads";
+"iCloud Drive" = "iCloud Drive";
+"External drives" = "Externe Laufwerke";
+"Contacts" = "Kontakte";
+"Photos" = "Fotos";
+"Mail" = "Mail";
+"Notes" = "Notizen";
+"Excel" = "Excel";
+"So Pippa can find, read and tidy your files when you ask." = "Damit Pippa deine Dateien findet, liest und aufräumt, wenn du sie darum bittest.";
+"For the files you keep in iCloud." = "Für die Dateien, die du in iCloud ablegst.";
+"For USB sticks and external disks." = "Für USB-Sticks und externe Festplatten.";
+"So Pippa can read your appointments and add deadlines." = "Damit Pippa deine Termine liest und Fristen einträgt.";
+"So Pippa can add deadlines as reminders." = "Damit Pippa Fristen als Erinnerung einträgt.";
+"So Pippa can find addresses and phone numbers when you ask." = "Damit Pippa Adressen und Telefonnummern findet, wenn du fragst.";
+"So Pippa can find your photos when you ask, like “photos of my bike”." = "Damit Pippa deine Fotos findet, wenn du fragst, etwa „Fotos von meinem Fahrrad“.";
+"So Pippa can read the selected mail and prepare a reply. Nothing is sent." = "Damit Pippa die ausgewählte Mail liest und eine Antwort vorbereitet. Verschickt wird nichts.";
+"So Pippa can find and add notes when you ask." = "Damit Pippa Notizen findet und anlegt, wenn du fragst.";
+"So Pippa can read the table you’re looking at." = "Damit Pippa die Tabelle liest, die du gerade ansiehst.";
+"Your Mac is asking you" = "Dein Mac fragt dich gerade";
+"Opens System Settings." = "Öffnet die Systemeinstellungen.";
+"Allow" = "Erlauben";
+"Allow %@" = "%@ erlauben";
+"You said no. “Allow…” opens System Settings, where you can turn it on." = "Du hast abgelehnt. „Erlauben …“ öffnet die Systemeinstellungen, dort kannst du es einschalten.";
+"Your files" = "Deine Dateien";
+"Your apps" = "Deine Apps";
+"Your Mac asks you once for each. You can change it later in System Settings." = "Dein Mac fragt dich bei jedem Punkt einmal. Ändern kannst du es später in den Systemeinstellungen.";
+"What Pippa may do" = "Was Pippa darf";
+"Your Mac asks you once for each. You can change it later in Settings." = "Dein Mac fragt dich bei jedem Punkt einmal. Ändern kannst du es später in den Einstellungen.";
+"Pippa keeps loading her AI meanwhile · %lld %%" = "Pippa lädt nebenbei weiter · %lld %%";
+"Continue" = "Weiter";
+"For the files you keep in %@." = "Für die Dateien, die du in %@ ablegst.";
+"What Pippa knows about you" = "Was Pippa über dich weiß";
+"Pippa only keeps what you tell her about yourself, on this Mac. A forgotten fact is gone from the next conversation on." = "Pippa behält nur, was du über dich erzählst, und nur auf diesem Mac. Was du Pippa vergessen lässt, ist ab dem nächsten Gespräch weg.";
+"Nothing yet" = "Noch nichts";
+"When you tell Pippa something about yourself that should last, such as your doctor’s name, it appears here." = "Wenn du Pippa etwas über dich erzählst, das bleiben soll, etwa den Namen deiner Ärztin, steht es hier.";
+"Forget “%@”" = "„%@“ vergessen";
+"Forget everything" = "Alles vergessen";
+"Forget All" = "Alle vergessen";
+"I couldn’t forget that just now. Please try again." = "Das konnte ich gerade nicht vergessen. Versuch es bitte noch einmal.";
+"Your Mac didn’t ask. Turn on Pippa in System Settings." = "Dein Mac hat nicht gefragt. Schalte Pippa in den Systemeinstellungen ein.";
+"Your Mac didn’t answer. Try again." = "Dein Mac hat nicht geantwortet. Versuch es nochmal.";
+"1 not answered yet. You can allow it later in Settings." = "1 Punkt ist noch offen. Du kannst ihn später in den Einstellungen erlauben.";
+"%lld not answered yet. You can allow them later in Settings." = "%lld Punkte sind noch offen. Du kannst sie später in den Einstellungen erlauben.";
+"Load Pippa’s AI · %@" = "Pippas KI laden · %@";
+"Picked to fit your Mac: %@" = "Passend zu deinem Mac: %@";
+"Empty the Trash or delete large files you no longer need, then click “Check Again”." = "Leer den Papierkorb oder lösch große Dateien, die du nicht mehr brauchst, und klick dann auf „Erneut prüfen“.";
+"Stop Loading" = "Laden anhalten";
+"Call me from anywhere" = "Ruf mich von überall aus";
+"Press %@ in any app and I’m there." = "Drück %@ in jeder App, dann bin ich da.";
+
+/* Setup: not enough space, loading and ready steps (PiSetupViews.swift) */
+"I need about %@ more free space for my AI." = "Für meine KI fehlen noch etwa %@ Speicherplatz.";
+"Check Again" = "Erneut prüfen";
+"What has loaded stays. You can go on later." = "Was schon geladen ist, bleibt. Du kannst später weitermachen.";
+"Not Now" = "Nicht jetzt";

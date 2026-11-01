@@ -18,10 +18,9 @@ let package = Package(
     targets: [
         // Resources/{en,de}.lproj/*.strings become localized resources in Bundle.module (tables Core, Analysis, Skills).
         .target(name: "PippaCore", resources: [.process("Resources")]),
-        // Bagel Fat One (SIL Open Font License, see Resources/Fonts/OFL.txt), only for the welcome heading.
-        // Localization/{en,de}.lproj/*.strings: tables App, Views, Settings.
+        // Localization/{en,de}.lproj/*.strings: tables App and Settings.
         .executableTarget(name: "Pippa", dependencies: ["PippaCore", "PiRPC", .product(name: "Sparkle", package: "Sparkle")],
-                          resources: [.copy("Resources/Fonts"), .process("Localization")]),
+                          resources: [.process("Localization")]),
         // Without Xcode there is neither XCTest nor Swift Testing: checks run as `swift run PippaChecks`.
         .executableTarget(name: "PippaChecks", dependencies: ["PippaCore"]),
         .executableTarget(name: "PippaUpdateProbe", dependencies: [.product(name: "Sparkle", package: "Sparkle")]),

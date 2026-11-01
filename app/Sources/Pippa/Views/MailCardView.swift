@@ -69,7 +69,7 @@ private struct MailCardRow: View {
 
     /// The mail itself by its Message-ID; without one, Mail opens. With PIPPA_DEMO=1 nothing (no real apps).
     private func open() {
-        guard DevEnvironment.value("PIPPA_DEMO") != "1" else { return }
+        guard ProcessInfo.processInfo.environment["PIPPA_DEMO"] != "1" else { return }
         if let id = item.messageID, let encoded = "<\(id)>".addingPercentEncoding(withAllowedCharacters: .alphanumerics),
            let url = URL(string: "message://" + encoded), NSWorkspace.shared.open(url) { return }
         Task { await PippaMCPService.showMail() }
@@ -92,8 +92,7 @@ struct ResultCardsView: View {
                 case .reminders: EmptyView()
                 case .web(let web): WebSourcesCardView(card: web)
                 case .preparedFiles(let prepared): PreparedFilesCardView(card: prepared)
-                case .chart(let chart): ChartCardView(card: chart)
-                case .filledForm(let form): FilledFormCardView(card: form)
+                case .chart, .filledForm: EmptyView()
                 }
             }
         }

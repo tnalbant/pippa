@@ -8,7 +8,6 @@ import PippaCore
 enum BundleVerification {
     static func run() throws {
         progress("start")
-        DisplayFont.register()
         let bundle = Bundle.main.bundleURL
         // Checks what the Pi RPC path needs: install payload, skills, llama-server, Node, Pi and the web access package.
         let release = bundle.appendingPathComponent("Contents/Resources/pi-payload/release")

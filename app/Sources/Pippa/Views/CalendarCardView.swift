@@ -16,7 +16,7 @@ struct CalendarCardView: View {
                     .accessibilityHidden(true)
                 Text(card.title).font(.scaled(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
                 if let range = card.rangeLabel {
-                    Text(range).font(Fonts.hint).foregroundStyle(Theme.ink3).lineLimit(1)
+                    Text(range).font(.caption).foregroundStyle(Theme.ink3).lineLimit(1)
                 }
             }
             .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 6)
@@ -24,7 +24,7 @@ struct CalendarCardView: View {
             .accessibilityAddTraits(.isHeader)
 
             if let empty = card.emptyText {
-                Text(empty).font(Fonts.body).foregroundStyle(Theme.ink2)
+                Text(empty).font(.body).foregroundStyle(Theme.ink2)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 14).padding(.vertical, 6)
             }
@@ -39,7 +39,7 @@ struct CalendarCardView: View {
                 }
             }
             if let note = card.truncatedNote {
-                Text(note).font(Fonts.hint).foregroundStyle(Theme.ink3)
+                Text(note).font(.caption).foregroundStyle(Theme.ink3)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 14).padding(.top, 8)
             }
@@ -69,7 +69,7 @@ private struct CalendarCardRow: View {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Capsule().fill(color).frame(width: 3, height: 15).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 3 }
                 Text(entry.time)
-                    .font(Fonts.hint.monospacedDigit()).foregroundStyle(Theme.ink2)
+                    .font(.caption.monospacedDigit()).foregroundStyle(Theme.ink2)
                     .frame(width: 92, alignment: .leading)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(entry.title)
@@ -108,7 +108,7 @@ private struct CalendarCardRow: View {
 
     /// Calendar shows the appointment itself; if it cannot (an identifier Calendar does not know), Calendar opens.
     private func open() {
-        guard DevEnvironment.value("PIPPA_DEMO") != "1" else { return }
+        guard ProcessInfo.processInfo.environment["PIPPA_DEMO"] != "1" else { return }
         let id = entry.eventID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? entry.eventID
         if let url = URL(string: "ical://ekevent/\(id)?method=show&options=more"), NSWorkspace.shared.open(url) { return }
         if let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.iCal") {

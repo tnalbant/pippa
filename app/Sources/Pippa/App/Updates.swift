@@ -42,23 +42,6 @@ final class Updates: NSObject {
         controller.checkForUpdates(nil)
     }
 
-    /// Once after an update: "Pippa was updated". Not on the very first launch.
-    func announceIfUpdated(_ toasts: ToastController?) {
-        guard Self.available else { return }
-        let defaults = UserDefaults.standard
-        let current = AppVersion.build
-        let previous = defaults.string(forKey: Self.lastBuildKey)
-        defaults.set(current, forKey: Self.lastBuildKey)
-        guard let previous, previous != current else { return }
-        DiagnosticsLog.shared.event("update-installiert", ["von": previous, "auf": AppVersion.label])
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            MainActor.assumeIsolated {
-                toasts?.show(title: T("Pippa was updated", table: "App"),
-                             detail: T("Now on version %@. Your conversations and settings are all still here.", table: "App", AppVersion.short),
-                             buttons: [])
-            }
-        }
-    }
 
     // MARK: Install silently when nobody is there
 
@@ -72,9 +55,7 @@ final class Updates: NSObject {
 
     private func installIfQuiet() {
         guard let install = pendingInstall else { return }
-        let model = AppModel.shared
-        guard model.markState == .ruht, !model.isActiveWork, !model.sortFilling,
-              NSApp.modalWindow == nil, NSApp.keyWindow == nil else { return }
+        guard !ChatModel.shared.isAnswering, NSApp.modalWindow == nil, NSApp.keyWindow == nil else { return }
         let idle = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: UInt32.max)!)
         guard idle >= Self.quietSeconds else { return }
         idleTimer?.invalidate()

@@ -18,7 +18,7 @@ enum AppMover {
         let bundle = Bundle.main.bundleURL
         guard bundle.pathExtension == "app",
               Bundle.main.bundleIdentifier == LegacyContainerMigration.bundleID,
-              DevEnvironment.value("PIPPA_SNAPSHOT") == nil,
+              
               ProcessInfo.processInfo.environment["PIPPA_NO_MOVE"] == nil,
               !defaults.bool(forKey: declinedKey) else { return false }
         let home = FileManager.default.homeDirectoryForCurrentUser
