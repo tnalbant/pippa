@@ -53,7 +53,7 @@ public actor OMLXServer {
             p.arguments = plan.arguments
             p.environment = PiLocalServer.environment(plan)
             p.currentDirectoryURL = plan.baseDirectory
-            FileManager.default.createFile(atPath: logURL.path, contents: nil)
+            if !FileManager.default.fileExists(atPath: logURL.path) { FileManager.default.createFile(atPath: logURL.path, contents: nil) }
             let log = try FileHandle(forWritingTo: logURL)
             log.seekToEndOfFile()
             p.standardOutput = log

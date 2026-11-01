@@ -39,5 +39,25 @@ tuning flags.
 - [x] App: PiSession, setup card and settings texts
 - [x] Remove llama code, bundle steps, checks, scripts; docs
 - [x] Build, verify; setup adopts Ornith from `~/.omlx` by APFS clone; ETF question answered from `ETF-Portfolio.md` (270 s, 13.7 tok/s while a second oMLX held the same model)
-- [ ] Acceptance runs with Ornith alone in memory
+- [x] Acceptance runs with Ornith alone in memory (2026-11-01, headless `--ask`, see below): 2 of 5 pass
+- [ ] Letter deadline: Ornith computes a date from "four weeks after receipt" despite the persona rule (three runs,
+  13, 17 and 19 November); needs a structural fix, not more prompt
+- [ ] Mail totals: too slow (no answer after 600 s; prompt grew to 23K tokens reading two mail PDFs)
+- [ ] Calendar: `calendar_read` hangs in the headless run of the re-signed build (likely an unanswered permission prompt)
 - [ ] Publish the runtime archive as a release asset (needs the person's go: it is a push)
+
+## Acceptance, 2026-11-01
+
+Ornith alone in memory, M-series Mac, headless `Pippa --ask`, each run starting the server cold.
+
+| Task | Result | Time |
+| --- | --- | --- |
+| ETF overview in brain | Pass: `ETF-Portfolio.md`, snapshots named as history | 262 s |
+| Letter "Until when…" | Fail: payment date quoted right, but an objection date computed (wrong, three different values); offered to make the transfer before the persona fix | 55–132 s |
+| Five photos → one PDF (model) | Pass: one PDF; the answer names an internal folder ("DurableJobs") | 57 s |
+| Mail attachments → totals | Fail: found two of three mails, read both PDFs, no answer within 600 s | >600 s |
+| Dentist Tuesday 10:00 | Blocked: `calendar_read` did not return | >600 s |
+
+Generation 12.6–18.4 tok/s; prefill dominates once tool results land (prompt up to 23K tokens).
+Fixed on the way: the server log was emptied on every start; the persona now says how to treat relative deadlines and
+that Pippa cannot pay or post letters.

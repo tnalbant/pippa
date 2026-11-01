@@ -39,6 +39,9 @@ Dropped: `applescript`, `pippa_more_tools` and tool-scope, `save_skill`, `make_c
   - [ ] Calendar entry: needs Calendar permission for a signed build (`calendar_read` waited on the macOS prompt)
   - [x] Letter deadline: pay by 15 Nov 2026; objection "four weeks after receipt" without a computed date, 54 s
   - [x] Photos to one PDF: with the model 82 s, with the One PDF button and no model under 10 s
+- [ ] Acceptance again with Ornith 1.5 9B on oMLX (2026-11-01, results in docs/omlx-switch.md): ETF 262 s and photos
+  57 s pass; the letter deadline regresses against Qwen (Ornith computes an objection date in three of three runs);
+  Mail totals not done within 600 s; Calendar still waits on the permission
 
 ## Open
 
