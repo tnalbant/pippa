@@ -6,9 +6,6 @@
 
 "Excel" = "Excel";
 "First open your table in Excel and select the cells. Then try again." = "First open your table in Excel and select the cells. Then try again.";
-"Looking at your table …" = "Looking at your table …";
-"Looking at your table: %@" = "Looking at your table: %@";
-"Looking at your table: %@, column %@" = "Looking at your table: %@, column %@";
 "I didn’t find a total here." = "I didn’t find a total here.";
 "The total adds up." = "The total adds up.";
 "The totals add up." = "The totals add up.";
@@ -37,8 +34,4 @@
 "“%@”" = "“%@”";
 "the row with %@" = "the row with %@";
 "the column with %@" = "the column with %@";
-"In total %@ instead of %@ (%@)." = "In total %@ instead of %@ (%@).";
-"%@ %@ (%@ instead of %@)" = "%@ %@ (%@ instead of %@)";
-"Changed most: %@." = "Changed most: %@.";
-"Nothing changed compared with last year." = "Nothing changed compared with last year.";
 "Numbers" = "Numbers";

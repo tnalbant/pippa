@@ -1,54 +1,3 @@
-/* Thought Line: working status and receipt (ThoughtLine.swift). Plain verbs, no architecture words. */
-/* After ten seconds, once, instead of a seconds counter (ThoughtLine.isSlow). */
-"Taking a little longer, I’m on it." = "Taking a little longer, I’m on it.";
-"Considering…" = "Considering…";
-"Reading %@…" = "Reading %@…";
-"%lld of %lld" = "%lld of %lld";
-"Recognizing text on page %lld of %lld…" = "Recognizing text on page %lld of %lld…";
-"Recognizing text…" = "Recognizing text…";
-"Finding the right passages…" = "Finding the right passages…";
-"Getting ready…" = "Getting ready…";
-/* Cold start: the knowledge is loaded into memory once (ColdStart.swift). */
-"Waking up…" = "Waking up…";
-"Almost ready…" = "Almost ready…";
-"Takes a moment now, then it’s quicker" = "Takes a moment now, then it’s quicker";
-"Pippa is waking up…" = "Pippa is waking up…";
-"Pippa is almost ready…" = "Pippa is almost ready…";
-"%lld percent" = "%lld percent";
-"Continuing the answer…" = "Continuing the answer…";
-"Looking in %@…" = "Looking in %@…";
-"Looking through your documents…" = "Looking through your documents…";
-"Looking it up online…" = "Looking it up online…";
-"Checking your calendar…" = "Checking your calendar…";
-"Preparing a preview…" = "Preparing a preview…";
-"Trying again…" = "Trying again…";
-"Summarizing our conversation so far…" = "Summarizing our conversation so far…";
-"Waiting for you" = "Waiting for you";
-"Writing the answer…" = "Writing the answer…";
-"Stopping…" = "Stopping…";
-"Selected text" = "Selected text";
-"All %lld pages read" = "All %lld pages read";
-"Read" = "Read";
-"Pages 1–%lld of %lld read" = "Pages 1–%lld of %lld read";
-"Read in part" = "Read in part";
-"No readable text" = "No readable text";
-"Not available anymore" = "Not available anymore";
-"File names only" = "File names only";
-"text recognized" = "text recognized";
-"looked at again while answering" = "looked at again while answering";
-"Read %@ · %@" = "Read %@ · %@";
-"Read part of %@ · %@" = "Read part of %@ · %@";
-"Couldn’t read %@ · %@" = "Couldn’t read %@ · %@";
-"Read %lld of %lld sources · %@" = "Read %lld of %lld sources · %@";
-"Read %lld sources, %lld only in part · %@" = "Read %lld sources, %lld only in part · %@";
-"Read %lld sources · %@" = "Read %lld sources · %@";
-"Looked it up online · %@" = "Looked it up online · %@";
-"Checked your calendar · %@" = "Checked your calendar · %@";
-"%lld s" = "%lld s";
-"%@ s" = "%@ s";
-"%lld min" = "%lld min";
-"%lld min %lld s" = "%lld min %lld s";
-"Checking the answer against your documents…" = "Checking the answer against your documents…";
 /* Quittung aus Werkzeug-Ereignissen (ActionReceipt), nie aus dem Modelltext. */
 "Created: %@" = "Created: %@";
 "Overwritten: %@" = "Overwritten: %@";
@@ -115,94 +64,8 @@
 "%@ (that time is already taken)" = "%@ (that time is already taken)";
 "No draft in Mail yet" = "No draft in Mail yet";
 "%@ (I can’t find the email in Mail anymore)" = "%@ (I can’t find the email in Mail anymore)";
-/* Tool steps in everyday words (WorkStepPhrase.swift). */
-"Working on it…" = "Working on it…";
-"1 step · %@" = "1 step · %@";
-"%lld steps · %@" = "%lld steps · %@";
-"in your home folder" = "in your home folder";
-"on your Desktop" = "on your Desktop";
-"in your Documents" = "in your Documents";
-"in Downloads" = "in Downloads";
-"in your Pictures" = "in your Pictures";
-"on an external drive" = "on an external drive";
-"in the folder %@" = "in the folder %@";
-"on your Mac" = "on your Mac";
-"“%@”" = "“%@”";
-"Looking for %@ files %@" = "Looking for %@ files %@";
-"Looking for files %@" = "Looking for files %@";
-"Looking for folders %@" = "Looking for folders %@";
-"Looking for files with %@ in the name %@" = "Looking for files with %@ in the name %@";
-"Looking for folders with %@ in the name %@" = "Looking for folders with %@ in the name %@";
-"Searching Spotlight for %@ %@" = "Searching Spotlight for %@ %@";
-"Searching Spotlight for %@" = "Searching Spotlight for %@";
-"Searching with Spotlight" = "Searching with Spotlight";
-"Searching for %@ %@" = "Searching for %@ %@";
-"Searching for %@" = "Searching for %@";
-"Searching through text %@" = "Searching through text %@";
-"Searching through text" = "Searching through text";
-"Looking %@" = "Looking %@";
-"Reading %@" = "Reading %@";
-"Reading a file" = "Reading a file";
-"Reading %lld files" = "Reading %lld files";
-"Changing %@" = "Changing %@";
-"Changing a file" = "Changing a file";
-"Writing %@" = "Writing %@";
-"Writing a file" = "Writing a file";
-"Taking a closer look at files" = "Taking a closer look at files";
-"Moving files" = "Moving files";
-"Copying files" = "Copying files";
-"Creating a folder" = "Creating a folder";
-"Working on your Mac" = "Working on your Mac";
-"Looking in your mail" = "Looking in your mail";
-"Looking in your notes" = "Looking in your notes";
-"Looking in your contacts" = "Looking in your contacts";
-"Using %@" = "Using %@";
-"%lld times" = "%lld times";
-"Looking in your calendar" = "Looking in your calendar";
-"Adding a calendar entry" = "Adding a calendar entry";
-"Opening the mail" = "Opening the mail";
-"Searching your mail" = "Searching your mail";
-"Reading the selected mail" = "Reading the selected mail";
-"Writing a mail draft" = "Writing a mail draft";
-"Looking at your reminders" = "Looking at your reminders";
-"Adding a reminder" = "Adding a reminder";
-"Going through your documents" = "Going through your documents";
-"Reading a document" = "Reading a document";
-"Searching online for %@" = "Searching online for %@";
-"Searching online" = "Searching online";
-"Reading a web page" = "Reading a web page";
-"nothing found" = "nothing found";
-"1 match" = "1 match";
-"%lld matches" = "%lld matches";
-"many matches" = "many matches";
-"empty" = "empty";
-"1 item" = "1 item";
-"%lld items" = "%lld items";
-"file not found" = "file not found";
-"folder not found" = "folder not found";
-"no access" = "no access";
-"didn’t work" = "didn’t work";
-"in the file %@" = "in the file %@";
 "%@ · you can put it back from the Trash" = "%@ · you can put it back from the Trash";
 
-/* Living pill (PillStatus.swift): short form of the line, shown on the collapsed pill. */
-"Quick question" = "Quick question";
-"Your answer is ready" = "Your answer is ready";
-"That didn’t work" = "That didn’t work";
-"Reading the scan · page %lld/%lld" = "Reading the scan · page %lld/%lld";
-"Reading the scan…" = "Reading the scan…";
-"Looking in %@" = "Looking in %@";
-"Summarizing…" = "Summarizing…";
-"Double-checking…" = "Double-checking…";
-"Writing…" = "Writing…";
-"Thinking…" = "Thinking…";
-"Done!" = "Done!";
-"Back as it was." = "Back as it was.";
-"Drop something on me!" = "Drop something on me!";
-"Remembering that" = "Remembering that";
-"Loading my AI · %lld%%" = "Loading my AI · %lld%%";
-"Setting up my AI…" = "Setting up my AI…";
-"Searching your photos" = "Searching your photos";
 "Remembered: “%@” (instead of “%@”)" = "Remembered: “%@” (instead of “%@”)";
 "Remembered: “%@”" = "Remembered: “%@”";
 "Forgot everything Pippa knew about you" = "Forgot everything Pippa knew about you";
@@ -220,7 +83,6 @@
 "Mail hasn’t confirmed the draft yet. Check Mail before trying again. Nothing was sent." = "Mail hasn’t confirmed the draft yet. Check Mail before trying again. Nothing was sent.";
 
 // A tool error does not establish that no changes happened.
-"result not confirmed" = "result not confirmed";
 "Reading was not confirmed" = "Reading was not confirmed";
 "Command failed; changes may have happened" = "Command failed; changes may have happened";
 "Couldn’t finish: %@ · check the result before trying again" = "Couldn’t finish: %@ · check the result before trying again";
@@ -228,7 +90,5 @@
 // Skills the person saved with save_skill (skill-save.ts).
 "Steps remembered: %@" = "Steps remembered: %@";
 "Steps not remembered: %@" = "Steps not remembered: %@";
-"Remembering the steps" = "Remembering the steps";
 
 // make_chart: a chart card computed from a table file (PippaMCPChart.swift).
-"Drawing a chart" = "Drawing a chart";

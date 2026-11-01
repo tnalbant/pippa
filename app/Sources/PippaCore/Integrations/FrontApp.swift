@@ -38,58 +38,8 @@ public struct FrontApp: Sendable, Equatable {
         return (german ? "[Im Vordergrund: " : "[In front: ") + name + title + "]"
     }
 
-    /// Apps whose chip would only be noise: Finder is in front after every click on the desktop.
-    public static let ignoredBundles: Set<String> = ["com.apple.finder"]
-
     public static let safari = "com.apple.Safari"
     public static let chrome = "com.google.Chrome"
-}
-
-/// The label goes before the first message with a chip, and again only when the chip changes (other app, other title,
-/// or back after the ×). Pi keeps it in the conversation; repeated before every message, a small model weighed the app
-/// more than the question.
-public struct FrontLabelMemo: Sendable {
-    private var sent: [String: String] = [:]
-    public init() {}
-
-    /// The line for this message of `conversation`, or `nil` (no chip, or the same chip already named there).
-    public mutating func line(for app: FrontApp?, conversation: String, german: Bool) -> String? {
-        guard let app else {
-            sent[conversation] = nil
-            return nil
-        }
-        let label = app.label(german: german)
-        guard sent[conversation] != label else { return nil }
-        sent[conversation] = label
-        return label
-    }
-}
-
-/// Does the question mean what is open in front ("Was hältst du hiervon?", "Fass die Seite zusammen", "What is this about?")?
-/// Then Pippa reads it itself before Pi answers: a small local model given only the label answered "Ich kann nicht sehen,
-/// was in Safari angezeigt wird" instead of calling `front_read`. Pointing words only, never a bare "das" ("Wie wird das
-/// Wetter?"): a question about something else costs no read.
-public enum FrontQuestion {
-    static let pointing: [String] = [
-        // German
-        "hier", "hiervon", "hierzu", "hierüber", "hieraus", "hierin", "hierauf", "hiermit",
-        "dies", "diese", "dieser", "dieses", "diesem", "diesen",
-        "seite", "webseite", "website", "artikel", "beitrag", "dokument", "zusammenfassen", "zusammenfassung",
-        // With Mail in front ("Antworte bitte", "Was will sie von mir?" after "Lies die Mail")
-        "mail", "antworte", "antworten", "beantworte", "beantworten",
-        // English
-        "this", "here", "page", "article", "post", "document", "summarize", "summarise", "summary", "email", "reply", "respond",
-    ]
-    static let phrases: [String] = ["tl;dr", "was steht", "worum geht", "was meinst du dazu", "what does it say", "what's it about", "what is it about"]
-
-    public static func meansOpen(_ question: String) -> Bool {
-        let text = question.lowercased()
-        if phrases.contains(where: { text.contains($0) }) { return true }
-        let words = Set(text.split { !$0.isLetter }.map(String.init))
-        // "Fass das zusammen", "Fasse kurz zusammen".
-        if words.contains("zusammen"), words.contains(where: { $0.hasPrefix("fass") }) { return true }
-        return pointing.contains(where: { words.contains($0) })
-    }
 }
 
 /// What `front_read` found.
@@ -162,43 +112,6 @@ public final class DemoFrontApp: FrontAppReading, @unchecked Sendable {
         return access
     }
     public func readFront(_ app: FrontApp) async throws -> FrontContent? { content }
-}
-
-/// Window title at call time, only from sources that never ask: the window list (with screen recording allowed),
-/// Accessibility (if already allowed), Safari and Chrome (if automation is already allowed).
-public enum FrontAppProbe {
-    public static func title(for app: FrontApp) async -> String? {
-        if let title = windowListTitle(pid: app.pid) { return title }
-        if let title = accessibilityTitle(pid: app.pid) { return title }
-        guard [FrontApp.safari, FrontApp.chrome].contains(app.bundleID),
-              await AppleEvents.permission(bundle: app.bundleID, appName: app.name, ask: false) == .granted else { return nil }
-        let source = app.bundleID == FrontApp.safari ? FrontAppScript.safari : FrontAppScript.chrome
-        let name = app.name
-        return try? await AppleEvents.perform { () throws -> String? in
-            try AppleEvents.call(source, handler: "frontTitle", appName: name).stringValue
-        }
-    }
-
-    /// Without screen recording the window list has no names: then `nil`, no prompt.
-    static func windowListTitle(pid: pid_t) -> String? {
-        guard let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
-            return nil
-        }
-        return windows.first { ($0[kCGWindowOwnerPID as String] as? pid_t) == pid && ($0[kCGWindowLayer as String] as? Int) == 0
-            && !(($0[kCGWindowName as String] as? String) ?? "").isEmpty }?[kCGWindowName as String] as? String
-    }
-
-    /// Only if Pippa already may use Accessibility; never asks.
-    static func accessibilityTitle(pid: pid_t) -> String? {
-        guard AXIsProcessTrusted() else { return nil }
-        let element = AXUIElementCreateApplication(pid)
-        var window: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, kAXFocusedWindowAttribute as CFString, &window) == .success,
-              let window, CFGetTypeID(window) == AXUIElementGetTypeID() else { return nil }
-        var title: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(window as! AXUIElement, kAXTitleAttribute as CFString, &title) == .success else { return nil }
-        return title as? String
-    }
 }
 
 /// Read only: the front tab's title, address and text; the front document's path. Never changes anything.

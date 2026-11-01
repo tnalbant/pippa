@@ -187,20 +187,6 @@ func runDurableJobChecks() async {
         return duplicate == dismissed && duplicate.state == .cancelled && duplicate.resultData == done.resultData
     }
 
-    await checkAsync("Durable jobs: changed sources are rejected, including same-length edits with restored modification time") {
-        let directory = try durableFixtureDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let source = directory.appendingPathComponent("source.txt")
-        try Data("before".utf8).write(to: source)
-        let input = try DurableJobInput.capture(url: source)
-        guard try input.resolvedURL() == source else { return false }
-        let handle = try FileHandle(forWritingTo: source)
-        try handle.write(contentsOf: Data("edited".utf8)); try handle.close()
-        try FileManager.default.setAttributes([.modificationDate: input.identity.modified], ofItemAtPath: source.path)
-        do { _ = try input.resolvedURL(); return false }
-        catch DurableJobError.sourceChanged { return true }
-    }
-
     await checkAsync("Durable jobs: artifacts are promoted out of caches, survive pruning, and read back across restarts") {
         let directory = try durableFixtureDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -280,34 +266,6 @@ func runDurableJobChecks() async {
         try Data("changed again".utf8).write(to: output)
         do { _ = try await store.verifiedArtifacts(id: record.id); return false }
         catch DurableJobError.artifactChanged { return true }
-    }
-
-    await checkAsync("Durable jobs: pruning retires only old cancelled copies, preserving referenced, completed, edited, and redirected outputs") {
-        let directory = try durableFixtureDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let store = try DurableJobStore(baseDirectory: directory)
-        let source = directory.appendingPathComponent("source.txt")
-        try Data("owned copy".utf8).write(to: source)
-        var artifacts: [DurableJobArtifact] = []
-        for index in 0..<5 {
-            let record = try await store.create(kind: .filePreparation, requestKey: "prune-\(index)", title: "Prepare")
-            let run = try await store.start(id: record.id, expectedRevision: 0)
-            let artifact = try await store.retainArtifact(from: source, run: run)
-            artifacts.append(artifact)
-            let done = try await store.finish(run: run, state: .completed, artifacts: [artifact])
-            if index != 2 { _ = try await store.cancel(id: record.id, expectedRevision: done.revision) }
-        }
-        // A person-edited output and a directory containing a link must stay untouched.
-        try Data("person edited this".utf8).write(to: artifacts[3].url)
-        let link = artifacts[4].url.deletingLastPathComponent().appendingPathComponent("external-link")
-        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: source)
-        let early = try await store.pruneCancelledArtifacts(keeping: [], now: Date().addingTimeInterval(3600))
-        let removed = try await store.pruneCancelledArtifacts(keeping: [artifacts[1].url], now: Date().addingTimeInterval(2 * 86_400))
-        let remaining = artifacts.map { FileManager.default.fileExists(atPath: $0.url.path) }
-        let correct = early == 0 && removed == 1 && remaining == [false, true, true, true, true]
-            && FileManager.default.fileExists(atPath: source.path)
-        if !correct { print("    Prune counts early=\(early), removed=\(removed); remaining=\(remaining)") }
-        return correct
     }
 
     await checkAsync("Durable jobs: SQLite write failure leaves the former state and never reports completion") {

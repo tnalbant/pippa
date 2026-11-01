@@ -505,24 +505,6 @@ public struct PippaMCPWriteTools: Sendable {
         return await insert(draft)
     }
 
-    /// "Save as draft in Mail": reply to exactly the mail with this message ID (from the shown .eml or
-    /// the result of `mail_selected` of the reply), looked up by message ID in all mailboxes, never via the
-    /// current selection. No longer in Mail → nothing created, reason `not_found`. Same states as `mail_draft`.
-    public func replyDraft(to source: MailReplySource, body raw: String) async -> PippaMCPToolResult {
-        await withLease(action: "mailDraft") { await replyDraftScoped(to: source, body: raw) }
-    }
-
-    private func replyDraftScoped(to source: MailReplySource, body raw: String) async -> PippaMCPToolResult {
-        let body = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !body.isEmpty, body.count <= Self.mailBodyLimit else { return Self.invalid("body must be 1 to \(Self.mailBodyLimit) characters.") }
-        if case .blocked(let status, let tell) = await ensure(.mail, openMail: true) {
-            return Self.blocked(status, tell, receipt: PippaMCPWriteReceipt(action: "mailDraft", outcome: "failed", name: L("reply", table: "MCP"), reason: status))
-        }
-        let address = source.replyTo.map(MailAddress.parse)
-        return await insert(MailDraft(messageID: source.messageID, to: address?.address, toName: address?.name, subject: source.subject,
-                                      body: body, isReply: true, locator: nil))
-    }
-
     private func insert(_ draft: MailDraft) async -> PippaMCPToolResult {
         let name = Self.quoted(draft.replySubject)
         func receipt(_ outcome: String, _ reason: String) -> PippaMCPWriteReceipt {

@@ -175,7 +175,7 @@ for event in outcomes { outcomeReceipt.observe(event) }
 check("RPC keeps absent and malformed results uncertain, permits valid empty success, and classifies full native JSON",
       outcomeReceipt.records.map(\.outcome) == [.unclear, .unclear, .done, .unclear])
 runOutcomeChecks()
-runSkillLaunchChecks()
+runLaunchChecks()
 var skillReceipt = PiTurnReceipt()
 for event in try await collect("skill-protocol") { skillReceipt.observe(event) }
 check("Real RPC keeps a saved skill's name behind long steps, and the person's no stays theirs",

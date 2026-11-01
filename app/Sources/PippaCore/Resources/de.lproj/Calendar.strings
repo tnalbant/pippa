@@ -14,7 +14,6 @@
 "Cancelled or declined: %lld" = "Abgesagt oder abgelehnt: %lld";
 "I couldn’t read your calendar just now. That doesn’t mean it’s empty. Please try again." = "Ich konnte deinen Kalender gerade nicht lesen. Das heißt nicht, dass er leer ist. Versuch es bitte noch einmal.";
 "I didn’t find a calendar on this Mac that I can read." = "Auf diesem Mac habe ich keinen Kalender gefunden, den ich lesen kann.";
-"I’m not allowed to read your calendar, so I haven’t looked at any appointments. You can allow it in System Settings under Privacy & Security → Calendars." = "Ich darf deinen Kalender nicht lesen und habe mir deshalb keine Termine angesehen. Erlauben kannst du es in den Systemeinstellungen unter Datenschutz & Sicherheit → Kalender.";
 "Last week" = "Letzte Woche";
 "Next week" = "Nächste Woche";
 "Nothing in your calendar for this period." = "In diesem Zeitraum steht nichts in deinem Kalender.";
@@ -36,7 +35,3 @@
 "tentative" = "vorläufig";
 "until %@" = "bis %@";
 "Calendar on this Mac · read at %@" = "Kalender auf diesem Mac · gelesen um %@";
-"And tomorrow?" = "Und morgen?";
-"And this week?" = "Und diese Woche?";
-"And next week?" = "Und nächste Woche?";
-"And the weekend?" = "Und am Wochenende?";

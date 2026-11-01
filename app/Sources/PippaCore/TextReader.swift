@@ -11,8 +11,6 @@ public struct DocumentText: Sendable {
     public enum Problem: String, Sendable { case none, noText, protected, unsupported, cloudOnly
         /// File cannot be opened (damaged). Unlike `noText`: there was nothing to read there, here something went wrong.
         case damaged
-        /// Real read error: the answer might hinge on this file. Images without text, empty PDFs and foreign types don't count.
-        public var isReadFailure: Bool { self == .protected || self == .cloudOnly || self == .damaged }
     }
     public var url: URL
     public var pages: [String]
@@ -28,21 +26,6 @@ public struct DocumentText: Sendable {
     public var fullText: String { pages.joined(separator: "\n\n") }
     public var hasText: Bool { pages.contains { $0.trimmingCharacters(in: .whitespacesAndNewlines).count >= 15 } }
 
-    /// Text shortened to about 1,500 tokens, with page markers for PDFs.
-    public func capped(maxChars: Int = 6000) -> String {
-        var out = ""
-        for (i, page) in pages.enumerated() {
-            let trimmed = page.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty { continue }
-            let chunk = isPaged ? "[S. \(i + 1)]\n\(trimmed)\n" : trimmed + "\n"
-            if out.count + chunk.count > maxChars {
-                out += String(chunk.prefix(max(0, maxChars - out.count)))
-                break
-            }
-            out += chunk
-        }
-        return out
-    }
 }
 
 public extension DocumentText {
@@ -224,19 +207,6 @@ public enum TextReader {
                                      kCGImageSourceThumbnailMaxPixelSize: 3000,
                                      kCGImageSourceCreateThumbnailWithTransform: true]
         return CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary)
-    }
-
-    /// A tiny text recognition with the same settings as `recognize`, so Vision loads its models.
-    public static func warmUp() {
-        let w = 360, h = 72
-        guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
-                                  bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return }
-        ctx.setFillColor(CGColor(gray: 1, alpha: 1)); ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
-        let attr = NSAttributedString(string: "Summe 23,45 €", attributes: [.font: NSFont.systemFont(ofSize: 36), .foregroundColor: NSColor.black])
-        let line = CTLineCreateWithAttributedString(attr)
-        ctx.textPosition = CGPoint(x: 12, y: 20)
-        CTLineDraw(line, ctx)
-        if let image = ctx.makeImage() { _ = recognize(image) }
     }
 
     /// Text recognition (German, English): document recognition from macOS 26 (tables as Markdown), otherwise the classic one.

@@ -91,8 +91,7 @@ public enum UserMessage {
     /// Every error gets German text; system texts (English, with technical terms) never reach the person.
     public static func text(for error: Error, context: String = "") -> String {
         record(error, context: context)
-        if error is PippaError || error is InferenceError || error is AnswerFailure
-            || error is ConversationStoreError { return error.localizedDescription }
+        if error is PippaError || error is InferenceError || error is AnswerFailure { return error.localizedDescription }
         if let url = error as? URLError { return network(url) }
         let ns = error as NSError
         if ns.domain == NSPOSIXErrorDomain || ns.domain == NSCocoaErrorDomain {

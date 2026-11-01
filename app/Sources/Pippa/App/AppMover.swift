@@ -17,7 +17,7 @@ enum AppMover {
         let defaults = UserDefaults.standard
         let bundle = Bundle.main.bundleURL
         guard bundle.pathExtension == "app",
-              Bundle.main.bundleIdentifier == LegacyContainerMigration.bundleID,
+              Bundle.main.bundleIdentifier == Pippa.bundleID,
               
               ProcessInfo.processInfo.environment["PIPPA_NO_MOVE"] == nil,
               !defaults.bool(forKey: declinedKey) else { return false }
@@ -26,7 +26,7 @@ enum AppMover {
         if place == .applications { return false }
         // Another Pippa already runs (e.g. the one in Applications): the single-instance check wakes it.
         let mine = ProcessInfo.processInfo.processIdentifier
-        guard NSRunningApplication.runningApplications(withBundleIdentifier: LegacyContainerMigration.bundleID)
+        guard NSRunningApplication.runningApplications(withBundleIdentifier: Pippa.bundleID)
             .allSatisfy({ $0.processIdentifier == mine }) else { return false }
         let source = place == .translocated ? (originalURL(ofTranslocated: bundle) ?? bundle) : bundle
 

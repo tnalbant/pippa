@@ -14,8 +14,6 @@ public actor LlamaServer {
     public let binary: URL
     let logURL: URL
     public static let idleSeconds: Double = 300
-    /// After a call (letter), the model stays loaded this long (20 minutes).
-    public static let afterCallSeconds: Double = 1200
 
     public private(set) var state: State = .stopped
     /// Fixed port and key (Pi's `pippa-local`); `nil`: random per start (LocalEngine).
@@ -33,7 +31,7 @@ public actor LlamaServer {
         return adoptedPID.flatMap { PiServerLock.isAlive($0) ? $0 : nil }
     }
     private var process: Process?
-    /// Already running: a request starts without loading (Thought Line shows "Getting ready" only otherwise).
+    /// Already running: a request starts without loading.
     public var isWarm: Bool { state == .ready && (process?.isRunning == true || adoptedPID.map(PiServerLock.isAlive) == true) }
     /// Shared lock file with Pippa's terminal extension (runtime/pippa-local-server, `PiServerLock`); only for
     /// `pippa-local` with a fixed port. Without it (LocalEngine, older checks) as before.
@@ -201,19 +199,6 @@ public actor LlamaServer {
     }
 
     private var pendingStart: Task<Void, Error>?
-    /// While loading: when the process started, what `/health` last said, the size of the weights (cold-start progress).
-    private var loadStartedAt: Date?
-    private var lastHealth = ColdStart.Health.silent
-    private var loadBytes: UInt64 = 0
-
-    /// Progress of a start under way (`nil` when the server is ready or stopped). Memory of the own process; a server
-    /// started by the terminal is measured by time only.
-    public func coldStartSample() -> ColdStart.Sample? {
-        guard state == .starting, let loadStartedAt else { return nil }
-        let pid = process?.isRunning == true ? process?.processIdentifier : nil
-        return ColdStart.Sample(residentBytes: pid.flatMap(ColdStart.memory(pid:))?.resident, modelBytes: loadBytes, health: lastHealth,
-                                elapsed: Date().timeIntervalSince(loadStartedAt), lastLoadSeconds: ColdStart.lastLoadSeconds)
-    }
 
     private func startIfNeeded() async throws {
         installPressureWatch()
@@ -227,8 +212,6 @@ public actor LlamaServer {
         try checkHeadroom()
         state = .starting
         startAborted = false
-        loadStartedAt = Date(); lastHealth = .silent
-        if loadBytes == 0 { loadBytes = ColdStart.modelBytes(choice, file: modelPath) }
         port = fixedPort ?? Self.freePort()
         apiKey = fixedKey ?? Self.randomKey()
         // Lock file (shared with the terminal extension): if the terminal is already starting or running the server,
@@ -284,10 +267,8 @@ public actor LlamaServer {
         while Date() < deadline {
             if startAborted { await stop(); throw PippaError.notEnoughMemory }
             guard p.isRunning else { state = .stopped; releaseLock(); DiagnosticsLog.shared.event("llama-beendet", ["phase": "start"]); throw PippaError.modelFailed }
-            lastHealth = ColdStart.Health(status: await health())
-            if lastHealth == .ready {
+            if await health() == 200 {
                 lastStartSeconds = Date().timeIntervalSince(started)
-                ColdStart.rememberLoad(seconds: lastStartSeconds ?? 0)
                 if fixedPort != nil { DiagnosticsLog.shared.event("llama-bereit", ["dauer-s": String(format: "%.1f", lastStartSeconds ?? 0)]) }
                 // Restore the saved slot before the first request arrives (lease and Pi wait for this function).
                 slotsActive = p.arguments?.contains("--slot-save-path") == true
@@ -339,8 +320,7 @@ public actor LlamaServer {
                 state = .stopped
                 throw PippaError.notEnoughMemory
             }
-            lastHealth = ColdStart.Health(status: await health())
-            if lastHealth == .ready {
+            if await health() == 200 {
                 adoptedPID = lock.pid ?? lock.holder
                 slotsActive = false
                 touchLock()
@@ -453,14 +433,6 @@ public actor LlamaServer {
             _ = await Self.waitForExit(seconds: 1, { PiServerLock.isAlive(pid) })
         }
         PiServerLock.remove(lockFile) { $0 == lock }
-    }
-
-    /// Keeps an already running model loaded for at least `seconds`. Starts nothing; if the idle timer is running,
-    /// it restarts with the longer deadline.
-    public func keepWarm(for seconds: Double) {
-        let until = Date().addingTimeInterval(seconds)
-        if until > warmUntil { warmUntil = until }
-        if state == .ready, inFlight == 0, idleTask != nil { scheduleIdle() }
     }
 
     private func scheduleIdle(after minimum: Double? = nil) {
@@ -627,17 +599,6 @@ public actor LlamaServer {
         await stop()
     }
 
-    /// For development: every request with its response as a JSON line in PIPPA_MODEL_TRACE (recordings for checks).
-    static func trace(schemaName: String, user: String, status: Int, response: Data, seconds: Double) {
-        guard let path = ProcessInfo.processInfo.environment["PIPPA_MODEL_TRACE"], !path.isEmpty else { return }
-        let parsed = (try? JSONSerialization.jsonObject(with: response)) ?? String(decoding: response, as: UTF8.self)
-        let line: [String: Any] = ["schema": schemaName, "user": user, "status": status, "seconds": seconds, "response": parsed]
-        guard var data = try? JSONSerialization.data(withJSONObject: line, options: [.sortedKeys]) else { return }
-        data.append(0x0A)
-        if !FileManager.default.fileExists(atPath: path) { FileManager.default.createFile(atPath: path, contents: nil) }
-        if let h = FileHandle(forWritingAtPath: path) { _ = try? h.seekToEnd(); try? h.write(contentsOf: data); try? h.close() }
-    }
-
     /// Hold the current server alive for a complete Pi agent run, including tool turns.
     public struct AgentLease: Sendable {
         public let id: UUID
@@ -660,40 +621,4 @@ public actor LlamaServer {
         inFlight -= 1; touchLock(); scheduleIdle()
     }
 
-    /// One request with an enforced JSON schema; returns the JSON text of the response.
-    public func completeJSON(system: String, user: String, schemaName: String, schema: String, maxTokens: Int = 600) async throws -> Data {
-        try await ensureRunning()
-        inFlight += 1
-        touchLock()
-        defer { inFlight -= 1; touchLock(); scheduleIdle() }
-        let schemaObject = try JSONSerialization.jsonObject(with: Data(schema.utf8))
-        let body: [String: Any] = [
-            "messages": [["role": "system", "content": system], ["role": "user", "content": user]],
-            "response_format": ["type": "json_schema", "json_schema": ["name": schemaName, "strict": true, "schema": schemaObject]],
-            "max_tokens": maxTokens,
-            "temperature": 0.1,
-            "stream": false,
-            "chat_template_kwargs": ["enable_thinking": false],
-        ]
-        var req = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/v1/chat/completions")!)
-        req.httpMethod = "POST"
-        req.timeoutInterval = 300
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        req.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let started = Date()
-        let (data, response) = try await URLSession.shared.data(for: req)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        Self.trace(schemaName: schemaName, user: user, status: status, response: data, seconds: Date().timeIntervalSince(started))
-        guard status == 200,
-              let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let choices = json["choices"] as? [[String: Any]],
-              let message = choices.first?["message"] as? [String: Any],
-              var content = message["content"] as? String else { throw PippaError.modelFailed }
-        content = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        if content.hasPrefix("```") {
-            content = content.replacingOccurrences(of: #"^```(json)?\s*|\s*```$"#, with: "", options: .regularExpression)
-        }
-        return Data(content.utf8)
-    }
 }

@@ -70,22 +70,6 @@ public struct DurableJobInput: Codable, Sendable, Equatable {
                      identity: try DurableFileIdentity.capture(source))
     }
 
-    /// Bookmark lookup never shows a dialog. A moved or edited source needs the person's attention before work resumes.
-    public func resolvedURL() throws -> URL {
-        var resolved = url
-        if let bookmark {
-            var stale = false
-            if let candidate = try? URL(resolvingBookmarkData: bookmark, options: [.withoutUI, .withSecurityScope],
-                                        relativeTo: nil, bookmarkDataIsStale: &stale) {
-                guard !stale else { throw DurableJobError.sourceChanged }
-                resolved = candidate.standardizedFileURL.resolvingSymlinksInPath()
-            }
-        }
-        let accessed = resolved.startAccessingSecurityScopedResource()
-        defer { if accessed { resolved.stopAccessingSecurityScopedResource() } }
-        guard try DurableFileIdentity.capture(resolved) == identity else { throw DurableJobError.sourceChanged }
-        return resolved
-    }
 }
 
 public struct DurableJobArtifact: Codable, Sendable, Equatable {
@@ -351,63 +335,6 @@ public actor DurableJobStore {
             try verifyArtifact(artifact, run: .init(jobID: id, token: token, revision: record.revision))
         }
         return record.artifacts
-    }
-
-    /// Retired internal copies have the same grace period as temporary results, including drag promises.
-    /// Call only after collecting tray and conversation references. Visible completed jobs are never candidates.
-    /// The transaction prevents another connection from retrying a cancelled job while its files are examined.
-    @discardableResult public func pruneCancelledArtifacts(keeping: [URL], maxAge: TimeInterval = 86_400,
-                                                           now: Date = Date()) throws -> Int {
-        guard maxAge.isFinite, maxAge >= 86_400, now.timeIntervalSinceReferenceDate.isFinite else { throw DurableJobError.invalidRequest }
-        let cutoff = now.addingTimeInterval(-maxAge)
-        let kept = keeping.filter(\.isFileURL).map { $0.standardizedFileURL.resolvingSymlinksInPath().path }
-        let root = Self.artifactsDirectory(baseDirectory: baseDirectory)
-        guard root.path == root.resolvingSymlinksInPath().standardizedFileURL.path else { throw DurableJobError.artifactOutsideJob }
-        return try transaction {
-            var removed = 0
-            for record in try Self.readRows(db) where record.state == .cancelled && record.updated < cutoff {
-                let jobDirectory = root.appendingPathComponent(record.id.uuidString, isDirectory: true)
-                guard Self.isOwnedDirectory(jobDirectory) else { continue }
-                let runs = try FileManager.default.contentsOfDirectory(at: jobDirectory, includingPropertiesForKeys: nil)
-                for directory in runs {
-                    guard let token = UUID(uuidString: directory.lastPathComponent), Self.isOwnedDirectory(directory) else { continue }
-                    let run = DurableJobRun(jobID: record.id, token: token, revision: record.revision)
-                    // Directory enumeration may return /private/var while a bookmark resolves to /var.
-                    let canonical = directory.standardizedFileURL.resolvingSymlinksInPath().path
-                    let protected = kept.contains { $0 == canonical || $0.hasPrefix(canonical + "/") || canonical.hasPrefix($0 + "/") }
-                    guard !protected else { continue }
-                    let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
-                    var eligible = true
-                    for file in files {
-                        do {
-                            try checkArtifactLocation(file, run: run)
-                            let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
-                            guard let modified = attributes[.modificationDate] as? Date, modified < cutoff else { eligible = false; break }
-                            if let recorded = record.artifacts.first(where: { $0.url.standardizedFileURL.path == file.standardizedFileURL.path }) {
-                                try verifyArtifact(recorded, run: run)
-                            }
-                        } catch { eligible = false; break }
-                    }
-                    guard eligible else { continue }
-                    for file in files {
-                        // unlink cannot recursively delete a directory swapped into a file's place.
-                        if unlink(file.path) == 0 { removed += 1 }
-                        else if errno != ENOENT { throw DurableJobError.persistenceFailed }
-                    }
-                    // rmdir is empty-only, including when another actor creates a file after the check.
-                    _ = rmdir(directory.path)
-                }
-                _ = rmdir(jobDirectory.path)
-            }
-            return removed
-        }
-    }
-
-    private static func isOwnedDirectory(_ url: URL) -> Bool {
-        guard url.standardizedFileURL.path == url.resolvingSymlinksInPath().standardizedFileURL.path,
-              let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
-              attributes[.type] as? FileAttributeType == .typeDirectory else { return false }
-        return true
     }
 
     private func verifyArtifact(_ artifact: DurableJobArtifact, run: DurableJobRun) throws {

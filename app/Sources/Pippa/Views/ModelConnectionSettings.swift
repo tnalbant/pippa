@@ -170,7 +170,7 @@ struct ModelConnectionSettings: View {
             Task { @MainActor in
                 defer { busyState.wrappedValue = false }
                 do {
-                    try await LocalEngine.testModelConnection(connection, apiKey: key)
+                    try await ModelConnectionTest.check(connection, apiKey: key)
                     do {
                         guard !model.isActiveWork else { throw InferenceError.busy }
                         let oldIdentifier = model.inferenceSettings.connection?.id

@@ -20,15 +20,6 @@ public enum PiSetupState: Sendable, Equatable {
     /// Done. `adoptedFrom`: the AI came without download from another program (for a calm sentence).
     case ready(adoptedFrom: String?)
 
-    /// Setup has just put the AI in place (loaded, or adopted from another program), not merely found it at launch.
-    /// Only then is it loaded into memory ahead of the first question and the ready step offered.
-    public static func justSetUp(from previous: PiSetupState, to next: PiSetupState) -> Bool {
-        guard case .ready = next else { return false }
-        switch previous {
-        case .downloading, .preparing(.some): return true
-        default: return false
-        }
-    }
 }
 
 /// An error for the UI: one sentence, technical details behind "Details".

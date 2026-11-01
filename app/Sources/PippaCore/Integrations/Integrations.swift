@@ -129,7 +129,6 @@ public protocol AppIntegrations: Sendable {
     func prepareMailAccess() async -> IntegrationAccess
     /// Shows the system prompt if needed. Only call when the person is using the feature right now.
     func requestAccess(_ integration: Integration) async -> IntegrationAccess
-    func add(_ entry: CalendarEntry, tag: URL) async throws -> CreatedItem
     /// Removes only what Pippa created and what has not been changed since.
     func remove(_ item: CreatedItem) async throws -> RemoveResult
     func selectedMail() async throws -> MailMessage?
@@ -174,6 +173,7 @@ public final class DemoIntegrations: AppIntegrations, @unchecked Sendable {
     public var mailRunning = true
     public var mailCanLaunch = true
     private var preparedMailCount = 0
+    /// Tests only: how often Mail was prepared for a search or draft.
     public var mailPreparations: Int { lock.withLock { preparedMailCount } }
 
     public init(granted: Bool = false) {
@@ -210,13 +210,6 @@ public final class DemoIntegrations: AppIntegrations, @unchecked Sendable {
 
     private func requireGranted(_ i: Integration) throws {
         guard lock.withLock({ state[i] }) == .granted else { throw PippaError.accessDenied(i.appName) }
-    }
-
-    public func add(_ entry: CalendarEntry, tag: URL) async throws -> CreatedItem {
-        try requireGranted(entry.integration)
-        let item = CreatedItem(integration: entry.integration, identifier: "demo-\(UUID().uuidString)", modified: Date())
-        lock.withLock { items[item.identifier] = (item, entry.title) }
-        return item
     }
 
     public func remove(_ item: CreatedItem) async throws -> RemoveResult {
@@ -293,7 +286,6 @@ public final class DemoIntegrations: AppIntegrations, @unchecked Sendable {
         ]
     }
 }
-
 
 // Create events and reminders, in memory only (tests, PIPPA_DEMO, end-to-end). Never touches real apps.
 extension DemoIntegrations: HostWriting {

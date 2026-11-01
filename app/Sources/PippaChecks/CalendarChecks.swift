@@ -63,54 +63,7 @@ func runCalendarChecks() async {
 
     // MARK: Recognizing the question (no attachment needed)
 
-    func intent(_ text: String, recent: Bool = false) -> CalendarIntent? { CalendarIntent.parse(text, now: now, calendar: berlin, recentCalendarTurn: recent) }
     func day(_ d: Int, month: Int = 10) -> CalendarRange? { CalendarRange.day(at(berlin, 2026, month, d), calendar: berlin) }
-    check("Calendar: user finding 'anstehende Termine diese Woche' is recognized in code, from now to weekend") {
-        let found = intent("Fass mir kurz meine anstehenden Termine diese Woche zusammen")
-        return found?.range == CalendarRange.restOfWeek(now: now, calendar: berlin) && found?.followUp == false
-            && intent("Summarize my upcoming appointments this week")?.range.kind == .restOfWeek
-            && intent("Welche Termine stehen an?")?.range.kind == .restOfWeek
-            && intent("Was steht diese Woche an?")?.range.kind == .restOfWeek
-    }
-    check("Calendar: days, weekdays, next week, date and English") {
-        intent("Was habe ich morgen vor?")?.range == day(8)
-            && intent("Habe ich am Mittwoch Termine?")?.range == day(7)
-            && intent("Welche Termine habe ich nächsten Mittwoch?")?.range == day(14)
-            && intent("Was steht Montag nächste Woche an?")?.range == day(12)
-            && intent("Meine Termine nächste Woche")?.range == CalendarRange.nextWeek(now: now, calendar: berlin)
-            && intent("Termine am 14.10.?")?.range == day(14)
-            && intent("Was steht heute und morgen in meinem Kalender?")?.range == CalendarRange(kind: .days, start: at(berlin, 2026, 10, 7), end: at(berlin, 2026, 10, 9))
-            && intent("What's on my calendar tomorrow?")?.range == day(8)
-            && intent("Am I free on Friday?")?.range == day(9)
-            && intent("Do I have meetings next week?")?.range.kind == .nextWeek
-            && intent("Was steht am Wochenende an?")?.range.kind == .weekend
-            && intent("Termine heute morgen?")?.range == day(7)
-    }
-    check("Calendar: questions about documents, adding and searching do not take the calendar path") {
-        [intent("Welche Termine stehen im Brief?"), intent("Trag den Termin in meinen Kalender ein"),
-         intent("Wann ist mein nächster Zahnarzttermin?"), intent("Fasse den Text zusammen"), intent("Hallo"),
-         intent("Welche Fristen hat die Rechnung diese Woche?"), intent("Add a meeting tomorrow to my calendar"),
-         intent("Sag den Termin morgen ab"), intent("Was steht in der Mail von morgen?"), intent("Wie funktioniert der Kalender?")]
-            .allSatisfy { $0 == nil }
-    }
-    check("Calendar: follow-up questions ('und morgen?', 'Was ist am Donnerstag?') only right after a calendar answer") {
-        intent("und morgen?") == nil && intent("Was ist am Donnerstag?") == nil
-            && intent("und morgen?", recent: true)?.range == day(8) && intent("und morgen?", recent: true)?.followUp == true
-            && intent("Was ist am Donnerstag?", recent: true)?.range == day(8)
-            && intent("Und nächste Woche?", recent: true)?.range.kind == .nextWeek
-            && intent("Und was steht im Brief zu morgen?", recent: true) == nil
-            && intent("Welcher davon ist am wichtigsten?", recent: true) == nil
-    }
-
-    check("Calendar: follow-up with its own topic (weather, price, news) does not go to the calendar, elliptic ones do") {
-        let other = ["Wie wird das Wetter morgen?", "Was kostet das morgen?", "Was sind die News von heute?", "Wie ist der Preis am Donnerstag?",
-                     "Wie hoch sind die Kosten morgen?", "What's the weather tomorrow?", "How much does it cost tomorrow?",
-                     "Wann fährt der Zug morgen?", "Wie ist der Dax heute?"]
-        let elliptic = ["und morgen?", "Und übermorgen?", "Was ist am Donnerstag?", "und nächste Woche?", "Was steht Freitag an?",
-                        "Und am Wochenende?", "Wie sieht Montag aus?", "Und heute?", "And tomorrow?", "What about Friday?", "Und in den nächsten 3 Tagen?"]
-        return other.allSatisfy { intent($0, recent: true) == nil }
-            && elliptic.allSatisfy { intent($0, recent: true) != nil }
-    }
 
     // MARK: Event facts
 
@@ -157,21 +110,6 @@ func runCalendarChecks() async {
         return text.contains(digest.rangeLabel) && text.contains(digest.sourceLine) && digest.sourceLine.contains("Arbeit, Privat")
             && digest.rangeLabel.contains(fmt.string(from: now)) && text.contains("Call \\*NY\\* \\[x\\](y)")
             && digest.days.allSatisfy { text.contains("**" + $0.label + "**") } && !text.lowercased().contains("attach") && !text.contains("Anhang")
-    }
-    check("Calendar card: same days and appointments as the text, struck through when cancelled, colour and event kept, stored with the answer") {
-        var colored = fixture
-        colored[1].color = "#1BADF8"
-        let card = CalendarDigest.make(CalendarFetch(events: colored, total: colored.count, calendars: ["Arbeit", "Privat"]), range: week, now: now, calendar: berlin).card
-        let rows = card.days.flatMap(\.entries)
-        let standup = rows.first { $0.title == "Standup" && !$0.inactive }
-        let answer = CalendarConversation.answer(for: .read(digest), question: "Was steht an?", range: week)
-        let back = try JSONDecoder().decode(ConversationCalendarRead.self, from: JSONEncoder().encode(answer.calendar))
-        let old = try JSONDecoder().decode(ConversationCalendarRead.self, from: JSONEncoder().encode(ConversationCalendarRead(state: .read, question: "x", range: week)))
-        return card.days.map(\.label) == digest.days.map(\.label) && rows.count == digest.shown
-            && standup?.color == "#1BADF8" && standup?.eventID == "standup"
-            && rows.filter(\.inactive).count == digest.inactiveCount && card.showsCalendar && card.rangeLabel == digest.rangeLabel
-            && card.footer.contains(digest.readAtLabel) && card.emptyText == nil && card.truncatedNote == nil
-            && back.card == digest.card && old.card == nil && answer.text == digest.markdown
     }
 
     check("Calendar: upper limit visible (first 60 of 75), nothing silently cut off") {
@@ -226,51 +164,13 @@ func runCalendarChecks() async {
         let value = after.payload.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
         return after.status == .ok && value?["count"] as? Int == 4 && demo.calendarReads.count == 1
     }
-    await checkAsync("Calendar: engines read only through their integration (stub and LocalEngine with demo calendar)") {
-        let stub = StubEngine(delay: 0)
-        let needs = await stub.readCalendar(week)
-        _ = await stub.requestIntegrationAccess(.calendar)
-        guard case .read = await stub.readCalendar(week) else { return false }
-        let demo = DemoIntegrations(granted: true); demo.calendarEvents = fixture
-        let engine = LocalEngine(baseDirectory: dir("calendar-engine"), modelEnabled: false, integrations: demo)
-        guard case .read(let read) = await engine.readCalendar(week) else { return false }
-        let tool = await CalendarReader.toolReply(.init(period: "tomorrow"), from: demo)
-        return needs == .needsAccess && read.activeCount == 4 && tool.status == .ok && demo.calendarReads.count == 2
-    }
 
     // MARK: Conversation
 
-    check("Calendar: answers per state, follow-up window, permission button only on the newest open request") {
-        let range = week
-        let asked = CalendarConversation.answer(for: .needsAccess, question: "Meine Termine?", range: range)
-        let deniedAnswer = CalendarConversation.answer(for: .denied, question: "Meine Termine?", range: range)
-        let read = CalendarConversation.answer(for: .read(digest), question: "Meine Termine?", range: range)
-        var messages = [ConversationMessage(role: .user, text: "Meine Termine?"),
-                        ConversationMessage(role: .assistant, text: asked.text, calendar: asked.calendar)]
-        let offer = CalendarConversation.pendingAccessOffer(in: messages)
-        let recent = CalendarConversation.recentTurn(in: messages)
-        messages.append(ConversationMessage(role: .assistant, text: read.text, calendar: read.calendar))
-        let resolved = CalendarConversation.pendingAccessOffer(in: messages) == nil
-        let later = messages + (0..<CalendarConversation.followUpWindow).map { ConversationMessage(role: $0 % 2 == 0 ? .user : .assistant, text: "x\($0)") }
-        let texts = [asked.text, deniedAnswer.text, CalendarReadResult.failureText]
-        return offer?.id == messages[1].id && recent && resolved && read.text.contains(digest.sourceLine)
-            && !CalendarConversation.recentTurn(in: later)
-            && asked.calendar.state == .needsAccess && deniedAnswer.calendar.state == .denied && read.calendar.state == .read
-            && Set(texts).count == 3 && texts.allSatisfy { !$0.lowercased().contains("attach") && !$0.contains("Anhang") && !$0.contains(L("Nothing in your calendar for this period.", table: "Calendar")) }
-    }
 }
 
 /// ConversationStore lives on the MainActor.
 @MainActor func runCalendarStoreChecks() {
-    check("Calendar: marker stays in the stored conversation, older conversations without the field still load") {
-        let store = try ConversationStore(directory: dir("calendar-store"))
-        let conversation = try store.create()
-        let marker = ConversationCalendarRead(state: .read, question: "Meine Termine?", range: CalendarRange(kind: .day, start: Date(timeIntervalSince1970: 0), end: Date(timeIntervalSince1970: 86400)))
-        _ = try store.append(ConversationMessage(role: .assistant, text: "x", calendar: marker), to: conversation.id)
-        let reloaded = try ConversationStore(directory: dir("calendar-store")).load(conversation.id)
-        let legacy = try JSONDecoder().decode(ConversationMessage.self, from: Data(#"{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","role":"assistant","text":"alt","timestamp":0,"attachments":[]}"#.utf8))
-        return reloaded.messages.last?.calendar == marker && legacy.calendar == nil
-    }
 }
 
 extension DemoIntegrations {

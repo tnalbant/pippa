@@ -76,15 +76,6 @@ func runPermissionRepairChecks() async {
             && malformed.items.first?.permissionRepair == nil && roundTrip == receipt
             && PermissionRepairTarget.allCases.allSatisfy { $0.settingsURL.scheme == "x-apple.systempreferences" }
     }
-    check("Permission repair: native compatibility, partial previews stay visible, cancelled/unclear cannot offer repair") {
-        let partial = ActionReceipt.Item(action: "read", outcome: "done", permissionRepair: .photos)
-        let rejected = ["cancelled", "unclear", "done"].map { ActionReceipt.Item(action: "look", outcome: $0, permissionRepair: .filesAndFolders) }
-        return partial.permissionRepairTarget == .photos && !partial.isQuiet
-            && ActionReceipt.Item(action: "read", outcome: "done").isQuiet
-            && rejected.allSatisfy { $0.permissionRepairTarget == nil }
-            && ActionReceipt.Item(action: "reminderAdd", outcome: "blocked", reason: "denied").permissionRepairTarget == .reminders
-            && ActionReceipt.Item(action: "mailDraft", outcome: "failed", reason: "denied").permissionRepairTarget == .automation
-    }
     check("Permission repair: only actual POSIX/Cocoa permission errors qualify; text and other domains never do") {
         let valid = [NSError(domain: NSPOSIXErrorDomain, code: Int(EACCES)), NSError(domain: NSPOSIXErrorDomain, code: Int(EPERM)),
                      NSError(domain: NSCocoaErrorDomain, code: NSFileReadNoPermissionError),

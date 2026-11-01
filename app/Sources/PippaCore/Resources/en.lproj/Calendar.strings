@@ -14,7 +14,6 @@
 "Cancelled or declined: %lld" = "Cancelled or declined: %lld";
 "I couldn’t read your calendar just now. That doesn’t mean it’s empty. Please try again." = "I couldn’t read your calendar just now. That doesn’t mean it’s empty. Please try again.";
 "I didn’t find a calendar on this Mac that I can read." = "I didn’t find a calendar on this Mac that I can read.";
-"I’m not allowed to read your calendar, so I haven’t looked at any appointments. You can allow it in System Settings under Privacy & Security → Calendars." = "I’m not allowed to read your calendar, so I haven’t looked at any appointments. You can allow it in System Settings under Privacy & Security → Calendars.";
 "Last week" = "Last week";
 "Next week" = "Next week";
 "Nothing in your calendar for this period." = "Nothing in your calendar for this period.";
@@ -36,7 +35,3 @@
 "tentative" = "tentative";
 "until %@" = "until %@";
 "Calendar on this Mac · read at %@" = "Calendar on this Mac · read at %@";
-"And tomorrow?" = "And tomorrow?";
-"And this week?" = "And this week?";
-"And next week?" = "And next week?";
-"And the weekend?" = "And the weekend?";

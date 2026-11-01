@@ -97,8 +97,6 @@ public struct PiInstallRoots: Sendable {
     /// Pi's folder for the person's extensions; Pippa's terminal extension lives in it as its own folder.
     public var extensionsDirectory: URL { agentDirectory.appendingPathComponent("extensions", isDirectory: true) }
     public var stateFile: URL { support.appendingPathComponent("install-state.json") }
-    /// Key of the llama-server for `pippa-local` (0600), see `PiInstaller.stableKey`.
-    public var llamaKeyFile: URL { PiInstaller.keyFile(support: support) }
     /// Shared model folder as in Pi's docs (llama-cpp.md), after one-time consent.
     public var sharedModels: URL { home.appendingPathComponent("models", isDirectory: true) }
     public var pippaModels: URL { support.appendingPathComponent("models", isDirectory: true) }

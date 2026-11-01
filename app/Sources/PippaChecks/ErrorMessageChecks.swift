@@ -33,9 +33,8 @@ func runErrorMessageChecks() {
         AnswerFailureCode.allCases.allSatisfy { clean($0.fallbackText) }
     }
 
-    check("Error texts: history, network and system errors are clean") {
-        var texts: [String] = [ConversationStoreError.corrupted, .unsupportedVersion, .unknownConversation, .changedExternally].compactMap { $0.errorDescription }
-        texts += [UserMessage.generic]
+    check("Error texts: network and system errors are clean") {
+        var texts: [String] = [UserMessage.generic]
         for code in [URLError.Code.notConnectedToInternet, .timedOut, .cannotFindHost, .badServerResponse, .secureConnectionFailed] {
             texts.append(UserMessage.network(URLError(code)))
         }

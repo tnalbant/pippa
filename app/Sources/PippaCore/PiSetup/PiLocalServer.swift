@@ -9,7 +9,7 @@ import Foundation
 // - 127.0.0.1 only, the same tuned flags as LocalEngine's server (`LlamaServer.arguments`), `--alias` with
 //   the model id from models.json.
 // - Model: developer file (`PIPPA_MODEL_FILE`), else the installer's model folder, else Pippa's current
-//   model folder (`LocalEngine.modelsDirectory`). Each only if the file is there and verified (`.ok`).
+//   model folder (`PiLocalServer.modelsDirectory`). Each only if the file is there and verified (`.ok`).
 // - Unloaded after `llamaIdleMinutes` without a request (default 10); `PIPPA_LLAMA_IDLE_SECONDS` only for measurements.
 // - Prompt cache across unloading: save the slot before unloading, restore it after the next start before Pi's first request
 //   (`<Support>/llama-slots`); `PIPPA_LLAMA_SLOT_CACHE=0` turns this off.
@@ -69,13 +69,13 @@ public enum PiLocalServer {
         let key = try PiInstaller.stableKey(support: roots.support)
 
         var file: URL?, source = ""
-        if let dev = LocalEngine.devModelFile(environment: environment) { file = dev; source = "dev" }
+        if let dev = devModelFile(environment: environment) { file = dev; source = "dev" }
         if file == nil, let folder = PiInstallState.load(from: roots.stateFile).modelsFolder {
             let downloader = ModelDownloader(directory: URL(fileURLWithPath: folder, isDirectory: true))
             if downloader.isInstalled(model) { file = downloader.primaryFile(model); source = "installer" }
         }
         if file == nil {
-            let downloader = ModelDownloader(directory: LocalEngine.modelsDirectory(base: legacySupport, environment: environment))
+            let downloader = ModelDownloader(directory: modelsDirectory(base: legacySupport, environment: environment))
             if downloader.isInstalled(model) { file = downloader.primaryFile(model); source = "pippa" }
         }
         guard let file else { throw Failure.modelMissing(modelID) }
@@ -93,14 +93,16 @@ public enum PiLocalServer {
                     slotDirectory: slots, lockFile: PiServerLock.url(support: roots.support), keyFile: PiInstaller.keyFile(support: roots.support))
     }
 
-    /// Remove all saved slots (`<Support>/llama-slots/pippa-slot-*.bin`), e.g. when a conversation is deleted;
-    /// the slot holds the last conversation as cache. Only Pippa's own cache files.
-    public static func discardSavedSlots(support: URL) {
-        let dir = support.appendingPathComponent("llama-slots", isDirectory: true)
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
-        for name in names where name.hasPrefix("pippa-slot-") && name.hasSuffix(".bin") {
-            try? FileManager.default.removeItem(at: dir.appendingPathComponent(name))
-        }
+    /// Model folder: `<Support>/models`; for development via PIPPA_MODELS_DIR (e.g. a folder outside the repo).
+    public static func modelsDirectory(base: URL, environment: [String: String] = ProcessInfo.processInfo.environment) -> URL {
+        if let env = environment["PIPPA_MODELS_DIR"], !env.isEmpty { return URL(fileURLWithPath: env, isDirectory: true) }
+        return base.appendingPathComponent("models", isDirectory: true)
+    }
+
+    /// Development: a model file given directly via PIPPA_MODEL_FILE.
+    static func devModelFile(environment: [String: String] = ProcessInfo.processInfo.environment) -> URL? {
+        guard let path = environment["PIPPA_MODEL_FILE"], !path.isEmpty, FileManager.default.fileExists(atPath: path) else { return nil }
+        return URL(fileURLWithPath: path)
     }
 
     /// The server for it (not yet started). Log `llama-server-pi.log` next to LocalEngine's.

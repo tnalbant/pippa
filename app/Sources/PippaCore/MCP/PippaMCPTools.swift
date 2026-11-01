@@ -450,7 +450,8 @@ public struct PippaMCPTools: Sendable {
     /// Pippa's sentence before the first system prompt: what she reads and when. One sentence, then the Mac asks.
     public static func accessExplanation(_ subject: PippaMCPAccessSubject) -> String {
         switch subject {
-        case .integration(.calendar): CalendarConversation.accessBenefit
+        case .integration(.calendar):
+            L("To answer this, I need to read your calendar on this Mac – only the period you ask about, and only when you ask.", table: "Calendar")
         case .integration(.reminders):
             L("To answer this, I need to read your reminders on this Mac – only when you ask, and I don’t change anything.", table: "MCP")
         case .integration(.mail):

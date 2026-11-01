@@ -2,140 +2,17 @@ import AppKit
 import Foundation
 import PippaCore
 
-/// Stub for the system language model: answers with `answer` or (if nil) never.
-private struct LetterGistModel: QuickLanguageModel, Sendable {
-    let answer: String?
-    var availability: QuickModelAvailability { .available }
-    func stream(instructions: String, prompt: String, maximumTokens: Int) -> AsyncThrowingStream<String, Error> {
-        let answer = answer
-        return AsyncThrowingStream { continuation in
-            guard let answer else { return }
-            continuation.yield(answer)
-            continuation.finish()
-        }
-    }
+/// Integrations with only the required members: everything else falls back to the protocol's defaults.
+private final class MinimalIntegrations: AppIntegrations, @unchecked Sendable {
+    let base = DemoIntegrations(granted: true)
+    func access(_ i: Integration) async -> IntegrationAccess { await base.access(i) }
+    func requestAccess(_ i: Integration) async -> IntegrationAccess { await base.requestAccess(i) }
+    func remove(_ item: CreatedItem) async throws -> RemoveResult { .changed }
+    func selectedMail() async throws -> MailMessage? { nil }
 }
 
-/// Letters: first line built in code, actions, validating model proposals, inserting into Mail.
+/// Mail drafts: identity of the original, readback, inserting into Mail. No native app actions.
 func runLetterChecks() async {
-    let today = DayDate(year: 2026, month: 10, day: 2)!
-    let german = Locale(identifier: "de_DE")
-    let now = Date(timeIntervalSince1970: 1_790_000_000)
-    func skillFixture(_ name: String) -> PippaSkill? {
-        PippaSkill.parse("---\nname: \(name)\ndescription: Prüfung \(name)\npippa-label: \(name)\n---\nAnleitung.\n", folder: name, german: false)
-    }
-    let skills: [PippaSkill] = ["antwort-schreiben", "brief-verstehen", "zusammenfassen"].compactMap { skillFixture($0) }
-
-    // MARK: Facts and first line
-
-    check("Letter: sample mail yields sender, amount and payment deadline; first line without path or jargon") {
-        guard let mail = DemoIntegrations().sampleMail else { return false }
-        let facts = LetterReading.facts(mail: mail, today: today)
-        let line = FirstLineBuilder.line(facts, locale: german)
-        let due = DayDate(year: 2026, month: 10, day: 31)
-        let senderOK = facts.sender == "Hausverwaltung Berger" && facts.senderAddress == "info@berger-hv.de"
-        let amountOK = facts.amount == Decimal(string: "312.48", locale: Locale(identifier: "en_US_POSIX"))
-        let deadlineOK = facts.deadline?.kind == .payment && facts.deadline?.date == due
-        let lower = line.text.lowercased()
-        let lineOK = line.text.contains("Hausverwaltung Berger") && line.text.contains("31.10.") && !line.text.contains("/")
-        let wordsOK = !lower.contains("model") && !lower.contains("token") && !lower.contains(".pdf")
-        let kindOK = facts.taskKind == .mail && facts.subject == "Nebenkostenabrechnung 2025"
-            && facts.attachmentNames == ["Nebenkosten 2025.pdf"]
-        return senderOK && amountOK && deadlineOK && lineOK && wordsOK && kindOK && !line.pleaseCheck && !line.usedSystemModel
-    }
-    check("Letter: tax notice with objection within one month yields a computed deadline marked \"please check\"") {
-        let text = """
-        Finanzamt München
-        Datum: 15.09.2026
-        Bescheid für 2025 über Einkommensteuer
-
-        Rechtsbehelfsbelehrung
-        Gegen diesen Bescheid ist der Einspruch gegeben. Der Einspruch ist innerhalb eines Monats nach Bekanntgabe dieses Bescheids beim Finanzamt einzulegen.
-        """
-        let doc = DocumentText(url: URL(fileURLWithPath: "/Users/test/Downloads/Bescheid.pdf"), pages: [text], isPaged: true,
-                               usedOCR: false, headers: [:])
-        let facts = LetterReading.facts(document: doc, today: today)
-        let line = FirstLineBuilder.line(facts, locale: german)
-        let due = DayDate(year: 2026, month: 10, day: 15)
-        let kindOK = facts.deadline?.kind == .objection && facts.deadline?.date == due && facts.taskKind == .letter
-        let lineOK = line.pleaseCheck && line.text.contains("15.10.") && line.text.hasPrefix("Finanzamt München: ")
-        let statement = facts.deadline.map { FirstLineBuilder.statement(for: $0, locale: german) } ?? ""
-        let statementOK = statement.contains("15.10.") && !statement.contains("Finanzamt")
-        return kindOK && lineOK && statementOK && facts.amount == nil && facts.deadlines.count <= 5
-    }
-    check("Letter: without deadline and amount a calm line with subject; subject without slash and file extension") {
-        let mail = MailMessage(subject: "Einladung zum Sommerfest", sender: "Verein Gartenfreunde <info@gartenfreunde.de>", date: nil,
-                               body: "Liebe Mitglieder,\n\nwir laden euch herzlich zu unserem Sommerfest ein.\n\nViele Grüße", attachmentNames: [])
-        let facts = LetterReading.facts(mail: mail, today: today)
-        let line = FirstLineBuilder.line(facts, locale: german)
-        let neutralOK = facts.deadline == nil && facts.amount == nil && line.text.contains("Verein Gartenfreunde")
-            && line.text.contains("Einladung zum Sommerfest") && !line.pleaseCheck
-        let odd = FirstLineBuilder.line(LetterFacts(subject: "Rechnung 2026/10.pdf"), locale: german)
-        let oddOK = !odd.text.contains("/") && !odd.text.lowercased().contains(".pdf") && odd.text.contains("Rechnung")
-        let bare = FirstLineBuilder.line(LetterFacts(), locale: german)
-        return neutralOK && oddOK && !bare.text.isEmpty
-    }
-    check("Letter: line when called with and without sender, never with an address") {
-        let named = FirstLineBuilder.calling(sender: "Finanzamt München")
-        let plain = FirstLineBuilder.calling(sender: nil)
-        let address = FirstLineBuilder.calling(sender: "info@berger-hv.de")
-        return named.contains("Finanzamt München") && !plain.isEmpty && !address.contains("@")
-    }
-    check("Letter: mail as document carries sender, subject and attachments; mail ID stays optional") {
-        let mail = MailMessage(subject: "Test", sender: "A <a@b.de>", date: nil, body: "Hallo", attachmentNames: ["x.pdf"], messageID: "id-1@b.de")
-        let doc = LetterReading.document(for: mail, url: URL(fileURLWithPath: "/tmp/Test.eml"))
-        let old = MailMessage(subject: "Test", sender: "A", date: nil, body: "Hallo", attachmentNames: [])
-        return doc.headers["from"] == "A <a@b.de>" && doc.headers["subject"] == "Test" && doc.attachments == ["x.pdf"]
-            && doc.pages == ["Hallo"] && mail.messageID == "id-1@b.de" && old.messageID == nil
-    }
-
-    // MARK: System language model (supplement only)
-
-    let quiet = LetterFacts(sender: "Verein Gartenfreunde", subject: "Sommerfest")
-    await checkAsync("Letter: short gist from the system model is adopted") {
-        let line = await FirstLineBuilder.refined(quiet, text: "Bitte meldet euch bis Freitag.", model: LetterGistModel(answer: "möchte eine Rückmeldung."))
-        return line?.usedSystemModel == true && line?.text == "Verein Gartenfreunde: möchte eine Rückmeldung" && line?.pleaseCheck == false
-    }
-    await checkAsync("Letter: gist with digits, address or multiple lines is discarded") {
-        let digits = await FirstLineBuilder.refined(quiet, text: "Text", model: LetterGistModel(answer: "Zahlen Sie 312 €"))
-        let mail = await FirstLineBuilder.refined(quiet, text: "Text", model: LetterGistModel(answer: "schreib an a@b.de"))
-        let lines = await FirstLineBuilder.refined(quiet, text: "Text", model: LetterGistModel(answer: "möchte\netwas"))
-        return digits == nil && mail == nil && lines == nil
-    }
-    await checkAsync("Letter: a system model that does not answer does not hold up the line") {
-        let start = ContinuousClock.now
-        let line = await FirstLineBuilder.refined(quiet, text: "Text", model: LetterGistModel(answer: nil), timeout: .milliseconds(200))
-        let elapsed = ContinuousClock.now - start
-        return line == nil && elapsed < .seconds(2)
-    }
-    await checkAsync("Letter: with deadline or amount, or without a model, Pippa does not ask the system model") {
-        var withAmount = quiet
-        withAmount.amount = Decimal(12)
-        let a = await FirstLineBuilder.refined(withAmount, text: "Text", model: LetterGistModel(answer: "möchte Geld"))
-        let b = await FirstLineBuilder.refined(quiet, text: "Text", model: nil)
-        return a == nil && b == nil
-    }
-
-    // MARK: Actions
-
-    check("Letter: catalog in fixed order; without the skill the action drops out") {
-        let all = LetterActions.catalog(skills: skills).map(\.id)
-        let none = LetterActions.catalog(skills: []).map(\.id)
-        let drafts = LetterActions.catalog(skills: skills).filter(\.writesDraft).map(\.id)
-        let expectedDrafts: [String] = ["reply", "object", "cancel"]
-        return all == LetterActions.ids && none == ["add-date"] && drafts == expectedDrafts
-    }
-    check("Letter: type actions Explain · Reply · Date, habit moves Reply to the front") {
-        let plain = LetterActions.fallback(kind: .mail, source: nil, records: [], now: now, skills: skills).map(\.id)
-        let records = (0..<3).map { i in
-            TaskRecord(at: now.addingTimeInterval(-Double(i) * 3600), kind: .mail, offered: ["explain", "reply", "add-date"],
-                       chosen: "reply", outcome: .kept)
-        }
-        let habit = LetterActions.fallback(kind: .mail, source: nil, records: records, now: now, skills: skills).map(\.id)
-        let bare = LetterActions.fallback(kind: .mail, source: nil, records: [], now: now, skills: []).map(\.id)
-        let expected: [String] = ["explain", "reply", "add-date"]
-        return plain == expected && habit.first == "reply" && habit.count == 3 && bare == ["add-date"]
-    }
     // MARK: Inserting into Mail
 
     check("Mail: readback confirms the complete draft, never just the beginning") {
@@ -320,16 +197,6 @@ func runLetterChecks() async {
             && MailReplySource.capture(headers: Data("Message-ID: <a@b>\nSubject: =?UTF-8?Q?Gr=C3=BC=C3=9Fe?=\n\n".utf8))?.subject == "Grüße"
             && MailReplySource.capture(headers: Data("Message-ID: <a@b>\nSubject: Hello\n\n".utf8) + Data([255]))?.messageID == "a@b"
     }
-    check("Mail: old cards stay readable without an invented source; source is immutable") {
-        let legacy = Data(#"{"to":"","subject":"","body":"Hallo","state":"draft"}"#.utf8)
-        guard let old = try? JSONDecoder().decode(ConversationMailDraft.self, from: legacy),
-              let source = MailReplySource(messageID: "a@b", replyTo: "x@y.de", subject: "Original") else { return false }
-        let card = ConversationMailDraft(body: "Hallo", replySource: source)
-        var edited = card; edited.body = "Hallo neu"
-        return old.replySource == nil && !old.requiresOriginalReply && card.requiresOriginalReply && card.canUpdate(to: edited)
-            && !card.canUpdate(to: old)
-            && (try? JSONDecoder().decode(ConversationMailDraft.self, from: JSONEncoder().encode(card))) == card
-    }
 
     check("Mail: new drafts keep the subject and confirm all fields before success") {
         let draft = MailDraft(messageID: nil, to: "anna@example.invalid", toName: nil,
@@ -385,7 +252,7 @@ func runLetterChecks() async {
     }
     await checkAsync("Mail: integrations without their own insert say \"not possible\"") {
         let draft = MailDraft(messageID: nil, to: nil, toName: nil, subject: "x", body: "y")
-        do { _ = try await ChangedIntegrations().insertReply(draft); return false } catch let error as PippaError {
+        do { _ = try await MinimalIntegrations().insertReply(draft); return false } catch let error as PippaError {
             return error == .notAvailable
         }
     }

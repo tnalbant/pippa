@@ -43,12 +43,6 @@ public struct FileFacts: Sendable {
     public var pdfPageCount: Int?
 
     public var isImage: Bool { type.conforms(to: .image) }
-    public var isPDF: Bool { type.conforms(to: .pdf) }
-    public var isMail: Bool { url.pathExtension.lowercased() == "eml" }
-    public var looksLikeScreenshot: Bool {
-        let n = url.lastPathComponent.lowercased()
-        return n.hasPrefix("screenshot") || n.hasPrefix("screen shot") || n.hasPrefix("bildschirmfoto") || n.contains("bildschirmfoto") || n.hasPrefix("cleanshot")
-    }
 
     public static func read(_ url: URL) -> FileFacts {
         let type = UTType(filenameExtension: url.pathExtension.lowercased()) ?? .data
@@ -79,42 +73,5 @@ public struct FileFacts: Sendable {
         guard let v = try? url.resourceValues(forKeys: [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey]),
               v.isUbiquitousItem == true else { return false }
         return v.ubiquitousItemDownloadingStatus != .current
-    }
-}
-
-/// Checks that paths stay inside the shared folder, even after resolving symlinks.
-public struct PathGuard: Sendable {
-    public let scope: URL
-    private let root: String
-
-    public init(scope: URL) {
-        self.scope = scope
-        root = PathGuard.canonical(scope)
-    }
-
-    /// Real path: existing part via realpath (resolves symlinks and /private), rest appended.
-    public static func canonical(_ url: URL) -> String {
-        var existing = url.standardizedFileURL
-        var rest: [String] = []
-        while !FileManager.default.fileExists(atPath: existing.path) && existing.path != "/" {
-            rest.insert(existing.lastPathComponent, at: 0)
-            existing = existing.deletingLastPathComponent()
-        }
-        var base = existing.path
-        if let resolved = realpath(existing.path, nil) {
-            base = String(validatingCString: resolved) ?? base
-            free(resolved)
-        }
-        var path = base
-        for c in rest { path = (path as NSString).appendingPathComponent(c) }
-        return path
-    }
-
-    /// Is `url` (resolved) inside the area? The area itself does not count as a target.
-    public func contains(_ url: URL, allowRoot: Bool = false) -> Bool {
-        if url.pathComponents.contains("..") { return false }
-        let p = PathGuard.canonical(url)
-        if p == root { return allowRoot }
-        return p.hasPrefix(root.hasSuffix("/") ? root : root + "/")
     }
 }

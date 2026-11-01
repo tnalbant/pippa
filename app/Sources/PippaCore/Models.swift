@@ -182,11 +182,6 @@ public enum ModelSelector {
         return ModelChoice(model: model, ctx: min(ctx, model.ctx), extra: extra, sampling: sampling)
     }
 
-    /// Memory budget for Apple Silicon (rule from the former pi-local installer, whose `catalog.mjs` is not in this repo).
-    public static func budgetGiB(physicalMemory: UInt64) -> Double {
-        let ram = Double(physicalMemory) / 1_073_741_824
-        return ram <= 12 ? ram * 0.6 : min(ram * 0.75, ram - 6)
-    }
 
     /// A specific catalog model instead of the table above, only for developers and measurements (`PIPPA_PI_MODEL`,
     /// PippaLive, spikes) and for the model already in Pi's models.json (`PiLocalServer.plan`). The app offers
@@ -237,21 +232,6 @@ public struct ModelDownloadSize: Sendable, Equatable {
     }
 }
 
-/// Detects whether a running download is stuck: no progress for as long as `limit` allows.
-public struct DownloadStallWatch: Sendable {
-    public var limit: TimeInterval
-    private var last: Double?
-    private var since: Date?
-    public init(limit: TimeInterval = 30) { self.limit = limit }
-
-    /// `progress`: current state, `nil` = no download running. Returns whether it is stuck right now.
-    public mutating func update(progress: Double?, now: Date = Date()) -> Bool {
-        // Every byte in (checking and setting up follow): no new bytes is expected then, not a stall.
-        guard let progress, progress < 1 else { last = nil; since = nil; return false }
-        if progress != last || since == nil { last = progress; since = now; return false }
-        return now.timeIntervalSince(since ?? now) >= limit
-    }
-}
 
 /// Small settings file (settings.json) in the support folder.
 public struct PippaSettings: Codable, Sendable, Equatable {
@@ -269,9 +249,6 @@ public struct PippaSettings: Codable, Sendable, Equatable {
     /// message instead of via a `read_document` round (`PiShownContext.inlineShortLimit`). `nil` = on (also old
     /// settings.json without the key); only an explicit `false` turns it off. Read via `inlinesShortText`.
     public var piInlineShortText: Bool?
-    /// Effective value: stored value, else the default (on).
-    public var inlinesShortText: Bool { piInlineShortText ?? Self.inlineShortTextDefault }
-    public static let inlineShortTextDefault = true
     /// "Pippas Wissen" in settings (24 GB and up), raw value of `ModelPreference`; `nil` or unknown = standard. A string,
     /// so that an unknown value never makes the whole file unreadable (it holds the port). Read via `preference`.
     public var modelPreference: String?
@@ -290,13 +267,6 @@ public struct PippaSettings: Codable, Sendable, Equatable {
         self.localModelKey = localModelKey
     }
 
-    /// Change only the model preference (load, change, save), so other values written meanwhile stay.
-    public static func savePreference(_ preference: ModelPreference, to base: URL) throws {
-        var settings = load(from: base)
-        settings.preference = preference
-        settings.localModelKey = nil
-        try settings.save(to: base)
-    }
 
     /// Change only the kept download consent (load, change, save); nothing is written when it is already so.
     public static func saveDownloadConsent(_ key: String?, to base: URL) throws {
@@ -370,11 +340,6 @@ public final class ModelDownloader: NSObject, URLSessionDataDelegate, @unchecked
         return ModelDownloadSize(total: total, remaining: remaining, existing: found, existingSource: source)
     }
 
-    /// Finished or adoptable without download?
-    public func isAvailable(_ model: CatalogModel, existing: [String: ModelLocation]) -> Bool {
-        guard let files = model.pinned?.files, !files.isEmpty else { return false }
-        return files.allSatisfy { isInstalled($0) || existing[$0.sha256] != nil }
-    }
 
     // MARK: Adopting
 

@@ -24,7 +24,7 @@ func runTerminalAutostartChecks(binary: URL, argsLog: URL) async {
         let roots = PiInstallRoots(home: home, payload: try PiPayload(release: release, node: URL(fileURLWithPath: "/usr/bin/false")), searchPath: [])
         let port = PiInstaller.stablePort(support: roots.support)
         let entry = PiInstaller.providerEntry(models: [PiProviderModel(id: "qwen3.5-9b-q4", name: "Qwen", contextWindow: 16384)],
-                                              port: port, keyFile: roots.llamaKeyFile)
+                                              port: port, keyFile: PiInstaller.keyFile(support: roots.support))
         try fm.createDirectory(at: roots.agentDirectory, withIntermediateDirectories: true)
         try JSONSerialization.data(withJSONObject: ["providers": [PiInstaller.providerKey: entry]]).write(to: roots.modelsJSON)
         let model = home.appendingPathComponent("dev.gguf"); write("x", model)
@@ -79,7 +79,7 @@ func runTerminalAutostartChecks(binary: URL, argsLog: URL) async {
         return wrote && !again && mode == 0o600 && json["schemaVersion"] as? Int == 1 && json["provider"] as? String == "pippa-local"
             && json["port"] as? Int == plan.port && json["binary"] as? String == app.path
             && json["app"] as? String == roots.home.appendingPathComponent("Applications/Pippa.app").path
-            && json["keyFile"] as? String == roots.llamaKeyFile.path && json["idleSeconds"] as? Int == 600
+            && json["keyFile"] as? String == PiInstaller.keyFile(support: roots.support).path && json["idleSeconds"] as? Int == 600
             && json["logFile"] as? String == roots.support.appendingPathComponent("llama-server-pi.log").path
             && args == expected && args.contains("--slot-save-path") && args.joined(separator: " ").contains("--host 127.0.0.1 --port \(plan.port)")
             && !text.contains(plan.key)

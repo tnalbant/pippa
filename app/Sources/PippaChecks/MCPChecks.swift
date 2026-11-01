@@ -100,9 +100,8 @@ func runMCPChecks() async {
         let list = (await rpc(s.tools, "tools/list"))?["result"] as? [String: Any]
         let all = list?["tools"] as? [[String: Any]] ?? []
         let names = all.compactMap { $0["name"] as? String }
-        // calendar_add/reminder_add/mail_draft change something on the Mac (checked separately in R3Checks); make_chart is
-        // read-only but not a reader for draft tasks (ChartChecks).
-        let tools = all.filter { !(PippaMCPWriteTools.names + [PippaMCPFilePreparation.name, PippaMCPChart.name]).contains($0["name"] as? String ?? "") }
+        // calendar_add/reminder_add/mail_draft and prepare_files change something on the Mac.
+        let tools = all.filter { !(PippaMCPWriteTools.names + [PippaMCPFilePreparation.name]).contains($0["name"] as? String ?? "") }
         let hintsOK = tools.allSatisfy { tool in
             let a = tool["annotations"] as? [String: Any] ?? [:]
             return a["readOnlyHint"] as? Bool == true && a["destructiveHint"] as? Bool == false && a["openWorldHint"] as? Bool == false
@@ -536,28 +535,6 @@ func runMCPChecks() async {
             && safari.label(german: false) == "[In front: Safari – “Mietrecht Kaution – Beispielseite”]"
             && plain.label(german: true) == "[Im Vordergrund: TextEdit]"
             && cut.count == FrontApp.titleLimit && cut.hasSuffix("…") && !cut.contains("\n")
-            && FrontApp.ignoredBundles.contains("com.apple.finder")
-    }
-    check("Front app label: once per conversation, again only when the chip changes or comes back after the ×") {
-        let safari = FrontApp(name: "Safari", bundleID: FrontApp.safari, pid: 1, title: "Mietkaution")
-        var other = safari
-        other.title = "Nebenkosten"
-        var memo = FrontLabelMemo()
-        let first = memo.line(for: safari, conversation: "a", german: true)
-        let again = memo.line(for: safari, conversation: "a", german: true)
-        let elsewhere = memo.line(for: safari, conversation: "b", german: true)
-        let changed = memo.line(for: other, conversation: "a", german: true)
-        let removed = memo.line(for: nil, conversation: "a", german: true)
-        let back = memo.line(for: other, conversation: "a", german: true)
-        return first == safari.label(german: true) && again == nil && elsewhere != nil
-            && changed == other.label(german: true) && removed == nil && back == other.label(german: true)
-    }
-    check("Front app question: pointing words and phrases read what is open; other questions and a bare „das“ do not") {
-        let open = ["Was hältst du hiervon?", "Fass das kurz zusammen", "Worum geht es auf dieser Seite?", "Was steht da?",
-                    "Stimmt das hier?", "What do you think of this?", "Summarize the page", "tl;dr",
-                    "Antworte bitte freundlich", "Was will er in der Mail?", "Reply that I can come"]
-        let other = ["Wie wird das Wetter morgen?", "Erinnere mich um 8 an den Zahnarzt", "Was ist ein Mietspiegel?", "Hallo Pippa"]
-        return open.allSatisfy(FrontQuestion.meansOpen) && !other.contains(where: FrontQuestion.meansOpen)
     }
     await checkAsync("MCP front_read: only the chip's app; page text as untrusted data; without chip, permission or window plain text") {
         final class Box<T>: @unchecked Sendable {

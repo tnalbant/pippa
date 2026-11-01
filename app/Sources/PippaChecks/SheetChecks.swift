@@ -48,7 +48,7 @@ func runSheetChecks() async {
         return formulas.allSatisfy { formula, expected in
             let g = grid([[t("Item"), t("Amount")], [t("Rent"), n(10)], [t("Power"), n(20)], [t("Total"), f(formula, expected)]])
             let r = SheetCheck.run(g, locale: english)
-            return r.allFine && r.totals.first?.recomputed == expected && r.firstLine.text == sheet("The total adds up.")
+            return r.allFine && r.totals.first?.recomputed == expected && r.firstLine == sheet("The total adds up.")
         }
     }
     check("Sheet: a duplicate reference exposes a wrong stored total") {
@@ -60,8 +60,8 @@ func runSheetChecks() async {
         let g = grid([[t("Item"), t("Amount")], [t("Rent"), n(10)], [t("Power"), n(20)], [t("Total"), f("=SUM(B2:B100)", 999)]])
         let r = SheetCheck.run(g, locale: english)
         return r.foundTotals && !r.allFine && r.totals.first?.recomputed == nil && r.findings.map(\.kind) == [.unverified]
-            && r.firstLine.text == sheet("I couldn’t fully check this total.") && r.firstLine.pleaseCheck
-            && r.findings.first?.sentence.contains("outside") == true && noAddress(r.firstLine.text)
+            && r.firstLine == sheet("I couldn’t fully check this total.")
+            && r.findings.first?.sentence.contains("outside") == true && noAddress(r.firstLine)
     }
     check("Sheet: an error value in the total or its numbers gets no success message") {
         let rows: [[[SheetCell]]] = [
@@ -72,7 +72,7 @@ func runSheetChecks() async {
         return rows.allSatisfy { rows in
             let r = SheetCheck.run(grid(rows), locale: english)
             return !r.allFine && r.findings.map(\.kind) == [.unverified] && r.totals.first?.recomputed == nil
-                && r.firstLine.text == sheet("I couldn’t fully check this total.")
+                && r.firstLine == sheet("I couldn’t fully check this total.")
         }
     }
     check("Sheet: SUBTOTAL stays unverified without visibility data, also when it contains subtotals") {
@@ -95,7 +95,7 @@ func runSheetChecks() async {
                       [t("Total"), f("=SUM(B2:B3)", 30), f("=SUM(C2:C100)", 36)]])
         let r = SheetCheck.run(g, locale: english)
         return r.totals.count == 2 && r.totals.first?.recomputed == 30 && !r.allFine
-            && r.findings.map(\.kind) == [.unverified] && r.firstLine.text == sheet("I couldn’t fully check this total.")
+            && r.findings.map(\.kind) == [.unverified] && r.firstLine == sheet("I couldn’t fully check this total.")
     }
 
     check("Sheet: SUMME leaves out the last row; sentence names \"Wasser\" and \"Betrag\", no address") {
@@ -114,7 +114,7 @@ func runSheetChecks() async {
         let sentence = finding.sentence
         let sentenceOK = sentence.contains("Wasser") && sentence.contains("Betrag") && sentence.contains("1,110.69") && noAddress(sentence)
         let expectedOK = abs((finding.expected ?? 0) - 1110.69) < 0.001
-        let lineOK = r.firstLine.text == sheet("This total leaves out one row.") && noAddress(r.firstLine.text)
+        let lineOK = r.firstLine == sheet("This total leaves out one row.") && noAddress(r.firstLine)
         let recomputed: Double = r.totals.first?.recomputed ?? -1
         let totalOK = r.totals.first?.name == "Betrag" && abs(recomputed - 1074.19) < 0.001
         return layoutOK && cellsOK && sentenceOK && expectedOK && lineOK && totalOK
@@ -128,7 +128,7 @@ func runSheetChecks() async {
             [t("Total"), f("=SUM(B2:B4)", 1320.5)],
         ])
         let r = SheetCheck.run(g, locale: english)
-        return r.allFine && r.totals.count == 1 && r.firstLine.text == sheet("The total adds up.")
+        return r.allFine && r.totals.count == 1 && r.firstLine == sheet("The total adds up.")
     }
     check("Sheet: total starts one row too late (first row missing)") {
         let g = grid([
@@ -154,7 +154,7 @@ func runSheetChecks() async {
         guard let finding = r.findings.first, r.findings.count == 1 else { return false }
         return finding.kind == .textNumber && finding.cells == [CellRef(row: 3, column: 2)] && finding.expected == 24.5
             && finding.sentence.contains("Taxi") && finding.sentence.contains("Betrag") && noAddress(finding.sentence)
-            && r.firstLine.text == sheet("One number here is stored as text.")
+            && r.firstLine == sheet("One number here is stored as text.")
     }
     check("Sheet: typed total in the \"Total\" row does not match") {
         let g = grid([
@@ -167,7 +167,7 @@ func runSheetChecks() async {
         let r = SheetCheck.run(g, locale: english)
         guard let finding = r.findings.first, r.findings.count == 1 else { return false }
         return finding.kind == .mismatch && finding.expected == 1320 && finding.sentence.contains("1,300") && finding.sentence.contains("1,320")
-            && r.totals.first?.source == .labelledRow && r.firstLine.text == sheet("This total doesn’t match its numbers.")
+            && r.totals.first?.source == .labelledRow && r.firstLine == sheet("This total doesn’t match its numbers.")
     }
     check("Sheet: typed subtotals and grand total add up, no false report") {
         let g = grid([
@@ -181,7 +181,7 @@ func runSheetChecks() async {
             [t("Gesamt"), n(40)],
         ])
         let r = SheetCheck.run(g, locale: english)
-        return r.totals.count == 3 && r.findings.isEmpty && r.firstLine.text == sheet("The totals add up.")
+        return r.totals.count == 3 && r.findings.isEmpty && r.firstLine == sheet("The totals add up.")
     }
     check("Sheet: total along a row, no finding") {
         let g = grid([
@@ -201,12 +201,12 @@ func runSheetChecks() async {
         ])
         let r = SheetCheck.run(g, locale: english)
         let expected = L("The total for “%@” leaves out one row.", table: "Sheet", "Brutto")
-        return r.findings.map(\.kind) == [.missingRows] && r.firstLine.text == expected
+        return r.findings.map(\.kind) == [.missingRows] && r.firstLine == expected
     }
     check("Sheet: without a total: \"I didn’t find a total here.\"") {
         let g = grid([[t("Posten"), t("Betrag")], [t("Miete"), n(950)], [t("Strom"), n(84)]])
         let r = SheetCheck.run(g, locale: english)
-        return !r.foundTotals && r.findings.isEmpty && r.firstLine.text == sheet("I didn’t find a total here.")
+        return !r.foundTotals && r.findings.isEmpty && r.firstLine == sheet("I didn’t find a total here.")
     }
     check("Sheet: selection narrows down to its total") {
         let g = grid([
@@ -219,74 +219,7 @@ func runSheetChecks() async {
         return r.totals.count == 1 && r.allFine
     }
 
-    check("Sheet: \"Show me where\" draws the rows of a finding, the total marked, long sheets with a gap") {
-        let short = grid([
-            [t("Posten"), t("Betrag")],
-            [t("Miete"), n(950)],
-            [t("Strom"), n(84.2)],
-            [t("Internet"), n(39.99)],
-            [t("Wasser"), n(36.5)],
-            [t("Summe"), f("=SUMME(B2:B4)", 1074.19)],
-        ])
-        let r = SheetCheck.run(short, locale: english)
-        guard let finding = r.findings.first,
-              let e = SheetExcerpt.around(finding, in: short, layout: r.layout, locale: english) else { return false }
-        let shortOK = e.headings == ["Posten", "Betrag"] && e.numeric == [false, true] && e.rows.map(\.number) == [2, 3, 4, 5, 6]
-            && e.rows[3].cells == ["Wasser", "36.50"] && e.rows[3].marked == [false, true] && e.rows[4].marked == [false, true]
-            && e.rows[4].isTotal && !e.rows[0].gapBefore && !e.rows[1].marked[1]
-        var rows = [[t("Posten"), t("Betrag")]]
-        for i in 2...20 { rows.append([t("Posten \(i)"), n(Double(i))]) }
-        rows.append([t("Summe"), f("=SUM(B2:B19)", Double((2...19).reduce(0, +)))])
-        let long = grid(rows)
-        let lr = SheetCheck.run(long, locale: english)
-        guard let lf = lr.findings.first, let le = SheetExcerpt.around(lf, in: long, layout: lr.layout, locale: english) else { return false }
-        let longOK = le.rows.map(\.number) == [19, 20, 21] && le.rows[0].gapBefore && !le.rows[1].gapBefore
-            && le.rows.count <= SheetExcerpt.maxRows
-        return shortOK && longOK
-    }
-
     // MARK: Compare with last year
-
-    check("Sheet: last year only with two comparable columns") {
-        let years = grid([
-            [t("Posten"), n(2025), n(2026)],
-            [t("Miete"), n(900), n(950)],
-            [t("Strom"), n(70), n(84)],
-            [t("Summe"), f("=SUM(B2:B3)", 970), f("=SUM(C2:C3)", 1034)],
-        ])
-        let previous = grid([
-            [t("Posten"), t("Aktuell"), t("Vorjahr")],
-            [t("Miete"), n(950), n(900)],
-            [t("Strom"), n(84), n(70)],
-        ])
-        let single = grid([[t("Posten"), t("Betrag")], [t("Miete"), n(950)], [t("Strom"), n(84)]])
-        guard let c = SheetComparison.find(in: years), let p = SheetComparison.find(in: previous) else { return false }
-        let line = c.line(locale: english)
-        return c.currentHeading == "2026" && c.previousHeading == "2025" && c.changes.count == 2
-            && c.biggestChange?.label == "Miete" && line.contains("In total 1,034 instead of 970 (+6.6 %).")
-            && line.contains("Miete +50 (950 instead of 900)") && line.contains("Strom +14 (84 instead of 70)") && noAddress(line)
-            && SheetComparison.signed(-14, locale: english) == "−14" && SheetComparison.percent(-0.13, locale: english) == "−13 %"
-            && p.currentColumn == 2 && p.previousColumn == 3 && SheetComparison.find(in: single) == nil
-            && SheetCheck.run(years, locale: english).allFine
-    }
-
-    check("Sheet: without a pair the person picks the columns, then code compares them") {
-        let plain = grid([
-            [t("Nr."), t("Posten"), t("Alt"), t("Neu"), t("Notiz")],
-            [n(1), t("Miete"), n(900), n(950), t("Index")],
-            [n(2), t("Strom"), n(70), n(84), t("")],
-            [n(3), t("Wasser"), n(30), n(30), t("")],
-            [t(""), t("Summe"), f("=SUM(C2:C4)", 1000), f("=SUM(D2:D4)", 1064), t("")],
-        ])
-        let columns = SheetComparison.columns(in: plain)
-        guard SheetComparison.find(in: plain) == nil, columns.map(\.heading) == ["Alt", "Neu"],
-              let c = SheetComparison.make(in: plain, current: columns[1].column, previous: columns[0].column) else { return false }
-        let line = c.line(locale: english)
-        let one = grid([[t("Posten"), t("Betrag")], [t("Miete"), n(950)], [t("Strom"), n(84)]])
-        return c.changes.count == 3 && line.contains("In total 1,064 instead of 1,000 (+6.4 %).") && line.contains("Miete +50")
-            && SheetComparison.columns(in: one).isEmpty
-            && SheetComparison.make(in: plain, current: columns[0].column, previous: columns[0].column) == nil
-    }
 
     // MARK: Reading from Excel (without Excel)
 
@@ -334,34 +267,6 @@ func runSheetChecks() async {
             && IntegrationScripts.thirdPartyApps["Excel"] == ExcelScript.bundleIdentifier
             && ExcelScript.bundleIdentifier == "com.microsoft.Excel"
     }
-    await checkAsync("Excel: stand-in asks first, then delivers \"Kosten 2026\" with the omitted row \"Wasser\"") {
-        let reader = DemoSheetReader()
-        let denied = (try? await reader.selectedSheet()) == nil
-        _ = await reader.requestSheetAccess()
-        guard let snapshot = try await reader.selectedSheet() else { return false }
-        let r = SheetCheck.run(snapshot, locale: english)
-        let calling = SheetLine.calling(snapshot)
-        let findingOK = r.findings.first?.kind == .missingRows && r.findings.first?.sentence.contains("Wasser") == true
-        let callingOK = calling.contains("Kosten 2026") && calling.contains("Betrag") && !calling.contains(".xlsx") && noAddress(calling)
-        return denied && snapshot.tableName == "Kosten 2026" && findingOK && callingOK && snapshot.contextText().contains("=SUM(B2:B4)")
-    }
-    await checkAsync("Excel via the engine: sample engine asks first and then reads; check engine never touches Excel") {
-        let stub = StubEngine(delay: 0)
-        let askedFirst = await stub.sheetAccess() == .notDetermined
-        let deniedBefore = (try? await stub.selectedSheet()) == nil
-        let granted = await stub.requestSheetAccess() == .granted
-        let read = try await stub.selectedSheet()
-        // With stand-in integrations LocalEngine does not read real Excel: stand-in without a sheet, never the system prompt.
-        let local = LocalEngine(baseDirectory: dir("support-sheet"), modelEnabled: false, integrations: DemoIntegrations())
-        let localAccess = await local.sheetAccess()
-        let localSheet = try? await local.selectedSheet()
-        let given = LocalEngine(baseDirectory: dir("support-sheet-given"), modelEnabled: false, integrations: DemoIntegrations(),
-                                sheets: DemoSheetReader(granted: true))
-        let givenSheet = try await given.selectedSheet()
-        let stubOK = askedFirst && deniedBefore && granted && read?.tableName == "Kosten 2026"
-        let localOK = localAccess == .notDetermined && localSheet == nil && givenSheet?.sheet == "2026"
-        return stubOK && localOK
-    }
     check("Sheet: checking 4000 cells stays under one second") {
         var rows: [[SheetCell]] = [[t("Posten"), t("A"), t("B"), t("C")]]
         for i in 2..<1000 { rows.append([t("Zeile \(i)"), n(Double(i)), n(1), n(2)]) }
@@ -376,27 +281,6 @@ func runSheetChecks() async {
 
     // MARK: Table files (dropped .xlsx, .csv, .tsv)
 
-    check("Table file: CSV with semicolons, quotes and German numbers becomes cells; Pippa's own Excel text does not") {
-        let csv = "\u{FEFF}Posten;Betrag;Notiz\r\nMiete;\"1.200,00\";\"warm; inkl. NK\"\r\nStrom;84,20;\"sagt \"\"hallo\"\"\"\r\n\r\n"
-        guard let g = SheetFileCheck.csvGrid(csv) else { return false }
-        let cells = g.rowCount == 3 && g.columnCount == 3 && g[2, 2].value == .number(1200) && g[3, 2].value == .number(84.2)
-            && g[2, 3].value == .text("warm; inkl. NK") && g[3, 3].value == .text("sagt \"hallo\"") && g[1, 1].value == .text("Posten")
-        let tab = SheetFileCheck.csvGrid("A\tB\n1\t2", separator: "\t")?.columnCount == 2
-        let comma = SheetFileCheck.guessSeparator("a,b,c\n1;2") == ","
-        return cells && tab && comma && SheetFileCheck.csvGrid("Table: Kosten\nSheet: 2026\nRow\tA") == nil && SheetFileCheck.csvGrid(" \n") == nil
-    }
-    check("Table file: a total row that is wrong is found in code, the sum without it computed; nothing to add up, no note") {
-        let csv = "Posten;Betrag\nMiete;800\nStrom;84,20\nWasser;22,49\nSumme;884,20\n"
-        guard let g = SheetFileCheck.csvGrid(csv), let note = SheetFileCheck.note(for: [("Nebenkosten", g)], locale: english) else { return false }
-        let plain = SheetFileCheck.csvGrid("Posten;Betrag\nMiete;800\nStrom;84,20\n")!
-        let words = SheetFileCheck.csvGrid("Name;Ort\nAnna;Köln\nBen;Bonn\n")!
-        let plainNote = SheetFileCheck.note(for: [("Liste", plain)], locale: english) ?? ""
-        if !note.contains("Summe 906.69 aus 3 Zeilen") { print("  note: \(note)") }
-        return note.hasPrefix("[Pippa hat diese Tabelle") && note.contains("B5") && !note.contains("Blatt") && note.contains("Summe 906.69 aus 3 Zeilen")
-            && plainNote.contains("Summe 884.20 aus 2 Zeilen") && !plainNote.contains("Zellen:")
-            && SheetFileCheck.note(for: [("Namen", words)], locale: english) == nil
-            && SheetFileCheck.prepend(nil, to: "x") == "x" && SheetFileCheck.prepend("n", to: "x") == "n\n\nx"
-    }
     check("Table file: one column keeps its decimal commas; a table longer than Pippa reads says the sums cover only a part") {
         let single = SheetFileCheck.csvRead("Betrag\n12,50\n7,25\n")
         var long = "Posten;Betrag\n"
@@ -429,26 +313,6 @@ func runSheetChecks() async {
             && SheetFacts.isIdentifier("Kunden-Nr") && SheetFacts.isIdentifier("PLZ") && !SheetFacts.isIdentifier("Anrede") && !SheetFacts.isIdentifier("Betrag")
             && SheetFacts.isIdentifier("MwSt %") && SheetFacts.isIdentifier("Monat") && !SheetFacts.isIdentifier("Umsatz")
     }
-    check("Excel writer: the file reads back with text, numbers, formulas, umlauts and dates; Pippa's copy of a sheet keeps addresses") {
-        let day = Date(timeIntervalSince1970: 1_767_225_600) // 1 Jan 2026, 00:00 UTC
-        let rows: [[XLSXWriter.Cell]] = [
-            [.text("Posten"), .text("Betrag"), .text("Datum")],
-            [.text("Müll & <Gebühr>"), .number(84.2, format: .money), XLSXWriter.Cell(.date(day), format: .date)],
-            [.text("Summe", bold: true), XLSXWriter.Cell(.number(84.2), formula: "=SUM(B2:B2)", format: .money, bold: true), .text("prüfen", highlight: true)],
-        ]
-        let data = XLSXWriter.data([XLSXWriter.Sheet(name: "Kosten: 2026/1", rows: rows)])
-        guard let book = XLSXReader.workbook(data), let sheet = book.sheets.first else { return false }
-        let g = sheet.grid
-        let written = sheet.name == "Kosten 20261" && g[2, 1].value == .text("Müll & <Gebühr>") && g[2, 2].value == .number(84.2)
-            && g[2, 3].value == .date(day) && book.text.contains("C2: 2026-01-01") && g[3, 2].formula == "=SUM(B2:B2)" && g[3, 2].value == .number(84.2) && g[3, 3].value == .text("prüfen")
-        // A sheet read from Excel starting at C3 lands at C3 again.
-        let excerpt = SheetGrid(origin: CellRef(row: 3, column: 3), rows: [[t("Posten"), t("Betrag")], [t("Miete"), n(800)], [t("Summe"), f("=SUM(D4:D4)", 800)]])
-        guard let copy = XLSXWriter.Sheet(name: "2026", grid: excerpt), let back = XLSXReader.workbook(XLSXWriter.data([copy]))?.sheets.first?.grid else { return false }
-        let kept = back[4, 4].value == .number(800) && back[5, 4].formula == "=SUM(D4:D4)" && back[3, 3].value == .text("Posten")
-        let names = XLSXWriter.uniqueName("Kosten", in: ["kosten"]) == "Kosten 2" && XLSXWriter.sheetName("[]") == "Tabelle1"
-        if !written || !kept { print("  read back: \(book.text.prefix(400))") }
-        return written && kept && names && XLSXWriter.Sheet(name: "x", grid: SheetGrid(origin: CellRef(row: 5000, column: 1), rows: [[n(1)]])) == nil
-    }
     check("Table file: Excel cells keep numbers, text numbers and formulas for the check; a total leaving out a row is found") {
         let sheetXML = #"<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Posten</t></is></c><c r="B1" t="inlineStr"><is><t>Betrag</t></is></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>Miete</t></is></c><c r="B2"><v>800</v></c></row><row r="3"><c r="A3" t="inlineStr"><is><t>Strom</t></is></c><c r="B3" t="inlineStr"><is><t>84,20</t></is></c></row><row r="4"><c r="A4" t="inlineStr"><is><t>Wasser</t></is></c><c r="B4"><v>22.5</v></c></row><row r="5"><c r="A5" t="inlineStr"><is><t>Summe</t></is></c><c r="B5"><f>SUM(B2:B3)</f><v>800</v></c></row></sheetData></worksheet>"#
         var zip = ZipWriter()
@@ -477,13 +341,9 @@ func runSheetChecks() async {
         return first == again && first != other && first.lastPathComponent == "Haushalt 2026.xlsx" && first.path.contains("/Caches/")
             && first.deletingLastPathComponent() != file.deletingLastPathComponent()
     }
-    check("Table file: only readable tables get the check button; Numbers (without Numbers), .xls and .ods get a sentence instead") {
-        func place(_ name: String) -> PippaSkill.Place? {
-            let url = URL(fileURLWithPath: "/x/" + name)
-            return PippaSkill.place(for: DropKind.guess(for: url), fileExtension: url.pathExtension)
-        }
-        return place("Haushalt.xlsx") == .tabelle && place("Liste.csv") == .tabelle && place("Haushalt.numbers") == (NumbersExport.isInstalled ? PippaSkill.Place.tabelle : nil)
-            && place("Alt.xls") == nil && place("Libre.ods") == nil
-            && SheetFileCheck.unreadableNote(fileExtension: "Numbers")?.contains(".xlsx") == true && SheetFileCheck.unreadableNote(fileExtension: "pdf") == nil
-    }
+}
+
+private extension SheetCheckResult {
+    /// Totals found and everything is correct.
+    var allFine: Bool { !totals.isEmpty && findings.isEmpty && totals.allSatisfy { $0.recomputed != nil && $0.value != nil } }
 }

@@ -30,85 +30,15 @@ SOURCES = ROOT / "app" / "Sources"
 
 # Funktion -> (Modulordner, Ressourcenordner, Tabellen)
 MODULES = {
-    "L": ("PippaCore", SOURCES / "PippaCore" / "Resources", ("Core", "Analysis", "Skills", "Tools", "TrayCore", "Letter", "Lookup", "Sheet", "Calendar", "Thought", "Setup", "MCP", "FilePreparation")),
+    "L": ("PippaCore", SOURCES / "PippaCore" / "Resources", ("Core", "Analysis", "Tools", "TrayCore", "Sheet", "Calendar", "Thought", "Setup", "MCP", "FilePreparation")),
     "T": ("Pippa", SOURCES / "Pippa" / "Localization", ("App", "Views", "Settings", "CalendarUI")),
 }
 LANGUAGES = ("en", "de")
 
 # Keys looked up through a variable instead of a literal L/T call, per (module, table). They
-# are not reported as unused. Thought: WorkStepPhrase.Describer.l(…) and fileTitle(…).
-# When such a phrase goes away, remove it here too (an entry that is no longer in its table
-# is an error).
-DYNAMIC_KEYS: dict[tuple[str, str], frozenset[str]] = {
-    ("PippaCore", "Thought"): frozenset({
-        "%lld items",
-        "%lld matches",
-        "1 item",
-        "1 match",
-        "Adding a calendar entry",
-        "Adding a reminder",
-        "Changing %@",
-        "Changing a file",
-        "Copying files",
-        "Creating a folder",
-        "Drawing a chart",
-        "Going through your documents",
-        "Looking %@",
-        "Looking at your reminders",
-        "Looking for %@ files %@",
-        "Looking for files %@",
-        "Looking for files with %@ in the name %@",
-        "Looking for folders %@",
-        "Looking for folders with %@ in the name %@",
-        "Looking in your calendar",
-        "Looking in your contacts",
-        "Looking in your mail",
-        "Looking in your notes",
-        "Moving files",
-        "Reading %lld files",
-        "Reading a document",
-        "Opening the mail",
-        "Reading a file",
-        "Reading a web page",
-        "Reading the selected mail",
-        "Remembering that",
-        "Remembering the steps",
-        "Searching Spotlight for %@",
-        "Searching Spotlight for %@ %@",
-        "Searching for %@",
-        "Searching for %@ %@",
-        "Searching online",
-        "Searching online for %@",
-        "Searching through text",
-        "Searching through text %@",
-        "Searching with Spotlight",
-        "Searching your mail",
-        "Searching your photos",
-        "Taking a closer look at files",
-        "Using %@",
-        "Working on your Mac",
-        "Writing %@",
-        "Writing a file",
-        "Writing a mail draft",
-        "didn’t work",
-        "empty",
-        "file not found",
-        "folder not found",
-        "in Downloads",
-        "in the file %@",
-        "in the folder %@",
-        "in your Documents",
-        "in your Pictures",
-        "in your home folder",
-        "many matches",
-        "no access",
-        "nothing found",
-        "on an external drive",
-        "on your Desktop",
-        "on your Mac",
-        "“%@”",
-    }),
-}
+# are not reported as unused. When such a key goes away, remove it here too (an entry that is
+# no longer in its table is an error).
+DYNAMIC_KEYS: dict[tuple[str, str], frozenset[str]] = {}
 
 CALL = re.compile(r'(?<![A-Za-z0-9_.])(L|T)\(')
 PLACEHOLDER = re.compile(

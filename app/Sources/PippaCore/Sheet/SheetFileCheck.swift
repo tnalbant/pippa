@@ -5,14 +5,6 @@ import Foundation
 // model explains what code found and computed instead of adding up numbers itself. Plain code, no model.
 
 public enum SheetFileCheck {
-    /// Table formats Pippa reads as cells. Others (.numbers, .xls, .ods) get a sentence instead (`unreadableNote`).
-    public static let readableExtensions: Set<String> = ["xlsx", "xlsm", "csv", "tsv"]
-    /// Can Pippa read this table? The formats above, and Numbers files when Numbers is installed (`NumbersExport`
-    /// saves an Excel copy first).
-    public static func isReadable(fileExtension: String) -> Bool {
-        let ext = fileExtension.lowercased()
-        return readableExtensions.contains(ext) || (ext == "numbers" && NumbersExport.isInstalled)
-    }
     /// Spreadsheet formats Pippa cannot read yet.
     public static let unreadableExtensions: Set<String> = ["numbers", "xls", "ods"]
     /// At most this many findings per sheet in the note; the cells follow anyway.
@@ -36,7 +28,7 @@ public enum SheetFileCheck {
             guard checked || !facts.isEmpty else { continue }
             if sheets.count > 1 { lines.append("Blatt „\(sheet.name)“:") }
             if checked {
-                lines.append(result.firstLine.text)
+                lines.append(result.firstLine)
                 for finding in result.findings.prefix(findingLimit) {
                     let cells = finding.addresses.isEmpty ? "" : " (Zellen: \(finding.addresses.joined(separator: ", ")))"
                     lines.append("- " + finding.sentence + cells)
@@ -60,14 +52,6 @@ public enum SheetFileCheck {
     public static func unreadableNote(fileExtension: String) -> String? {
         guard unreadableExtensions.contains(fileExtension.lowercased()) else { return nil }
         return "Pippa cannot read this spreadsheet format yet. Tell the person in one sentence: save it as an Excel file (.xlsx) and show it again (in Numbers: File > Export To > Excel). Do not guess its content."
-    }
-
-    /// A CSV or TSV as cells: separator from the first line (tab, semicolon or comma, outside quotes),
-    /// quoted fields with doubled quotes, numbers as numbers (German or English style), the rest as text.
-    /// Nil for an empty text and for the table text Pippa writes itself from Excel (`SheetSnapshot.contextText`):
-    /// that sheet was already checked.
-    public static func csvGrid(_ text: String, separator forced: Character? = nil) -> SheetGrid? {
-        csvRead(text, separator: forced)?.grid
     }
 
     /// `csvGrid`, and whether the cell budget cut the table short.

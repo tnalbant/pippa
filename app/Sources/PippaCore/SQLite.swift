@@ -82,7 +82,4 @@ extension SQLiteDB.Value {
     var int: Int64? {
         switch self { case .int(let v): v; case .real(let v): Int64(v); default: nil }
     }
-    var double: Double? {
-        switch self { case .real(let v): v; case .int(let v): Double(v); default: nil }
-    }
 }

@@ -38,30 +38,14 @@
 "It’s on a different drive." = "It’s on a different drive.";
 "There’s no space left." = "There’s no space left.";
 "That didn’t work just now." = "That didn’t work just now.";
-"1 file tidied" = "1 file tidied";
-"%lld files tidied" = "%lld files tidied";
-"It’s outside the folder, so it stays where it is." = "It’s outside the folder, so it stays where it is.";
-"It changed since the preview, so it stays where it is." = "It changed since the preview, so it stays where it is.";
-"It’s only in the cloud, and I don’t download anything." = "It’s only in the cloud, and I don’t download anything.";
-"It’s on a different drive. I can’t move it there yet." = "It’s on a different drive. I can’t move it there yet.";
 "In 1 folder" = "In 1 folder";
 "In %lld folders" = "In %lld folders";
 "1 stays put" = "1 stays put";
 "%lld stay put" = "%lld stay put";
 "Nothing changed" = "Nothing changed";
-"It’s outside the folder." = "It’s outside the folder.";
-"There’s a file where the folder should be." = "There’s a file where the folder should be.";
-"I couldn’t create the folder “%@”. %@" = "I couldn’t create the folder “%@”. %@";
 "The file has changed since then, so it stays." = "The file has changed since then, so it stays.";
 "Something else is in the old place now." = "Something else is in the old place now.";
 "Something else is in it now, so the folder stays." = "Something else is in it now, so the folder stays.";
-"The reminder is gone again." = "The reminder is gone again.";
-"The event is gone again." = "The event is gone again.";
-"Interrupted: tidying “%@”" = "Interrupted: tidying “%@”";
-"1 file already done" = "1 file already done";
-"%lld files already done" = "%lld files already done";
-"New file: %@" = "New file: %@";
-"interrupted" = "interrupted";
 "Development" = "Development";
 "That didn’t work just now. Please try again. If it keeps happening, choose “Report a Problem…” in the Help menu." = "That didn’t work just now. Please try again. If it keeps happening, choose “Report a Problem…” in the Help menu.";
 "%@ Check the folder or the free space and try again." = "%@ Check the folder or the free space and try again.";
@@ -71,80 +55,6 @@
 "The answer didn’t come through just now. Please try again in a moment." = "The answer didn’t come through just now. Please try again in a moment.";
 "The request was turned down. Please check the online AI and address under Settings › Online AI." = "The request was turned down. Please check the online AI and address under Settings › Online AI.";
 "The online AI you chose didn’t let me in. Please check the key under Settings › Online AI." = "The online AI you chose didn’t let me in. Please check the key under Settings › Online AI.";
-"Sample answer: Here you can ask Pippa a question or attach files for context. In the finished app, Pippa answers right here on your Mac." = "Sample answer: Here you can ask Pippa a question or attach files for context. In the finished app, Pippa answers right here on your Mac.";
-"Sender" = "Sender";
-"Date" = "Date";
-"Amount" = "Amount";
-"Deadline" = "Deadline";
-"Subject" = "Subject";
-"Period" = "Period";
-"%@ · 1 page" = "%@ · 1 page";
-"%@ · %lld pages" = "%@ · %lld pages";
-"%@ · 1 attachment" = "%@ · 1 attachment";
-"%@ · %lld attachments" = "%@ · %lld attachments";
-"From %@" = "From %@";
-"Text" = "Text";
-"%lld characters" = "%lld characters";
-"Selection" = "Selection";
-"%lld files" = "%lld files";
-"Sender and invoice date on page 1" = "Sender and invoice date on page 1";
-"Date taken, from the photo’s details" = "Date taken, from the photo’s details";
-"Heading “%@”, signed on %@" = "Heading “%@”, signed on %@";
-"Letterhead and invoice date %@" = "Letterhead and invoice date %@";
-"Recognized: practice name and date" = "Recognized: practice name and date";
-"No signature, so it’s a draft" = "No signature, so it’s a draft";
-"Nothing to go by" = "Nothing to go by";
-"Sender and date on page 1" = "Sender and date on page 1";
-"Subject “%@”" = "Subject “%@”";
-"Heading on page 1" = "Heading on page 1";
-"New folder" = "New folder";
-"I can’t make out any text. I won’t guess, so the file stays where it is." = "I can’t make out any text. I won’t guess, so the file stays where it is.";
-"Reading this one took too long. It stays where it is for now." = "Reading this one took too long. It stays where it is for now.";
-"Added to Reminders" = "Added to Reminders";
-"Added to Calendar" = "Added to Calendar";
-"I don’t have anything suitable for this Mac right now." = "I don’t have anything suitable for this Mac right now.";
-"Part of the app is missing. Please open Pippa from the Applications folder." = "Part of the app is missing. Please open Pippa from the Applications folder.";
-"Linked files weren’t searched." = "Linked files weren’t searched.";
-"Deeper subfolders weren’t searched." = "Deeper subfolders weren’t searched.";
-"Some folders couldn’t be read." = "Some folders couldn’t be read.";
-"At most %lld files were included." = "At most %lld files were included.";
-"1 word" = "1 word";
-"%lld words" = "%lld words";
-"I haven’t opened the link. Nothing has left this Mac." = "I haven’t opened the link. Nothing has left this Mac.";
-"1 file" = "1 file";
-"No readable text" = "No readable text";
-"Only in the cloud" = "Only in the cloud";
-"Photo" = "Photo";
-"Note" = "Note";
-"Protected, so I can’t look inside." = "Protected, so I can’t look inside.";
-"%@ · and %lld more" = "%@ · and %lld more";
-"It’s only a link, so it stays where it is." = "It’s only a link, so it stays where it is.";
-"Image without camera details, no receipt recognized" = "Image without camera details, no receipt recognized";
-"Protected. I can’t look inside, so the file stays where it is." = "Protected. I can’t look inside, so the file stays where it is.";
-"sender" = "sender";
-"invoice date" = "invoice date";
-"date" = "date";
-"heading “%@”" = "heading “%@”";
-" and " = " and ";
-"Recognized: %@" = "Recognized: %@";
-"Suggested from the content" = "Suggested from the content";
-"%@ in the pages read" = "%@ in the pages read";
-"%@ (text read from the image)" = "%@ (text read from the image)";
-"%@, marked as a draft" = "%@, marked as a draft";
-"Not sorted yet" = "Not sorted yet";
-"%@. The kind of document isn’t confirmed by its text" = "%@. The kind of document isn’t confirmed by its text";
-"Event" = "Event";
-"Reminder" = "Reminder";
-"Entry" = "Entry";
-"changed in the meantime" = "changed in the meantime";
-"It has changed since then, so it stays." = "It has changed since then, so it stays.";
-"The conversation history couldn’t be read. The saved file is kept." = "The conversation history couldn’t be read. The saved file is kept.";
-"This conversation history comes from a newer version of Pippa. The saved file is kept." = "This conversation history comes from a newer version of Pippa. The saved file is kept.";
-"I can’t find this conversation anymore." = "I can’t find this conversation anymore.";
-"The conversation history was changed outside this window. Please open Pippa again." = "The conversation history was changed outside this window. Please open Pippa again.";
-"New Conversation" = "New Conversation";
-"With this context, you can attach at most %lld files." = "With this context, you can attach at most %lld files.";
-"That isn’t possible here right now." = "That isn’t possible here right now.";
 "Pippa needs a Mac with Apple silicon (M1 or later)." = "Pippa needs a Mac with Apple silicon (M1 or later).";
 "%.1f GB" = "%.1f GB";
 "a few minutes" = "a few minutes";
@@ -168,34 +78,7 @@
 "Please enter a valid model ID." = "Please enter a valid model ID.";
 "The context size must be between 4,096 and 1,048,576." = "The context size must be between 4,096 and 1,048,576.";
 
-
-
-"This draft can no longer be changed or opened again. Start a new draft to try again." = "This draft can no longer be changed or opened again. Start a new draft to try again.";
-
-
 "On {date}, {sender} wrote:" = "On {date}, {sender} wrote:";
-
-"Whether the details match therefore remains open." = "Whether the details match therefore remains open.";
-
-"Open:" = "Open:";
-
-"I can’t confirm that from the sources I read." = "I can’t confirm that from the sources I read.";
-
-"please check: not in this source" = "please check: not in this source";
-
-"please check: not in the sources I read" = "please check: not in the sources I read";
-
-"%@ (source %lld)" = "%@ (source %lld)";
-
-"I could read only part of “%@”; the rest is unknown." = "I could read only part of “%@”; the rest is unknown.";
-
-"I couldn’t read any text in “%@”." = "I couldn’t read any text in “%@”.";
-
-"Of “%@” I know only the names, not the contents." = "Of “%@” I know only the names, not the contents.";
-
-"“%@” is not available, so I couldn’t read it." = "“%@” is not available, so I couldn’t read it.";
-
-"I looked only at excerpts of “%@” for this answer; anything else in it is unchecked." = "I looked only at excerpts of “%@” for this answer; anything else in it is unchecked.";
 
 /* R10: eigener Online-Dienst und KI-Wahl im RPC-Weg */
 "I didn’t ask %@. Nothing left your Mac." = "I didn’t ask %@. Nothing left your Mac.";
@@ -204,15 +87,4 @@
 "It’s no longer in the Trash." = "It’s no longer in the Trash.";
 "Photos" = "Photos";
 
-/* What Pippa may (MacPermissions.swift) */
-"Notes" = "Notes";
-"When you connect a drive, your Mac asks the first time Pippa opens it." = "When you connect a drive, your Mac asks the first time Pippa opens it.";
-
-/* Undo of a conversation's file changes (AgentChange.swift, Executor.recordAgentChanges) */
-"Changed “%@”" = "Changed “%@”";
-"%lld files changed" = "%lld files changed";
-"In the conversation" = "In the conversation";
 "The old version is no longer there." = "The old version is no longer there.";
-
-/* Missing source evidence on the Pi RPC path */
-"I couldn’t read the files needed for this answer: %@. Ask me to read the relevant file." = "I couldn’t read the files needed for this answer: %@. Ask me to read the relevant file.";

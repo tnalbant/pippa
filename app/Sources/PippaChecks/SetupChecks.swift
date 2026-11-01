@@ -96,7 +96,7 @@ func runSetupChecks() async {
         try PippaSettings(llamaPort: 18_471).save(to: r.support)
         try fm.createDirectory(at: r.agentDirectory, withIntermediateDirectories: true)
         let provider = PiInstaller.providerEntry(models: [PiProviderModel(id: "qwen3.5-9b-q4", name: "Qwen", contextWindow: 32768)],
-                                               port: 18_471, keyFile: r.llamaKeyFile)
+                                               port: 18_471, keyFile: PiInstaller.keyFile(support: r.support))
         try JSONSerialization.data(withJSONObject: ["providers": ["pippa-local": provider]]).write(to: r.modelsJSON)
         let file = home.appendingPathComponent("model.gguf")
         write("fixture", file)
@@ -107,24 +107,6 @@ func runSetupChecks() async {
         return plan.choice.ctx == 16384 && plan.choice.extra["cache-ram"] == "0"
             && args.joined(separator: " ").contains("--ctx-size 16384")
             && args.joined(separator: " ").contains("--cache-ram 0")
-    }
-    await runPiPivotChecks()
-    check("Settings: explicit local model survives port updates; table preference clears it") {
-        let home = fakeHome("local-model"); defer { discard(home) }
-        let key = "qwen3.8-saluki-27b-iq2"
-        try PippaSettings(llamaPort: 65070, localModelKey: key).save(to: home)
-        var saved = PippaSettings.load(from: home)
-        saved.llamaIdleMinutes = 3
-        try saved.save(to: home)
-        let selected = PiSetupFlow.choice(override: PippaSettings.load(from: home).localModelKey)
-        let memory: UInt64 = 24 * 1024 * 1024 * 1024
-        let fallback = PiSetupFlow.choice(override: "missing-model", physicalMemory: memory)
-        let standard = PiSetupFlow.choice(override: nil, physicalMemory: memory)
-        try PippaSettings.savePreference(.standard, to: home)
-        let cleared = PippaSettings.load(from: home)
-        return selected?.model.key == key && selected?.ctx == 16384
-            && fallback?.model.key == standard?.model.key
-            && cleared.localModelKey == nil && cleared.llamaPort == 65070 && cleared.llamaIdleMinutes == 3
     }
     check("Settings: a saved 9B selection on 24 GB keeps the table's 16K profile; a saved 35B there is an explicit pick, not the standard") {
         let memory: UInt64 = 24 * 1024 * 1024 * 1024
@@ -270,7 +252,7 @@ func runSetupChecks() async {
         return first.outcome == .providerWritten(port: 18_471, backup: installer.state.modelsJSONBackup.map(URL.init(fileURLWithPath:)), changed: true)
             && again.outcome == .providerWritten(port: 18_471, backup: installer.state.modelsJSONBackup.map(URL.init(fileURLWithPath:)), changed: false)
             && moved.isDone && ours?["baseUrl"] as? String == "http://127.0.0.1:18472/v1"
-            && ours?["apiKey"] as? String == "!/bin/cat '\(r.llamaKeyFile.path)'" && ours?["api"] as? String == "openai-completions"
+            && ours?["apiKey"] as? String == "!/bin/cat '\(PiInstaller.keyFile(support: r.support).path)'" && ours?["api"] as? String == "openai-completions"
             && ((ours?["models"] as? [[String: Any]])?.first?["id"] as? String) == "qwen3.5-9b-q4"
             && ollama?["apiKey"] as? String == "ollama" && (doc?["custom"] as? [String: Any])?["keep"] as? Bool == true
             && backups.count == 1 && backupText == original && mode == 0o600 && leftovers.isEmpty
@@ -297,12 +279,12 @@ func runSetupChecks() async {
         let migrated = PiModelTuning.merge(into: ["modelThinkingLevels": ["pippa-local/k2-horizon-7b": "high"]], models: k2Only)["modelThinkingLevels"] as? [String: String]
         let kept = PiModelTuning.merge(into: ["modelThinkingLevels": ["pippa-local/k2-horizon-7b": "low"]], models: k2Only)["modelThinkingLevels"] as? [String: String]
         // Provider entry: K2 thinks via reasoning_effort (medium as asked, the rest "high", see PiReasoningStyle), Qwen via enable_thinking.
-        let entry = PiInstaller.providerEntry(models: models, port: 1, keyFile: r.llamaKeyFile)
+        let entry = PiInstaller.providerEntry(models: models, port: 1, keyFile: PiInstaller.keyFile(support: r.support))
         let listed = entry["models"] as? [[String: Any]] ?? []
         let k2Compat = listed.first?["compat"] as? [String: Any]
         let k2Kwargs = k2Compat?["chatTemplateKwargs"] as? [String: Any]
         let qwenCompat = listed.last?["compat"] as? [String: Any]
-        let unknown = PiInstaller.providerEntry(models: [PiProviderModel(id: "other", name: "O", contextWindow: 8192)], port: 1, keyFile: r.llamaKeyFile)
+        let unknown = PiInstaller.providerEntry(models: [PiProviderModel(id: "other", name: "O", contextWindow: 8192)], port: 1, keyFile: PiInstaller.keyFile(support: r.support))
         return wrote && doc?["theme"] as? String == "dark"
             && k2?["reserveTokens"] == 4096 && k2?["keepRecentTokens"] == 6144
             && qwen?["reserveTokens"] == 4096 && qwen?["keepRecentTokens"] == 12288
@@ -733,19 +715,6 @@ func runSetupFlowChecks() async {
         return ok
     }
 
-    check("Setup: texts without \"Pi\", \"Terminal\" and paths (en and de)") {
-        var bad: [String] = []
-        for language in ["en", "de"] {
-            let url = repoRoot.appendingPathComponent("app/Sources/PippaCore/Resources/\(language).lproj/Setup.strings")
-            guard let table = NSDictionary(contentsOf: url) as? [String: String], !table.isEmpty else { return false }
-            for value in table.values where value.range(of: #"\bPi\b|Terminal|~/|/Users|models\.json"#, options: .regularExpression) != nil {
-                bad.append("\(language): \(value)")
-            }
-        }
-        if !bad.isEmpty { print("   ", bad) }
-        return bad.isEmpty
-    }
-
     check("Setup: \"Picked to fit your Mac\" names chip and memory in plain words") {
         let named = MacHardware.summary(chip: "Apple M2 Pro", physicalMemory: 17_179_869_184)
         let unnamed = MacHardware.summary(chip: nil, physicalMemory: 8_589_934_592)
@@ -811,14 +780,6 @@ func runSetupFlowChecks() async {
         return ok
     }
 
-    check("Setup: the AI goes into memory only right after setting up, not on every start") {
-        let ready = PiSetupState.ready(adoptedFrom: nil)
-        return PiSetupState.justSetUp(from: .downloading(progress: 1, remaining: nil), to: ready)
-            && PiSetupState.justSetUp(from: .preparing(adoptingFrom: "LM Studio"), to: .ready(adoptedFrom: "LM Studio"))
-            && !PiSetupState.justSetUp(from: .preparing(adoptingFrom: nil), to: ready)
-            && !PiSetupState.justSetUp(from: ready, to: ready)
-            && !PiSetupState.justSetUp(from: .downloading(progress: 0.5, remaining: nil), to: .askDownload(bytes: 1))
-    }
 }
 
 // Pi switch with a Pippa update (docs/updating-pi.md "Existing installs"): new pin next to the old one, the

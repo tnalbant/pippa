@@ -42,6 +42,13 @@ public enum ModelConnectionTest {
         }
     }
 
+    /// "Test connection": validate, require a key for online services, then send the fixed sentence.
+    public static func check(_ connection: ModelConnection, apiKey: String) async throws {
+        try connection.validated()
+        guard connection.isLocal || !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw InferenceError.missingCredential }
+        try await run(connection, apiKey: apiKey)
+    }
+
     public static func run(_ connection: ModelConnection, apiKey: String, session: URLSession = .shared) async throws {
         let request = try request(connection, apiKey: apiKey)
         let response: URLResponse

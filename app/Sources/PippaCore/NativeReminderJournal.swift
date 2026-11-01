@@ -40,8 +40,6 @@ public struct NativeReminderRecord: Sendable, Equatable, Codable {
     public var finalReceipt: PippaMCPWriteReceipt?
 
     public var marker: URL { URL(string: "pippa://operation/" + id.uuidString.lowercased())! }
-    public var undoSafe: Bool { phase == .completed && !recovered && result?.item.fingerprint != nil }
-    public var isUnresolved: Bool { [.planned, .prepared, .dispatched, .uncertain].contains(phase) }
     public var receipt: PippaMCPWriteReceipt {
         var receipt = finalReceipt ?? .init(action: "reminderAdd", outcome: phase == .completed ? "done" : phase == .notDispatched ? "cancelled" : "unclear",
                                             name: label, reason: phase == .notDispatched ? "stopped" : phase == .completed ? nil : "unconfirmed")

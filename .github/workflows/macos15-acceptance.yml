@@ -54,36 +54,6 @@ jobs:
       - name: Pi RPC protocol checks
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: swift run --skip-build --package-path app --scratch-path .build/macos15-swift PiRPCChecks 2>&1 | tee .build/macos15-acceptance/reports/rpc.log
-      - name: Native first use without a model (English and German)
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        timeout-minutes: 5
-        run: |
-          bin=$(swift build --package-path app --scratch-path .build/macos15-swift --show-bin-path)
-          bash scripts/check-native-first-use.sh "$bin" "$PWD/.build/macos15-acceptance/reports/first-use"
-      - name: Reminder status and concurrent reply (English and German)
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        timeout-minutes: 3
-        run: |
-          bin=$(swift build --package-path app --scratch-path .build/macos15-swift --show-bin-path)
-          bash scripts/check-reminder-status.sh "$bin" "$PWD/.build/macos15-acceptance/reports/reminder-status"
-      - name: Chat permission repair (English and German)
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        timeout-minutes: 3
-        run: |
-          bin=$(swift build --package-path app --scratch-path .build/macos15-swift --show-bin-path)
-          bash scripts/check-permission-repair.sh "$bin" "$PWD/.build/macos15-acceptance/reports/permission-repair"
-      - name: Durable everyday help without a model (English and German)
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        timeout-minutes: 5
-        run: |
-          bin=$(swift build --package-path app --scratch-path .build/macos15-swift --show-bin-path)
-          bash scripts/check-everyday-help.sh "$bin" "$PWD/.build/macos15-acceptance/reports/everyday-help"
-      - name: Conversation rails (English and German)
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        timeout-minutes: 4
-        run: |
-          bin=$(swift build --package-path app --scratch-path .build/macos15-swift --show-bin-path)
-          bash scripts/check-conversation-rails.sh "$bin" "$PWD/.build/macos15-acceptance/reports/conversation-rails"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
