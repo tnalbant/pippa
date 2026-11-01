@@ -42,6 +42,10 @@ Dropped: `applescript`, `pippa_more_tools` and tool-scope, `save_skill`, `make_c
 
 ## Open
 
+- UI polish, first pass done (867173e): Markdown blocks, folded steps, live thinking, date-grouped sidebar with
+  search, new composer and empty state. `Pippa --snapshot <folder>` renders sample states. Next: settings layout,
+  card views, onboarding text.
+
 - Undo for calendar entries and reminders in the receipt row (the old app had it).
 - Mail and Calendar acceptance needs a signed build or the person's clicks: a re-signed dev copy asks macOS again.
 - Model candidate: Ornith-1.5-9B (MLX, 4-bit) runs at 25–30 tokens/s in Pi on a 24 GB Mac and leaves it usable.
