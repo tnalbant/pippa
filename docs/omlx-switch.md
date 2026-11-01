@@ -61,3 +61,8 @@ Ornith alone in memory, M-series Mac, headless `Pippa --ask`, each run starting 
 Generation 12.6–18.4 tok/s; prefill dominates once tool results land (prompt up to 23K tokens).
 Fixed on the way: the server log was emptied on every start; the persona now says how to treat relative deadlines and
 that Pippa cannot pay or post letters.
+
+Comparison on the letter deadline, same build and persona: `mlx-community/Qwen3.5-9B-MLX-4bit` (revision 938d891) on
+the same oMLX also computes an objection date in three of three runs (19, 17 and 27 November), at 8.8–13.4 tok/s, and
+once failed to open the PDF (249 s). The earlier Qwen pass on llama.cpp was not reproducible. Switching back to Qwen does
+not fix it; Ornith stays.
