@@ -176,6 +176,9 @@ final class PiSession {
             }.value
         } catch { throw Failure.setup(error.localizedDescription) }
         if let localServer, localPlan == plan { return localServer }
+        // Pi in the terminal starts the same server from this file when the app isn't running.
+        let launchSupport = target.roots.support
+        Task.detached { _ = try? PiLocalServer.publishLaunchFile(plan, support: launchSupport) }
         if let old = localServer { await old.stop() }
         let server = PiLocalServer.server(plan, logDirectory: support)
         localServer = server; localPlan = plan

@@ -19,15 +19,23 @@ Dropped: `applescript`, `pippa_more_tools` and tool-scope, `save_skill`, `make_c
 ## Steps
 
 - [x] Audit and plan
-- [ ] Runtime tools: fact-shaped results (sorted, full timestamps, at most 20, newest marked), `read` returns document
+- [x] Runtime tools: fact-shaped results (sorted, full timestamps, at most 20, newest marked), `read` returns document
       text, drop the tools above, tests updated
-- [ ] MCP: drop chart and form fill, `structuredContent` on card tools, tool list trimmed
-- [ ] PiRPC: `toolEnded` carries the structured result
-- [ ] Launch: short system prompt (under 300 tokens), fixed tool list, no keyword routing
-- [ ] New app target: menu bar, hotkey, pill, chat window with sidebar (Pi sessions), composer with file drop and
+- [x] MCP: chart and form fill dropped, tool list trimmed (cards come from the in-process server's read and write notes,
+      so no `structuredContent` is needed)
+- [x] PiRPC: action policy removed; native readiness checks the trimmed list
+- [x] Launch: short system prompt (under 300 tokens), fixed tool list, no keyword routing
+- [x] New app target: menu bar, hotkey, pill, chat window with sidebar (Pi sessions), composer with file drop and
       front-app chip, cards, stop, permissions on demand
-- [ ] First run: one card (download for this Mac, or online AI); settings: AI, permissions, updates
-- [ ] Delete old UI, routers, LocalEngine, SourceFidelity sentence removal, snapshot harness, old checks
+- [x] First run: one card (download for this Mac, or online AI); settings: AI, permissions, updates
+- [x] Delete old UI, routers, LocalEngine, SourceFidelity sentence removal, snapshot harness, old checks
 - [ ] Checks: behavior only; CI split (fast PR gate)
 - [ ] Docs: development.md, README; one ROADMAP; measurements archived
 - [ ] Acceptance: the five tasks in the plan
+
+## Open
+
+- Undo for calendar entries and reminders in the receipt row (the old app had it).
+- Mail and Calendar acceptance needs a signed build or the person's clicks: a re-signed dev copy asks macOS again.
+- Model candidate: Ornith-1.5-9B (MLX, 4-bit) runs at 25–30 tokens/s in Pi on a 24 GB Mac and leaves it usable.
+  Pippa only talks to Pi, so trying it is a provider entry in models.json plus an MLX server instead of llama-server.
