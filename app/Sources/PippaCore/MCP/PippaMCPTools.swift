@@ -42,6 +42,8 @@ public struct PippaMCPHost: Sendable {
     public var filePreparationStore: DurableJobStore?
     /// The app in front at the call, as the chip shows it for the running answer (`front_read`). `nil`: no chip.
     public var shownFront: @Sendable () -> FrontApp? = { FrontAppStage.shared.current }
+    /// Where read mails and their attachments are saved as files (`MailFiling`); checks use their own folder.
+    public var mailFiles: URL = MailFiling.inbox
     /// Reads that app (Safari, Chrome, the front document); Mail and Excel go through their own readers.
     public var front: any FrontAppReading = SystemFrontApp()
 
@@ -135,7 +137,7 @@ public struct PippaMCPTools: Sendable {
     public static let protocolVersions = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
     public static let maxResultBytes = 8000
     /// The selected mail and Excel selection are read through `front_read` with that app's chip (same readers, same receipts).
-    public static let toolNames = ["calendar_read", "reminders_read", "mail_search", "photos_search", "front_read"]
+    public static let toolNames = ["calendar_read", "reminders_read", "mail_search", "mail_read", "photos_search", "front_read"]
         + PippaMCPTurnTools.names
         + PippaMCPWriteTools.names
         + [PippaMCPFilePreparation.name]
@@ -291,6 +293,9 @@ public struct PippaMCPTools: Sendable {
             tool("mail_search", "Mail suchen",
                  "Inbox, newest first. query=word in subject/sender; omit=newest; unread=true only unread.",
                  ["query": string, "unread": ["type": "boolean"], "limit": integer]),
+            tool("mail_read", "Mail öffnen",
+                 "Whole inbox email from mail_search: subject exact, from=its sender; attachments saved for read_document.",
+                 ["subject": string, "from": string], required: ["subject"]),
             tool("photos_search", "Fotos suchen",
                  "query=one Mac-language word; omit=newest; days=last N (no query).",
                  ["query": string, "days": integer, "limit": integer]),
@@ -305,7 +310,7 @@ public struct PippaMCPTools: Sendable {
     /// Each reader accepts only its own declared fields and types. An invalid optional filter must never become
     /// an omitted filter: `photos_search(query: 123)` must not fall through to reading the newest pictures.
     struct ToolInput: Sendable {
-        var period: String?, start: String?, end: String?, query: String?
+        var period: String?, start: String?, end: String?, query: String?, subject: String?, from: String?
         var days: Int?, limit: Int?
         var unread: Bool?
         var unknown: [String]
@@ -313,6 +318,7 @@ public struct PippaMCPTools: Sendable {
             "calendar_read": ["period", "days", "start", "end"],
             "reminders_read": ["days"],
             "mail_search": ["query", "unread", "limit"],
+            "mail_read": ["subject", "from"],
             "photos_search": ["query", "days", "limit"],
             "front_read": [],
         ]
@@ -324,6 +330,7 @@ public struct PippaMCPTools: Sendable {
             }
             period = raw["period"] as? String; start = raw["start"] as? String; end = raw["end"] as? String
             query = raw["query"] as? String; days = int("days"); limit = int("limit")
+            subject = raw["subject"] as? String; from = raw["from"] as? String
             func bool(_ key: String) -> Bool? {
                 guard let n = raw[key] as? NSNumber, CFGetTypeID(n) == CFBooleanGetTypeID() else { return nil }
                 return n.boolValue
@@ -351,6 +358,9 @@ public struct PippaMCPTools: Sendable {
             case "calendar_read": outcome = await calendarRead(input)
             case "reminders_read": outcome = await remindersRead(input)
             case "mail_search": outcome = await mailSearch(input)
+            case "mail_read":
+                // Read like the selected mail: same receipt, same reply identity for a draft.
+                outcome = await mailRead(input); noted = "mail_selected"
             case "photos_search": outcome = await photosSearch(input)
             default:
                 let read = await frontRead(context.front)
@@ -531,22 +541,59 @@ public struct PippaMCPTools: Sendable {
             guard let mail = try await host.integrations.selectedMail() else {
                 return blocked("nothing_selected", L("No email is selected in Mail. Select one and ask again.", table: "MCP"))
             }
-            let limit = 6000
-            let body = Self.compact(mail.body)
-            var data: [String: Any] = ["subject": mail.subject, "from": mail.sender, "body": String(body.prefix(limit)),
-                                       "bodyTruncated": body.count > limit]
-            if let date = mail.date { data["date"] = Self.dateLabel(date, time: true, calendar: host.calendar) }
-            // Identity for "Als Entwurf in Mail" (reply to exactly this mail, found via the Message-ID).
-            if let source = mail.replySource {
-                data["messageID"] = source.messageID
-                if let replyTo = source.replyTo { data["replyTo"] = replyTo }
-            }
-            if !mail.attachmentNames.isEmpty { data["attachments"] = Array(mail.attachmentNames.prefix(20)) }
-            return Self.bounded(source: "Mail on this Mac (selected email)", data: data,
-                                next: "Use only what the email says. Never send mail; replies are drafts. " + Self.mailAppointmentHint)
+            return mailResult(mail, source: "Mail on this Mac (selected email)")
         } catch {
             return failure(error, .mail)
         }
+    }
+
+    private func mailRead(_ input: ToolInput) async -> PippaMCPToolResult {
+        let subject = (input.subject ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (1...300).contains(subject.count) else { return invalid("subject must be the exact subject from mail_search.") }
+        let sender = Self.address(input.from ?? "")
+        if case .blocked(let reply) = await ensure(.mail, openMail: true,
+                                                   closed: L("Open %@ first. Then ask again.", table: "MCP", Integration.mail.appName)) {
+            return reply
+        }
+        do {
+            guard let mail = try await host.integrations.findMail(subject: subject, sender: sender) else {
+                return blocked("not_found", L("I couldn’t find this email in the inbox.", table: "MCP"))
+            }
+            return mailResult(mail, source: "Mail on this Mac (email from the inbox)")
+        } catch {
+            return failure(error, .mail)
+        }
+    }
+
+    /// "Frank Semmler <frank@firma.de>" → "frank@firma.de"; a bare name or address stays as it is.
+    static func address(_ from: String) -> String {
+        let text = from.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let open = text.lastIndex(of: "<"), let close = text.lastIndex(of: ">"), open < close else { return text }
+        return String(text[text.index(after: open)..<close]).trimmingCharacters(in: .whitespaces)
+    }
+
+    /// One mail for the model: text, identity for a reply draft, and its attachments saved as files (`MailFiling`), so
+    /// read_document can read them. Without Mail's original message only the attachment names are known.
+    private func mailResult(_ mail: MailMessage, source: String) -> PippaMCPToolResult {
+        let limit = 6000
+        let body = Self.compact(mail.body)
+        var data: [String: Any] = ["subject": mail.subject, "from": mail.sender, "body": String(body.prefix(limit)),
+                                   "bodyTruncated": body.count > limit]
+        if let date = mail.date { data["date"] = Self.dateLabel(date, time: true, calendar: host.calendar) }
+        // Identity for "Als Entwurf in Mail" (reply to exactly this mail, found via the Message-ID).
+        if let source = mail.replySource {
+            data["messageID"] = source.messageID
+            if let replyTo = source.replyTo { data["replyTo"] = replyTo }
+        }
+        var next = "Use only what the email says. Never send mail; replies are drafts. "
+        let files = mail.source == nil ? [] : ((try? MailFiling.file(mail, root: host.mailFiles))?.attachments ?? [])
+        if !files.isEmpty {
+            data["attachments"] = files.prefix(20).map { ["name": $0.lastPathComponent, "path": $0.path] }
+            next += "Its attachments are saved as files: read one with mcp__pippa__read_document and its path. "
+        } else if !mail.attachmentNames.isEmpty {
+            data["attachments"] = Array(mail.attachmentNames.prefix(20))
+        }
+        return Self.bounded(source: source, data: data, next: next + Self.mailAppointmentHint)
     }
 
     private func mailSearch(_ input: ToolInput) async -> PippaMCPToolResult {
@@ -571,7 +618,7 @@ public struct PippaMCPTools: Sendable {
             var result = Self.bounded(source: query.isEmpty ? "Mail on this Mac (newest in the inbox)" : "Mail on this Mac (inbox search by subject or sender)",
                                       data: ["query": query, "unread": unread, "mails": mails, "shown": mails.count, "total": fetch.total,
                                              "truncated": fetch.total > mails.count],
-                                      next: "If mails is not empty, the person sees them as a card under your answer: do not list them again; answer in one or two sentences. start is only the beginning of each email. If mails is empty, no email in the inbox matches.")
+                                      next: "If mails is not empty, the person sees them as a card under your answer: do not list them again; answer in one or two sentences. start is only the beginning of each email; for the whole email or its attachments call mail_read with its subject and from. If mails is empty, no email in the inbox matches.")
             if !fetch.items.isEmpty {
                 result.card = .mail(MailCard(query: query, unread: unread, mails: fetch.items, total: fetch.total, calendar: host.calendar))
             }

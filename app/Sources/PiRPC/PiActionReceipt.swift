@@ -172,7 +172,7 @@ public struct PiTurnReceipt: Sendable {
             return ("move", (args?["folder"] as? String).map { URL(fileURLWithPath: $0).lastPathComponent },
                     into.isEmpty ? nil : into.joined(separator: ", "))
         case "move_to_trash": return ("trash", name, nil)
-        case "bash", "powershell": return ("command", nil, nil)
+        case "bash", "powershell", "applescript": return ("command", nil, nil)
         // A saved skill (skill-save.ts): its name, from the call's own arguments.
         case "save_skill": return ("skill", (args?["name"] as? String).map { String($0.prefix(64)) }, nil)
         // Pippa's memory: what was kept (`add`) and what was let go (`forget`), one line each, shortened.

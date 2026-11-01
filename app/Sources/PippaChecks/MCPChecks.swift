@@ -95,7 +95,7 @@ func runMCPChecks() async {
             && (unknown?["error"] as? [String: Any])?["code"] as? Int == -32601
             && (broken?["error"] as? [String: Any])?["code"] as? Int == -32700 && batch?.count == 1
     }
-    await checkAsync("MCP: four readers and front_read (+ read_document), all read-only (readOnly, non-destructive, closed world), schema as object") {
+    await checkAsync("MCP: five readers and front_read (+ read_document), all read-only (readOnly, non-destructive, closed world), schema as object") {
         let s = setup()
         let list = (await rpc(s.tools, "tools/list"))?["result"] as? [String: Any]
         let all = list?["tools"] as? [[String: Any]] ?? []
@@ -110,7 +110,7 @@ func runMCPChecks() async {
         }
         // Keep the tool list small: with direct approval it goes into every request.
         let bytes = (try? JSONSerialization.data(withJSONObject: tools))?.count ?? .max
-        return names == PippaMCPTools.toolNames && hintsOK && bytes < 3500 && tools.count == 6
+        return names == PippaMCPTools.toolNames && hintsOK && bytes < 3500 && tools.count == 7
     }
     await checkAsync("MCP: unknown tool is a protocol error, unknown arguments a tool error") {
         let s = setup()
@@ -321,6 +321,75 @@ func runMCPChecks() async {
         return !hit.isError && mails.count == 1 && (mails.first?["start"] as? String)?.contains("312,48") == true && hit.json["untrusted"] as? Bool == true
             && !none.isError && ((none.json["data"] as? [String: Any])?["mails"] as? [Any])?.isEmpty == true
             && short.isError && many.isError && closed.isError && closed.json["status"] as? String == "unavailable"
+    }
+    // A mail as Mail keeps it: text, a real PDF attachment and a signature logo shown inside the text.
+    let pdfBytes = Data("%PDF-1.4 Zahlungseingangsliste 29.10.2026".utf8)
+    let mailSource = """
+    From: Maximilian Lahm <maximilian.lahm@firma.example>
+    Subject: Zahlungseingangsliste zum 29.10.2026
+    Message-ID: <zel-2910@firma.example>
+    Content-Type: multipart/mixed; boundary="b1"
+
+    --b1
+    Content-Type: text/plain; charset=utf-8
+
+    Hallo, anbei erhalten Sie die Zahlungseingangsliste.
+    --b1
+    Content-Type: image/png; name="logo_175x87.png"
+    Content-Disposition: inline; filename="logo_175x87.png"
+    Content-ID: <logo1>
+    Content-Transfer-Encoding: base64
+
+    iVBORw0KGgo=
+    --b1
+    Content-Type: application/pdf; name="Zahlungseingangsliste zum 29.10.2026.pdf"
+    Content-Disposition: attachment; filename="Zahlungseingangsliste zum 29.10.2026.pdf"
+    Content-Transfer-Encoding: base64
+
+    \(pdfBytes.base64EncodedString())
+    --b1--
+
+    """
+    check("Mail attachments: the parser keeps a real attachment's bytes and marks the inline logo") {
+        let mail = MailParser.parse(Data(mailSource.utf8))
+        return mail.attachments == ["logo_175x87.png", "Zahlungseingangsliste zum 29.10.2026.pdf"]
+            && mail.files.count == 2 && mail.files[0].inline && !mail.files[1].inline && mail.files[1].data == pdfBytes
+            && mail.body.hasPrefix("Hallo, anbei")
+    }
+    check("Mail attachments: saved as files beside Pippa's copy, logo left out, a second read writes nothing new; a person's .eml stays untouched") {
+        let folder = dir("mail-filing")
+        let eml = folder.appendingPathComponent("Zahlungseingangsliste.eml")
+        try? mailSource.write(to: eml, atomically: true, encoding: .utf8)
+        let first = MailFiling.saveAttachments(of: eml, into: folder)
+        let written = (try? first.first.map { try $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate }) ?? nil
+        let second = MailFiling.saveAttachments(of: eml, into: folder)
+        let again = (try? second.first.map { try $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate }) ?? nil
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path).sorted()) ?? []
+        let outside = MailFiling.attachmentFolder(for: eml)
+        return first.map(\.lastPathComponent) == ["Zahlungseingangsliste zum 29.10.2026.pdf"]
+            && (try? Data(contentsOf: first[0])) == pdfBytes && written != nil && written == again
+            && names == ["Zahlungseingangsliste zum 29.10.2026.pdf", "Zahlungseingangsliste.eml"]
+            && outside.path.hasPrefix(MailFiling.inbox.path + "/attachments-") && outside == MailFiling.attachmentFolder(for: eml)
+    }
+    await checkAsync("MCP mail_read: a found mail in full with its attachment saved for read_document; unknown subject → not_found") {
+        let demo = DemoIntegrations(granted: true)
+        demo.sampleMail = MailMessage(subject: "Zahlungseingangsliste zum 29.10.2026", sender: "Maximilian Lahm <maximilian.lahm@firma.example>",
+                                      date: nil, body: "Hallo, anbei erhalten Sie die Zahlungseingangsliste.",
+                                      attachmentNames: ["logo_175x87.png", "Zahlungseingangsliste zum 29.10.2026.pdf"],
+                                      messageID: "zel-2910@firma.example", source: mailSource)
+        var host = PippaMCPHost(integrations: demo, sheets: DemoSheetReader(granted: true), hostData: DemoHostData(integrations: demo, now: now),
+                                askForAccess: false, now: { now }, calendar: berlin)
+        host.mailFiles = dir("mail-read")
+        let tools = PippaMCPTools(host: host)
+        let found = await call(tools, "mail_read", ["subject": "Zahlungseingangsliste zum 29.10.2026", "from": "Maximilian Lahm <maximilian.lahm@firma.example>"])
+        let missing = await call(tools, "mail_read", ["subject": "Gibt es nicht"])
+        let data = found.json["data"] as? [String: Any] ?? [:]
+        let files = data["attachments"] as? [[String: Any]] ?? []
+        let path = files.first?["path"] as? String ?? ""
+        return !found.isError && (data["body"] as? String)?.contains("Zahlungseingangsliste") == true
+            && files.count == 1 && path.hasPrefix(host.mailFiles.path + "/mail-") && (try? Data(contentsOf: URL(fileURLWithPath: path))) == pdfBytes
+            && (found.json["next"] as? String)?.contains("read_document") == true
+            && missing.isError && missing.json["status"] as? String == "not_found"
     }
     await checkAsync("MCP mail_search: without a query the newest mails, unread=true only unread ones, never a guessed word") {
         let s = setup()

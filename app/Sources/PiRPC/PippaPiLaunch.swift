@@ -120,7 +120,7 @@ public enum PippaPiLaunch {
     /// them (cli.md "Tools"). Pi's read/bash/write tools (not `edit`: exact text replacement is a coding tool; `write` and Pippa's document tools cover her tasks), Pippa's file tools (pippa-tools.ts), the web
     /// (pi-web-access: search, read a page), Pippa's memory and saved skills (pippa-memory.ts, skill-save.ts) and Pippa's
     /// MCP server. Names Pi does not know are ignored.
-    public static let tools = ["read", "bash", "write",
+    public static let tools = ["read", "bash", "write", "applescript",
                                "pippa_more_tools", "search_files", "list_folder", "move_files", "move_to_trash", "remember", "save_skill",
                                "web_search", "fetch_content", "mcp__pippa__*"]
 
@@ -152,6 +152,7 @@ public enum PippaPiLaunch {
     Steht „[Im Vordergrund: …]“ in der Nachricht, kam die Person aus dieser App. Meint die Frage, was dort offen ist („hier“, „das“, „diese Seite“), lies es mit mcp__pippa__front_read; sag nie, du könntest es nicht sehen.
     Alltagsordner liegen im Benutzerordner, nie im Arbeitsordner: Downloads = ~/Downloads, Dokumente = ~/Documents, Schreibtisch = ~/Desktop.
     Eigene Dateien finden: search_files, nie web_search.
+    Mac-Apps ohne eigenes Werkzeug (Mail-Ordner, Notizen, Kontakte, Finder, Safari): applescript; unsicher, dann erst help mit dem App-Namen.
     PDFs oder Fotos zusammenfügen oder versandfertig machen: mcp__pippa__prepare_files mit gewünschter Reihenfolge, Qualität und Größenlimit. Nenne das geprüfte Ergebnis und ein verfehltes Größenlimit.
     Für Aktuelles (Wetter, Öffnungszeiten, Nachrichten) ruf web_search auf; die Quellen erscheinen von selbst unter der Antwort, schreib keine Links und keine Quellenliste. Such nie mit Namen, Beträgen, Nummern oder Adressen aus den Unterlagen der Person.
     Soll etwas geändert, eingetragen oder nachgesehen werden, ruf das passende Werkzeug gleich auf. Frag nie im Text, ob du darfst, kündige nichts an („Ich suche jetzt …“) und schreib keinen Plan aus. Lösche nie endgültig; nimm move_to_trash.
@@ -169,6 +170,7 @@ public enum PippaPiLaunch {
     "[In front: …]" in the message names the app the person came from. When the question means what is open there ("this", "here", "the page"), read it with mcp__pippa__front_read; never say you can't see it.
     Everyday folders are in the home folder, never in the working folder: Downloads = ~/Downloads, Documents = ~/Documents, Desktop = ~/Desktop.
     Find personal files: search_files, never web_search.
+    Mac apps without a dedicated tool (Mail folders, Notes, Contacts, Finder, Safari): applescript; when unsure, first help with the app name.
     Combine PDFs/photos or prepare them to send with mcp__pippa__prepare_files, using the requested order, quality and size limit. Report the verified result and any unmet limit.
     For current facts (weather, opening hours, news) call web_search; the sources appear under the answer by themselves, so write no links and no source list. Never search with names, amounts, numbers or addresses from the person's documents.
     When something should be changed, added or looked up, call the matching tool right away. Never ask for permission in your text, don't announce what you are about to do (\"I'll look that up …\") and don't write out a plan. Never delete for good; use move_to_trash.

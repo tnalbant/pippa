@@ -76,19 +76,23 @@ public struct MailMessage: Sendable, Hashable {
     public var replyTo: String?
     /// Where Mail showed this message at Call (account, mailbox, Mail's id). A hint for Insert, never shown.
     public var locator: MailLocator?
+    /// The whole message as Mail keeps it (RFC 822, attachments included), when Mail gave it.
+    public var source: String?
     public var replySource: MailReplySource? {
         let target = replyTo?.trimmingCharacters(in: .whitespacesAndNewlines)
         return messageID.flatMap { MailReplySource(messageID: $0, replyTo: target.flatMap { $0.isEmpty ? nil : $0 } ?? sender, subject: subject) }
     }
     public init(subject: String, sender: String, date: Date?, body: String, attachmentNames: [String], messageID: String? = nil, replyTo: String? = nil,
-                locator: MailLocator? = nil) {
+                locator: MailLocator? = nil, source: String? = nil) {
         self.subject = subject; self.sender = sender; self.date = date; self.body = body; self.attachmentNames = attachmentNames
-        self.messageID = messageID; self.replyTo = replyTo; self.locator = locator
+        self.messageID = messageID; self.replyTo = replyTo; self.locator = locator; self.source = source
     }
 
-    /// As .eml text, so the normal flow (overview, deadlines, questions) reads it like a filed mail.
-    /// Attachments appear by name only (empty parts); their content is not read.
+    /// As .eml text, so the normal flow (overview, deadlines, questions) reads it like a filed mail: Mail's own message
+    /// with its attachments when Mail gave it (`MailFiling` saves them as files), otherwise a stand-in that names the
+    /// attachments only.
     public var emlText: String {
+        if let source, !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return source }
         let boundary = "pippa-mail-boundary-7f3a"
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
@@ -129,6 +133,8 @@ public protocol AppIntegrations: Sendable {
     /// Removes only what Pippa created and what has not been changed since.
     func remove(_ item: CreatedItem) async throws -> RemoveResult
     func selectedMail() async throws -> MailMessage?
+    /// The newest inbox mail with exactly this subject whose sender contains `sender` ("" = any), or `nil`.
+    func findMail(subject: String, sender: String) async throws -> MailMessage?
     /// Creates an unsent native reply to the captured original identity. Never falls back to compose.
     func insertReply(_ draft: MailDraft) async throws -> MailInsertResult
     /// Occurrences overlapping `interval` from every event calendar, read only, sorted by start, at most `limit`
@@ -138,6 +144,7 @@ public protocol AppIntegrations: Sendable {
 
 public extension AppIntegrations {
     func prepareMailAccess() async -> IntegrationAccess { await access(.mail) }
+    func findMail(subject: String, sender: String) async throws -> MailMessage? { throw PippaError.notAvailable }
     func insertReply(_ draft: MailDraft) async throws -> MailInsertResult { throw PippaError.notAvailable }
     func events(in interval: DateInterval, limit: Int) async throws -> CalendarFetch { throw PippaError.notAvailable }
 }
@@ -225,6 +232,14 @@ public final class DemoIntegrations: AppIntegrations, @unchecked Sendable {
     public func selectedMail() async throws -> MailMessage? {
         try requireGranted(.mail)
         return sampleMail
+    }
+
+    /// The sample mail when subject and sender match it, as `SystemIntegrations.findMail` matches the inbox.
+    public func findMail(subject: String, sender: String) async throws -> MailMessage? {
+        try requireGranted(.mail)
+        let mail = sampleMail
+        guard let mail, mail.subject == subject, sender.isEmpty || mail.sender.localizedCaseInsensitiveContains(sender) else { return nil }
+        return mail
     }
 
     /// Remembers the draft instead of opening a window. Never sends.

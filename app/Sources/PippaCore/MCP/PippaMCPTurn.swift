@@ -267,7 +267,15 @@ public struct PippaMCPTurnTools: Sendable {
         if let nextPage { data["nextPage"] = nextPage }
         var next = nextPage.map { "Not all pages are shown. If the answer may be on later pages, call read_document again with from_page \($0)." }
             ?? (clipped ? "Only the beginning is shown. Say that you read only part of it if that matters." : "This is the whole document.")
-        if Self.emailExtensions.contains(url.pathExtension.lowercased()) { next += " " + PippaMCPTools.mailAppointmentHint }
+        if Self.emailExtensions.contains(url.pathExtension.lowercased()) {
+            // Attachments as their own files in Pippa's inbox (never beside a person's .eml), so they can be read next.
+            let files = url.pathExtension.lowercased() == "eml" ? MailFiling.saveAttachments(of: url, into: MailFiling.attachmentFolder(for: url)) : []
+            if !files.isEmpty {
+                data["attachments"] = files.prefix(20).map { ["name": $0.lastPathComponent, "path": $0.path] }
+                next += " Its attachments are saved as files: read one with read_document and its path."
+            }
+            next += " " + PippaMCPTools.mailAppointmentHint
+        }
         await turn?.notedText(path: url.standardizedFileURL.path, text: text, firstPage: document.isPaged ? from : nil,
                               lastPage: document.isPaged ? lastPage : nil, pageCount: pageCount, cut: cut)
         await turn?.noted(.init(path: url.standardizedFileURL.path, name: url.lastPathComponent, firstPage: document.isPaged ? from : nil,

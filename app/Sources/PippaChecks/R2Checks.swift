@@ -219,7 +219,7 @@ func runR2Checks() async {
         return doc["readOnlyHint"] as? Bool == true && doc["openWorldHint"] as? Bool == false
             && !names.contains("web_search") && !names.contains("read_web_page")
             // Three app writers, local file preparation and the chart card; no tool is hidden to meet the prompt budget.
-            && names == PippaMCPTools.toolNames && list.count == 11 && bytes < 5650
+            && names == PippaMCPTools.toolNames && list.count == 12 && bytes < 5650
     }
     // The other share (prompt, Pi's, Pippa's and the web tools) is runtime/pippa-tools/real-pi-budget.test.mjs, 6,880
     // characters; both together about 3,000 tokens, prefilled cold on every new conversation. make_chart added 419 here.

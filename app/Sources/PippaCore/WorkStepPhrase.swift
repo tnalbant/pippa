@@ -193,6 +193,9 @@ public enum WorkStepPhrase {
             case "calendar_add": return Described(text: l("Adding a calendar entry"), result: .none)
             case "mail_search": return Described(text: l("Searching your mail"), result: .none)
             case "mail_selected": return Described(text: l("Reading the selected mail"), result: .none)
+            case "mail_read": return Described(text: l("Opening the mail"), result: .none)
+            // Pippa's own AppleScript tool (applescript.ts): named by the app it addresses, like osascript in bash.
+            case "applescript": return appleScript(args.string("script") ?? "") ?? Described(text: l("Working on your Mac"), result: .none)
             case "photos_search": return Described(text: l("Searching your photos"), result: .none)
             case "remember": return Described(text: l("Remembering that"), result: .none)
             case "save_skill": return Described(text: l("Remembering the steps"), result: .none)

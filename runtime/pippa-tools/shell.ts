@@ -122,7 +122,7 @@ export function neededGrants(command: string): Set<Grant> {
 
 const NETWORK_FAILURE = /Could not resolve host|Couldn't connect|Failed to connect|nodename nor servname|Network is unreachable|getaddrinfo|Name or service not known|Temporary failure in name resolution|Failed to establish a new connection|URLError|unable to access '|Connection refused|No route to host/i;
 const APPS_FAILURE = /Not authorized to send Apple events|\(-1743\)|errAEEventNotPermitted|\(-600\)|\/usr\/bin\/(?:osascript|open|shortcuts|automator): (?:Operation not permitted|Permission denied)/i;
-export const APP_CONTROL_REASON = "Not run: generic app control is not available in Pippa’s shell. Use the dedicated native tools; Mail replies remain unsent drafts. Do not bypass this with another command, script, shortcut or URL.";
+export const APP_CONTROL_REASON = "Not run: app control is not available in Pippa’s shell. Use the applescript tool or the dedicated native tools; Mail replies remain unsent drafts. Do not bypass this with another shell command, shortcut or URL.";
 const WRITE_FAILURE = /Operation not permitted/i;
 
 /** Grants a failed command lacked, judged from its output. */
@@ -193,7 +193,7 @@ export function limitsNote(grants: ReadonlySet<Grant>, work: string): string {
 	if (!grants.has("write")) no.push(`write only in ${work} and temporary folders (save results there, then move_files them where they belong; for one text file use write)`);
 	no.push("never delete outside that folder (use move_to_trash)");
 	if (!grants.has("net")) no.push("no internet (use web_search and fetch_content)");
-	no.push("no generic app control (use Pippa’s native tools)");
+	no.push("no app control (use the applescript tool or Pippa’s native tools)");
 	return `Note: bash runs in Pippa's sandbox: ${no.join("; ")}. Do not retry the same command.`;
 }
 
