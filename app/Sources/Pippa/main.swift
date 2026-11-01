@@ -15,6 +15,15 @@ if let index = CommandLine.arguments.firstIndex(of: "--ask"), CommandLine.argume
     Task { @MainActor in exit(await HeadlessAsk.run(question)) }
     app.run()
 }
+if let index = CommandLine.arguments.firstIndex(of: "--make-pdf") {
+    let files = CommandLine.arguments.dropFirst(index + 1).map { URL(fileURLWithPath: $0) }
+    Task { @MainActor in
+        let result = await PippaMCPService.makePDF(files)
+        print(result.failed ? "FAILED: \(result.text)" : "\(result.text)\n\(result.card.map { String(describing: $0) } ?? "")")
+        exit(result.failed ? 1 : 0)
+    }
+    app.run()
+}
 // First launch from the disk image or Downloads: offer once to move to Applications.
 if AppMover.runIfNeeded() { exit(0) }
 let delegate = AppDelegate()

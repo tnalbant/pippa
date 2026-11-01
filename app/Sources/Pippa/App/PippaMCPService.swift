@@ -23,6 +23,16 @@ enum PippaMCPService {
     static func begin(_ turn: PippaMCPTurn) { currentHost.turns.begin(turn) }
     static func end(_ turn: PippaMCPTurn) { currentHost.turns.end(turn); turn.cancelWrites() }
 
+    /// Photos and PDFs into one PDF without the model: the same tool Pi calls, started by a button.
+    static func makePDF(_ files: [URL]) async -> (card: ResultCard?, text: String, failed: Bool) {
+        let turn = PippaMCPTurn()
+        begin(turn)
+        defer { end(turn) }
+        let result = await PippaMCPFilePreparation(host: currentHost, turn: turn, scope: turn.writes).call(["paths": files.map(\.path)])
+        let note = PippaMCPFilePreparation.readNote(for: result, turnID: turn.id)
+        return (note.card, note.line, result.isError)
+    }
+
     final class Notes<Note: Sendable>: @unchecked Sendable {
         private let lock = NSLock()
         private var notes: [Note] = []

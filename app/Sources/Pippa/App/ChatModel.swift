@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 import PiRPC
 import PippaCore
 
@@ -106,6 +107,38 @@ final class ChatModel: ObservableObject {
             }
             isAnswering = false
             save(id)
+        }
+    }
+
+    /// Dropped photos or PDFs, one PDF: done by the app itself, no model needed.
+    func makePDF() {
+        guard !isAnswering, !attachments.isEmpty else { return }
+        let id = currentID ?? UUID().uuidString.lowercased()
+        if current == nil {
+            conversations.insert(Conversation(id: id, title: T("One PDF", table: "App"), updated: Date(), messages: []), at: 0)
+            currentID = id
+        }
+        let files = attachments
+        append(ChatMessage(role: .user, text: T("Make one PDF", table: "App"), files: files.map(\.path)), to: id)
+        append(ChatMessage(role: .assistant, text: ""), to: id)
+        attachments = []
+        isAnswering = true
+        Task {
+            let result = await PippaMCPService.makePDF(files)
+            updateLast(in: id) { message in
+                if let card = result.card { message.cards = [card] }
+                if result.failed { message.error = result.text } else if result.card == nil { message.text = result.text }
+            }
+            isAnswering = false
+            save(id)
+        }
+    }
+
+    /// The button shows when everything attached is a photo or a PDF.
+    var canMakePDF: Bool {
+        !attachments.isEmpty && attachments.allSatisfy { url in
+            let type = UTType(filenameExtension: url.pathExtension.lowercased())
+            return type?.conforms(to: .image) == true || type?.conforms(to: .pdf) == true
         }
     }
 

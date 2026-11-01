@@ -199,6 +199,10 @@ private struct Composer: View {
                 TextField(T("Ask Pippa", table: "App"), text: $chat.draft, axis: .vertical)
                     .textFieldStyle(.plain).lineLimit(1...8).focused($focused)
                     .onSubmit { chat.send() }
+                if chat.canMakePDF && !chat.isAnswering {
+                    Button(T("One PDF", table: "App")) { chat.makePDF() }
+                        .buttonStyle(.bordered).help(T("Make one PDF from these files, right here on your Mac", table: "App"))
+                }
                 if chat.isAnswering {
                     Button { chat.stop() } label: { Image(systemName: "stop.circle.fill").font(.title2) }
                         .buttonStyle(.borderless).help(T("Stop", table: "App"))
