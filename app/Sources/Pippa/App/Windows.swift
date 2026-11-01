@@ -66,19 +66,38 @@ final class Pill {
     }
 }
 
-private struct PillView: View {
+struct PillView: View {
     @ObservedObject var chat: ChatModel
     @ObservedObject var setup: SetupModel
     private let targetedState = State(initialValue: false)
+
+    private let hoverState = State(initialValue: false)
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable().frame(width: 44, height: 44)
-                .scaleEffect(targetedState.wrappedValue ? 1.12 : 1)
+                .overlay {
+                    // Working: a ring that turns around the mark.
+                    if chat.isAnswering {
+                        TimelineView(.animation) { context in
+                            Circle().trim(from: 0, to: 0.3)
+                                .stroke(Theme.accent, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                                .rotationEffect(.degrees(context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.2) / 1.2 * 360))
+                                .frame(width: 48, height: 48)
+                        }
+                    }
+                }
+                .scaleEffect(targetedState.wrappedValue ? 1.12 : hoverState.wrappedValue ? 1.05 : 1)
+                .animation(.easeOut(duration: 0.15), value: hoverState.wrappedValue)
+                .animation(.easeOut(duration: 0.15), value: targetedState.wrappedValue)
                 .onTapGesture { AppActions.callPippa() }
-            Circle().fill(dot).frame(width: 11, height: 11)
-                .overlay(Circle().strokeBorder(.white, lineWidth: 1.5))
+                .onHover { hoverState.wrappedValue = $0 }
+            // Only when Pippa needs the person: the AI is not set up yet.
+            if !setup.canAnswer && !chat.isAnswering {
+                Circle().fill(Theme.needDot).frame(width: 11, height: 11)
+                    .overlay(Circle().strokeBorder(.white, lineWidth: 1.5))
+            }
         }
         .frame(width: 52, height: 52)
         .help(T("Ask Pippa", table: "App"))
@@ -91,12 +110,6 @@ private struct PillView: View {
             }
             return true
         }
-    }
-
-    private var dot: Color {
-        if chat.isAnswering { return Theme.accent }
-        if !setup.canAnswer { return Theme.needDot }
-        return Theme.ok
     }
 }
 

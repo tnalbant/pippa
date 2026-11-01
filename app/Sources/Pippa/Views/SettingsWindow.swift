@@ -40,7 +40,7 @@ final class SettingsWindow {
     }
 }
 
-private struct SettingsView: View {
+struct SettingsView: View {
     @ObservedObject var settings: SettingsModel
     @ObservedObject var setup: SetupModel
     private let hotkeyState = State(initialValue: Hotkey.current)

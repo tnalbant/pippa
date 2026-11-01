@@ -20,6 +20,8 @@ struct ChatMessage: Codable, Identifiable, Equatable {
     var steps: [ChatStep] = []
     var cards: [ResultCard] = []
     var receipts: [PippaMCPWriteReceipt] = []
+    /// The model's reasoning before it answered (local models think first); shown folded.
+    var thinking: String?
     var error: String?
 }
 
@@ -43,6 +45,8 @@ final class ChatModel: ObservableObject {
     /// The app that was in front when Pippa was called, offered as a chip ("Mail"); Pi reads it with `front_read`.
     @Published var frontApp: String?
     @Published private(set) var isAnswering = false
+    /// When the running answer started, for the live "Thinking … 12 s".
+    @Published private(set) var answerStarted: Date?
     private var answer: Task<Void, Never>?
 
     private static var folder: URL { Pippa.supportDirectory.appendingPathComponent("conversations", isDirectory: true) }
@@ -90,6 +94,7 @@ final class ChatModel: ObservableObject {
         let prompt = Self.prompt(text, files: files, frontApp: frontApp)
         draft = ""; attachments = []; frontApp = nil
         isAnswering = true
+        answerStarted = Date()
         _ = PippaMCPService.readNotes.take(); _ = PippaMCPService.writeNotes.take()
         answer = Task {
             do {
@@ -106,8 +111,21 @@ final class ChatModel: ObservableObject {
                 for index in message.steps.indices where !message.steps[index].done { message.steps[index].done = true }
             }
             isAnswering = false
+            answerStarted = nil
             save(id)
         }
+    }
+
+    /// The last answer failed: ask the same question again.
+    func retry() {
+        guard !isAnswering, let id = currentID, let index = conversations.firstIndex(where: { $0.id == id }) else { return }
+        let messages = conversations[index].messages
+        guard messages.count >= 2, messages[messages.count - 1].role == .assistant, messages[messages.count - 2].role == .user else { return }
+        let question = messages[messages.count - 2]
+        conversations[index].messages.removeLast(2)
+        draft = question.text
+        attachments = question.files.map { URL(fileURLWithPath: $0) }
+        send()
     }
 
     /// Dropped photos or PDFs, one PDF: done by the app itself, no model needed.
@@ -159,6 +177,8 @@ final class ChatModel: ObservableObject {
         switch event {
         case .textDelta(let delta):
             updateLast(in: id) { $0.text += delta }
+        case .thinkingDelta(let delta):
+            updateLast(in: id) { $0.thinking = ($0.thinking ?? "") + delta }
         case .toolStarted(let call, let name, let arguments):
             updateLast(in: id) { $0.steps.append(ChatStep(id: call, label: StepLabel.text(tool: name, arguments: arguments))) }
         case .toolEnded(let call, _, let isError, _, let outcome, _):
@@ -175,6 +195,14 @@ final class ChatModel: ObservableObject {
         default:
             break
         }
+    }
+
+    /// Snapshots only (`Snapshots`): never saved.
+    func replaceForSnapshot(_ conversations: [Conversation], current: String?, answering: Bool) {
+        self.conversations = conversations
+        currentID = current
+        isAnswering = answering
+        answerStarted = answering ? Date().addingTimeInterval(-42) : nil
     }
 
     // MARK: Storage

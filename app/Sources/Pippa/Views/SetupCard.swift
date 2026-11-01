@@ -6,8 +6,17 @@ struct SetupCard: View {
     @ObservedObject var setup: SetupModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(T("Pippa’s AI", table: "App")).font(.headline)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: symbol).font(.body.weight(.semibold)).foregroundStyle(Theme.accent)
+                    .frame(width: 32, height: 32)
+                    .background(Theme.accentTint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                Text(T("Pippa’s AI", table: "App")).font(.headline)
+                Spacer()
+                if case .downloading(let progress, _) = setup.state {
+                    Text(progress, format: .percent.precision(.fractionLength(0))).monospacedDigit().foregroundStyle(.secondary)
+                }
+            }
             switch setup.state {
             case .preparing(let source):
                 HStack(spacing: 8) {
@@ -23,7 +32,7 @@ struct SetupCard: View {
                     Button(T("Use an Online AI…", table: "App")) { SettingsWindow.shared.show() }
                 }
             case .downloading(let progress, let remaining):
-                ProgressView(value: progress)
+                ProgressView(value: progress).tint(Theme.accent)
                 HStack {
                     Text(remaining.map { T("About %@ left", table: "App", Self.duration($0)) } ?? T("Loading…", table: "App"))
                         .font(.caption).foregroundStyle(.secondary)
@@ -37,10 +46,18 @@ struct SetupCard: View {
                 Label(T("Ready", table: "App"), systemImage: "checkmark.circle").foregroundStyle(Theme.ok)
             }
         }
-        .padding(16)
+        .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.chatCard, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.chatBorder))
+        .background(Theme.chatCard, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.chatBorder))
+    }
+
+    private var symbol: String {
+        switch setup.state {
+        case .failed: return "exclamationmark.triangle"
+        case .ready: return "checkmark"
+        default: return "arrow.down.circle"
+        }
     }
 
     static func duration(_ seconds: TimeInterval) -> String {

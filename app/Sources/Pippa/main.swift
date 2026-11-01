@@ -24,6 +24,11 @@ if let index = CommandLine.arguments.firstIndex(of: "--make-pdf") {
     }
     app.run()
 }
+if let index = CommandLine.arguments.firstIndex(of: "--snapshot"), CommandLine.arguments.count > index + 1 {
+    let folder = URL(fileURLWithPath: CommandLine.arguments[index + 1], isDirectory: true)
+    Task { @MainActor in exit(await Snapshots.run(into: folder)) }
+    app.run()
+}
 // First launch from the disk image or Downloads: offer once to move to Applications.
 if AppMover.runIfNeeded() { exit(0) }
 let delegate = AppDelegate()

@@ -21,6 +21,17 @@ final class SetupModel: ObservableObject {
         return settings.subscriptionModel != nil || PiOnlineProvider.activeConnection(settings) != nil
     }
     var canAnswer: Bool { isReady || usesOnlineAI }
+    /// The setup card shows: a question, a download or a problem, and no online AI to fall back on.
+    var needsAttention: Bool {
+        if usesOnlineAI { return false }
+        switch state {
+        case .askDownload, .downloading, .failed: return true
+        case .preparing, .ready: return false
+        }
+    }
+
+    /// Snapshots only.
+    func showForSnapshot(_ state: PiSetupState) { self.state = state }
 
     init() {
         let env = ProcessInfo.processInfo.environment
