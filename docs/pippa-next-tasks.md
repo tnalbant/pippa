@@ -33,7 +33,12 @@ Dropped: `applescript`, `pippa_more_tools` and tool-scope, `save_skill`, `make_c
 - [x] CI split: fast PR gate (`ci.yml`); real Pi, web access, macOS 15 and the app build by hand and on release tags
       (`heavy.yml`)
 - [x] Docs: development.md, README; one [ROADMAP](ROADMAP.md); old plans and measurements in [archive/](archive/)
-- [ ] Acceptance: the five tasks in the plan
+- [ ] Acceptance: the five tasks in the plan (Qwen 3.5 9B on this Mac, `Pippa --ask` / `--make-pdf`, 2026-11-01)
+  - [x] ETF overview in iCloud `brain`: names `ETF-Portfolio.md` (updated 2026-11-01) as current, 293 s cold
+  - [ ] Payment receipts from Mail attachments: needs Mail permission for a signed build
+  - [ ] Calendar entry: needs Calendar permission for a signed build (`calendar_read` waited on the macOS prompt)
+  - [x] Letter deadline: pay by 15 Nov 2026; objection "four weeks after receipt" without a computed date, 54 s
+  - [x] Photos to one PDF: with the model 82 s, with the One PDF button and no model under 10 s
 
 ## Open
 
