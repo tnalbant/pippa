@@ -86,7 +86,7 @@ for key in "${usage_keys[@]}"; do
       fail "$lang.lproj/InfoPlist.strings: $key missing"
   done
 done
-ok "Info.plist + en/de: texts for Calendar, Reminders, Apple Events, Contacts, Photos, Desktop, Documents, Downloads, Microphone, Speech Recognition"
+ok "Info.plist + en/de: texts for Calendar, Reminders, Apple Events, Photos, Desktop, Documents, Downloads"
 
 # Helpers: run without a sandbox, also outside the bundle (the installer copies Node and esbuild to the home folder).
 [[ -x "$APP/Contents/Helpers/node" ]] || fail "bundled Node runtime missing"
