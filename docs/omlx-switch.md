@@ -44,8 +44,13 @@ tuning flags.
   13, 17 and 19 November). Fixed structurally: `DateEvidence` names every date in the answer that nothing the turn
   read shows, under the answer ("Not in what I read: … please check it"). Rerun: one answer without a date, one with
   19 November, which the note named
-- [ ] Mail totals: too slow (no answer after 600 s; prompt grew to 23K tokens reading two mail PDFs)
+- [ ] Mail totals: finds both mails (plural retry) and reads both PDFs, then thinks past the 4,096-token answer limit
+  adding up two large tables in its head (650–750 s) instead of using awk. The app now says so instead of ending
+  quietly; the task itself stays beyond this model
 - [ ] Calendar: `calendar_read` hangs in the headless run of the re-signed build (likely an unanswered permission prompt)
+- [x] Fresh setup in an empty home (`PIPPA_PI_HOME`, Developer ID build with Hardened Runtime): Pi installed, runtime
+  unpacked and checked, model checked, own server on a new port, first answer 31 s cold. The model download itself
+  could not be tried: huggingface.co resets the TLS handshake on this network (2026-11-02)
 - [ ] Publish the runtime archive as a release asset (needs the person's go: it is a push)
 
 ## Acceptance, 2026-11-01
@@ -68,3 +73,11 @@ Comparison on the letter deadline, same build and persona: `mlx-community/Qwen3.
 the same oMLX also computes an objection date in three of three runs (19, 17 and 27 November), at 8.8–13.4 tok/s, and
 once failed to open the PDF (249 s). The earlier Qwen pass on llama.cpp was not reproducible. Switching back to Qwen does
 not fix it; Ornith stays.
+
+### Second round, 2026-11-02 (sampling 0.6 / top-k 20)
+
+| Task | Result | Time |
+| --- | --- | --- |
+| Letter, two runs | Payment date right; objection date computed (20 and 17 November) and named by the date note both times; no stray words | 54 s, 157 s |
+| ETF overview | Pass, clean German | 232 s |
+| Mail totals | Fail: out of answer length while adding up in its head | 647–754 s |
