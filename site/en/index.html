@@ -964,15 +964,15 @@ strong, b { font-weight: 600; }
   <div class="wrap">
     <div class="sh">
       <h2 id="h-setup">Pippa sets everything up.</h2>
-      <p>She picks the AI that fits your Mac, tells you the download size and waits for your OK.</p>
+      <p>She checks that her AI fits your Mac, tells you the download size and waits for your OK.</p>
     </div>
-    <div class="tiers" role="img" aria-label="Three cards: Mac with 8 GB of memory, 2.7 GB AI download. Mac with 16 to 24 GB, 5.7 GB, highlighted with “Fits your Mac”. Mac with 32 GB or more, 16.8 GB.">
-      <div class="tier l" aria-hidden="true"><small>Mac with 8&nbsp;GB</small><b>2.7&nbsp;GB</b></div>
-      <div class="tier pick" aria-hidden="true"><small>Mac with 16–24&nbsp;GB</small><b>5.7&nbsp;GB</b><em><svg class="ic"><use href="#s-check"/></svg>Fits your Mac</em></div>
-      <div class="tier r" aria-hidden="true"><small>Mac with 32&nbsp;GB+</small><b>16.8&nbsp;GB</b></div>
+    <div class="tiers" role="img" aria-label="Three cards: Mac with less than 16 GB of memory, online AI. Mac with 16 GB or more, 5.4 GB AI download, highlighted with “Fits your Mac”. Model already there from oMLX or LM Studio, 0 GB.">
+      <div class="tier l" aria-hidden="true"><small>Mac under 16&nbsp;GB</small><b>Online AI</b></div>
+      <div class="tier pick" aria-hidden="true"><small>Mac with 16&nbsp;GB+</small><b>5.4&nbsp;GB</b><em><svg class="ic"><use href="#s-check"/></svg>Fits your Mac</em></div>
+      <div class="tier r" aria-hidden="true"><small>Model already there</small><b>0&nbsp;GB</b></div>
     </div>
     <div class="ready"><p><svg class="ic" aria-hidden="true"><use href="#s-checkc"/></svg>Photos and PDFs work before that, with no AI download.</p></div>
-    <p class="note">If LM Studio or Ollama already has the same model file, Pippa uses it instead of downloading it again.</p>
+    <p class="note">If oMLX, LM Studio or the Hugging Face cache already has the same model, Pippa uses it instead of downloading it again.</p>
   </div>
 </section>
 
@@ -1071,7 +1071,7 @@ strong, b { font-weight: 600; }
 
 <section class="faq" id="fragen" aria-labelledby="h-faq">
   <h2 id="h-faq">Questions?</h2>
-  <details id="passt"><summary>Will it run on my Mac?<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 8h11"/><path class="v" d="M8 2.5v11"/></svg></summary><p>You need a Mac with Apple silicon (M1 or later), macOS 15 or later and at least 8&nbsp;GB of memory. Check under Apple menu, About This Mac. Intel Macs are not supported. The download is under 100&nbsp;MB; installed, Pippa takes about 0.5&nbsp;GB. She picks the AI that fits your Mac and asks before downloading it: 3 to 17&nbsp;GB, depending on memory. If LM Studio, Ollama or the Hugging Face cache already has the same model file, she uses it instead of downloading it again.</p></details>
+  <details id="passt"><summary>Will it run on my Mac?<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 8h11"/><path class="v" d="M8 2.5v11"/></svg></summary><p>You need a Mac with Apple silicon (M1 or later), macOS 15 or later. Check under Apple menu, About This Mac. Intel Macs are not supported. The download is under 100&nbsp;MB. Her AI on your Mac needs 16&nbsp;GB of memory; she asks before downloading it, about 5.4&nbsp;GB. If oMLX, LM Studio or the Hugging Face cache already has the same model, she uses it. With less memory, or if you prefer, Pippa uses an online AI: sign in with ChatGPT or add your own key. One PDF from photos always works, without any AI.</p></details>
   <details><summary>Can I start without the AI download?<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 8h11"/><path class="v" d="M8 2.5v11"/></svg></summary><p>Yes. Turning photos and PDFs into one PDF, making files smaller and converting images work right after you install her, and so does tidying a folder. For letters and questions she loads her AI, but only after your OK, and she tells you the size first.</p></details>
   <details><summary>Do I need internet?<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 8h11"/><path class="v" d="M8 2.5v11"/></svg></summary><p>To download the app and her AI, for updates and for web lookups. After that, her AI and the PDF tools work without a connection. If a command needs the internet, she asks you first. An online AI, if you turn one on, needs the internet, of course.</p></details>
   <details><summary>Can I keep using ChatGPT?<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 8h11"/><path class="v" d="M8 2.5v11"/></svg></summary><p>Yes. Sign in with ChatGPT in Pippa or enter your own key from OpenAI or Anthropic, and she uses that service as her online AI. While that is on, your conversations go to it. You can turn it off any time in Settings.</p></details>
@@ -1098,7 +1098,7 @@ strong, b { font-weight: 600; }
     <ul class="foot-links"><li><a href="../impressum.html" hreflang="de">Legal notice (German)</a></li><li><a href="../datenschutz.html" hreflang="de">Privacy policy (German)</a></li><li><a href="https://github.com/tschnorpfeil/pippa">Source code on GitHub</a></li><li><a href="../" hreflang="de" lang="de" data-lang="de">Deutsch</a></li></ul>
   </div>
   <p class="fine">An independent open-source project, not affiliated with Apple, Microsoft, OpenAI, Anthropic or any other provider named here. Mac, macOS and Apple Intelligence are trademarks of Apple Inc., Microsoft Excel is a trademark of Microsoft Corporation, ChatGPT is a trademark of OpenAI and Claude is a trademark of Anthropic.</p>
-  <p class="fine">Pippa uses open models via llama.cpp and the open-source agent <a href="https://github.com/earendil-works/pi">Pi</a> (MIT).</p>
+  <p class="fine">Pippa uses the open Ornith model via <a href="https://github.com/jundot/omlx">oMLX</a> and the open-source agent <a href="https://github.com/earendil-works/pi">Pi</a> (MIT).</p>
 </footer>
 <script src="../pippaMark.js"></script>
 <script>

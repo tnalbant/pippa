@@ -73,7 +73,7 @@ Leave some extra disk space for the app and your results. If the same model is a
 
 ## Good to know
 
-- **Local AI can miss details.** Check important names, amounts and dates against the original. If Pippa gets something wrong, [open an issue](https://github.com/tschnorpfeil/pippa/issues) with the version, what you asked and what happened, using made-up examples.
+- **Local AI can miss details.** Check important names, amounts and dates against the original. A date in her answer that appears in nothing she read gets a note saying she worked it out herself. If Pippa gets something wrong, [open an issue](https://github.com/tschnorpfeil/pippa/issues) with the version, what you asked and what happened, using made-up examples.
 - **Answers may be in German.** Pippa's own abilities for letters and deadlines are written in German.
 - **Nothing is deleted for good.** A file she removes goes to the Trash, and moves never overwrite another file.
 - **She acts when you ask.** If you ask her to add a reminder or move a file, she does it without asking again. The card under her answer shows what she actually did; check the result.
