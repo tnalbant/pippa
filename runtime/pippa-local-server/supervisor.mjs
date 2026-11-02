@@ -6,11 +6,11 @@
 // 2. Starts the server with exactly the binary, arguments and environment Pippa wrote; output to the shared log.
 // 3. Writes the server's pid into the lock, so the app sees a live server and uses it.
 // 4. Server gone for any reason: remove the lock (only if it is still ours) and exit. SIGTERM here stops the server.
-//
-// No idle watchdog: oMLX unloads the model by itself after its idle timeout (settings.json); the process stays and
-// costs little.
+// 5. Nothing written to the shared log for `idleStopSeconds` (default 30 min): stop the server. oMLX unloads the
+//    model after its own idle timeout (settings.json) and logs every request, so a quiet log means nobody uses it,
+//    neither the terminal nor the app; the next request starts a new one.
 import { spawn } from "node:child_process";
-import { mkdirSync, openSync, writeSync } from "node:fs";
+import { mkdirSync, openSync, statSync, writeSync } from "node:fs";
 import { dirname } from "node:path";
 import { createLock, loadConfig, removeLockIf, serverEnvironment, sleep, writeLock } from "./common.mjs";
 
@@ -77,3 +77,14 @@ child.on("exit", (code, signal) => {
 	finish(0);
 });
 for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"]) process.on(signal, () => stopServer(signal));
+
+const idleMs = config.idleStopSeconds * 1000;
+setInterval(() => {
+	let last;
+	try {
+		last = statSync(config.logFile).mtimeMs;
+	} catch {
+		return;
+	}
+	if (Date.now() - last > idleMs) stopServer(`idle for ${config.idleStopSeconds} s`);
+}, Math.min(60_000, Math.max(250, idleMs / 4)));

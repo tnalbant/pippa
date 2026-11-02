@@ -67,15 +67,14 @@ denied, a blocked action offers **Open System Settings**.
 | Calendar | Reads appointments for the period you ask about, and adds events and deadlines when you ask. |
 | Reminders | Reads open and due reminders when you ask; adds reminders and deadlines from your letters when you ask. |
 | Photos | Shows the matching photos from your library. She doesn't change or upload anything. |
-| Contacts | Looks up addresses and phone numbers. She doesn't change them. |
 | Automation (Mail and others) | Searches and reads your inbox in Mail, reads what's open in the app in front when you ask about it, and saves unsent drafts in Mail. |
 
 ## Why she runs outside the App Sandbox
 
 Pippa runs outside Apple's App Sandbox so she can work with your folders and Mac apps; a sandboxed app couldn't, and it
 couldn't set up and start Pi, her assistant core, in your home folder either. Released copies are signed with a
-Developer ID and notarized by Apple. The app uses the Hardened Runtime with four extra rights: Automation, Calendars
-(which covers Reminders), Photos and Contacts. The bundled Node.js that runs Pi has two more: just-in-time compilation
+Developer ID and notarized by Apple. The app uses the Hardened Runtime with three extra rights: Automation, Calendars
+(which covers Reminders) and Photos. The bundled Node.js that runs Pi has two more: just-in-time compilation
 and loading code libraries not signed by Pippa's developer.
 
 Instead of the App Sandbox, Pippa has her own controls:

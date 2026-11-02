@@ -34,6 +34,9 @@ export class ServerError extends Error {
  * Read and check Pippa's launch file (schemaVersion 2). Refuses a key on the command line (it would show in `ps`) and,
  * when the arguments set them anyway, a host other than loopback or a port other than its own.
  */
+/** No log line for this long (no request, no model load or unload): the supervisor stops the server. */
+export const IDLE_STOP_SECONDS = 1800;
+
 export function loadConfig(path) {
 	if (!existsSync(path)) {
 		throw new ServerError(`Pippa's local model is not set up for the terminal yet. Open Pippa once; it writes ${path}.`);
@@ -74,6 +77,7 @@ export function loadConfig(path) {
 		app: typeof raw.app === "string" ? raw.app : undefined,
 		logFile: typeof raw.logFile === "string" && isAbsolute(raw.logFile) ? raw.logFile : join(dirname(path), "local-server.log"),
 		basePath: after("--base-path"),
+		idleStopSeconds: Number.isFinite(raw.idleStopSeconds) && raw.idleStopSeconds > 0 ? raw.idleStopSeconds : IDLE_STOP_SECONDS,
 	};
 }
 

@@ -65,10 +65,10 @@ has_runtime() {
 ents="$(entitlements "$APP")"
 ! grep -q 'com.apple.security.app-sandbox' <<<"$ents" || fail "App Sandbox still on"
 ! grep -q 'com.apple.security.inherit' <<<"$ents" || fail "app carries com.apple.security.inherit"
-# Only what the Hardened Runtime itself requires: Apple Events (Mail, Excel, Photos search), the microphone (dictation),
-# EventKit (Calendar + Reminders), Contacts and PhotoKit (photo previews), see app/Packaging/Pippa.entitlements.
-expect_entitlements "$APP" "Pippa.app" "com.apple.security.automation.apple-events com.apple.security.device.audio-input com.apple.security.personal-information.addressbook com.apple.security.personal-information.calendars com.apple.security.personal-information.photos-library"
-ok "no App Sandbox; app entitlements exactly Apple Events + Microphone + Calendars/Reminders + Contacts + Photos"
+# Only what the Hardened Runtime itself requires: Apple Events (Mail, Excel, Photos search), EventKit (Calendar +
+# Reminders) and PhotoKit (photo previews), see app/Packaging/Pippa.entitlements.
+expect_entitlements "$APP" "Pippa.app" "com.apple.security.automation.apple-events com.apple.security.personal-information.calendars com.apple.security.personal-information.photos-library"
+ok "no App Sandbox; app entitlements exactly Apple Events + Calendars/Reminders + Photos"
 if ((DEVELOPER_ID)); then
   has_runtime "$APP" || fail "Hardened Runtime missing on Pippa.app"
   ok "Hardened Runtime on Pippa.app (Developer ID, team $team)"
@@ -77,8 +77,8 @@ else
 fi
 # Permission prompt texts: without the sandbox TCC asks for the folders.
 usage_keys=(NSCalendarsFullAccessUsageDescription NSRemindersFullAccessUsageDescription NSAppleEventsUsageDescription
-  NSContactsUsageDescription NSPhotoLibraryUsageDescription NSDesktopFolderUsageDescription NSDocumentsFolderUsageDescription NSDownloadsFolderUsageDescription
-  NSMicrophoneUsageDescription NSSpeechRecognitionUsageDescription)
+  NSPhotoLibraryUsageDescription NSDesktopFolderUsageDescription NSDocumentsFolderUsageDescription NSDownloadsFolderUsageDescription
+  )
 for key in "${usage_keys[@]}"; do
   /usr/libexec/PlistBuddy -c "Print :$key" "$APP/Contents/Info.plist" >/dev/null 2>&1 || fail "Info.plist: $key missing"
   for lang in en de; do

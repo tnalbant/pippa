@@ -212,6 +212,15 @@ test("the server keeps running; when it exits the lock goes, and the next reques
 	assert.equal(await common.health(port, key), 0);
 });
 
+test("a quiet log for idleStopSeconds stops the server and gives back the lock", async () => {
+	const port = await freePort();
+	const config = writeConfig(port, { idleStopSeconds: 1 });
+	assert.equal(await ensureServer(config, { configFile, lockFile }), "started");
+	const running = common.readLock(lockFile);
+	assert.ok(await until(() => !existsSync(lockFile) && !common.isAlive(running.pid) && !common.isAlive(running.holder), 8000), "stopped when idle");
+	assert.equal(await common.health(port, key), 0);
+});
+
 test("the app holds the lock and is still loading: wait, never start a second server", async () => {
 	const port = await freePort();
 	const config = writeConfig(port);
