@@ -49,3 +49,11 @@ func runMailSingularChecks() {
             && PippaMCPTools.mailSingular("Zahlung Juni") == nil && PippaMCPTools.mailSingular("Mai") == nil
     }
 }
+
+/// read_document asks for awk once a document holds a table of amounts.
+func runAmountHintChecks() {
+    check("read_document: five euro amounts ask for awk, a letter with one does not") {
+        PippaMCPTurnTools.manyAmounts("Jan 5.231.992 € Feb 17.683.220 € Mär 15.263.114 € Apr 23.826.152 € Mai 1.000,50 EUR")
+            && !PippaMCPTurnTools.manyAmounts("Nachzahlung von 184,37 Euro bis zum 15. November 2026.")
+    }
+}

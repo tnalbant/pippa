@@ -401,6 +401,7 @@ check("System errors in our own words, never the system's wording") {
 
 runDateEvidenceChecks()
 runMailSingularChecks()
+runAmountHintChecks()
 runErrorMessageChecks()
 runLocalizationChecks()
 runSkillChecks()

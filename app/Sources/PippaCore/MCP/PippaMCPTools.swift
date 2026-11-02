@@ -617,10 +617,15 @@ public struct PippaMCPTools: Sendable {
                 if let date = m.date { value["date"] = Self.dateLabel(date, time: true, calendar: host.calendar) }
                 return value
             }
+            var next = "If mails is not empty, the person sees them as a card under your answer: do not list them again; answer in one or two sentences. start is only the beginning of each email; for the whole email or its attachments call mail_read with its subject and from. If mails is empty, no email in the inbox matches."
+            // A small model asked for "the last three" when there are two keeps searching until time runs out.
+            if let count = await host.turns.active?.countMailSearch(), count >= Self.mailSearchesBeforeStop {
+                next = "This is Mail search \(count) in this answer: stop searching. Tell the person which mails you found and that you found no others, then work with those."
+            }
             var result = Self.bounded(source: query.isEmpty ? "Mail on this Mac (newest in the inbox)" : "Mail on this Mac (inbox search by subject or sender)",
                                       data: ["query": query, "unread": unread, "mails": mails, "shown": mails.count, "total": fetch.total,
                                              "truncated": fetch.total > mails.count],
-                                      next: "If mails is not empty, the person sees them as a card under your answer: do not list them again; answer in one or two sentences. start is only the beginning of each email; for the whole email or its attachments call mail_read with its subject and from. If mails is empty, no email in the inbox matches.")
+                                      next: next)
             if !fetch.items.isEmpty {
                 result.card = .mail(MailCard(query: query, unread: unread, mails: fetch.items, total: fetch.total, calendar: host.calendar))
             }
@@ -629,6 +634,9 @@ public struct PippaMCPTools: Sendable {
             return failure(error, .mail)
         }
     }
+
+    /// From this Mail search on in one answer, the result tells the model to stop and work with what it found.
+    static let mailSearchesBeforeStop = 4
 
     /// A German plural as a stem Mail's search finds: "Zahlungseingänge" → "Zahlungseingang", "Rechnungen" → "Rechnung",
     /// "Verträge" → "Vertrag". One word only; `nil` when nothing changes.
