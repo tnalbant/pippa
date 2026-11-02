@@ -40,3 +40,12 @@ func runDateEvidenceChecks() {
         return e.unsupported(in: "30.11.2026, 04.12.2026 und 09.12.2026", today: today) == ["09.12.2026"]
     }
 }
+
+/// Mail search retries a German plural once as its singular.
+func runMailSingularChecks() {
+    check("Mail search: plural to a stem Mail finds, single words only") {
+        PippaMCPTools.mailSingular("Zahlungseingänge") == "Zahlungseingang" && PippaMCPTools.mailSingular("Rechnungen") == "Rechnung"
+            && PippaMCPTools.mailSingular("Verträge") == "Vertrag" && PippaMCPTools.mailSingular("Vertrag") == nil
+            && PippaMCPTools.mailSingular("Zahlung Juni") == nil && PippaMCPTools.mailSingular("Mai") == nil
+    }
+}

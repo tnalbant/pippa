@@ -204,6 +204,10 @@ final class ChatModel: ObservableObject {
         case .assistantEnded(_, let reason, let error):
             if reason == "toolUse" { updateLast(in: id) { if !$0.text.isEmpty, !$0.text.hasSuffix("\n") { $0.text += "\n\n" } } }
             if reason == "error", let error { updateLast(in: id) { $0.error = error } }
+            // The model used up its answer length (usually while thinking) and stopped mid-way: say so, never end quietly.
+            if reason == "length" {
+                updateLast(in: id) { $0.error = T("That was too much at once for the AI on this Mac. Ask for a smaller part, for example one document at a time.", table: "App") }
+            }
         case .notice(let text, let kind) where kind == "error" || kind == "warning":
             updateLast(in: id) { $0.error = text }
         default:

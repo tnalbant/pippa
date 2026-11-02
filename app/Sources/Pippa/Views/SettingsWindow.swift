@@ -50,7 +50,12 @@ struct SettingsView: View {
         Form {
             Section(T("Pippa’s AI", table: "App")) {
                 if setup.isReady {
-                    LabeledContent(T("On this Mac", table: "App"), value: T("Ready", table: "App"))
+                    SettingsRow(title: T("On this Mac", table: "App"),
+                                detail: T("%@. Your conversations stay on this Mac.", table: "App", Self.localModelName)) {
+                        Label(T("Ready", table: "App"), systemImage: "circle.fill")
+                            .labelStyle(StatusLabelStyle())
+                            .foregroundStyle(.secondary)
+                    }
                 } else {
                     SetupCard(setup: setup)
                 }
@@ -76,13 +81,26 @@ struct SettingsView: View {
                 }
             }
             Section(T("Updates", table: "App")) {
-                Button(T("Check for Updates…", table: "App")) { Updates.shared.checkNow() }
-                LabeledContent(T("Version", table: "App"), value: AppVersion.label)
+                SettingsRow(title: T("Version", table: "App"), detail: AppVersion.label) {
+                    Button(T("Check for Updates…", table: "App")) { Updates.shared.checkNow() }
+                }
             }
         }
         .formStyle(.grouped)
         .frame(width: 560)
         .frame(minHeight: 480)
+    }
+
+    static var localModelName: String { ModelCatalog.bundled().models.first?.label ?? "" }
+}
+
+/// A small green dot before the status text.
+private struct StatusLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 6) {
+            configuration.icon.font(.system(size: 7)).foregroundStyle(Theme.ok)
+            configuration.title
+        }
     }
 }
 

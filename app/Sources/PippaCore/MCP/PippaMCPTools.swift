@@ -602,7 +602,15 @@ public struct PippaMCPTools: Sendable {
             return reply
         }
         do {
-            let fetch = try await host.hostData.searchMail(query, unread: unread, limit: limit)
+            var fetch = try await host.hostData.searchMail(query, unread: unread, limit: limit)
+            // Mail finds parts of words, not other forms: "Zahlungseingänge" misses "Zahlungseingangsliste". A small
+            // model then guesses word after word; one retry with the singular saves those turns.
+            var searched = query
+            if fetch.items.isEmpty, let singular = Self.mailSingular(query) {
+                let retry = try await host.hostData.searchMail(singular, unread: unread, limit: limit)
+                if !retry.items.isEmpty { fetch = retry; searched = singular }
+            }
+            let query = searched
             let mails = fetch.items.map { m -> [String: Any] in
                 var value: [String: Any] = ["subject": m.subject, "from": m.sender, "mailbox": m.mailbox, "start": Self.compact(m.preview),
                                             "unread": m.unread]
@@ -620,6 +628,20 @@ public struct PippaMCPTools: Sendable {
         } catch {
             return failure(error, .mail)
         }
+    }
+
+    /// A German plural as a stem Mail's search finds: "Zahlungseingänge" → "Zahlungseingang", "Rechnungen" → "Rechnung",
+    /// "Verträge" → "Vertrag". One word only; `nil` when nothing changes.
+    public static func mailSingular(_ word: String) -> String? {
+        guard !word.contains(where: \.isWhitespace), word.count >= 5 else { return nil }
+        var w = word
+        let vowels: [Character: Character] = ["ä": "a", "ö": "o", "ü": "u", "Ä": "A", "Ö": "O", "Ü": "U"]
+        if let i = w.indices.suffix(4).last(where: { vowels[w[$0]] != nil }) { w.replaceSubrange(i...i, with: String(vowels[w[i]]!)) }
+        for ending in ["en", "er", "es", "e", "n", "s"] where w.lowercased().hasSuffix(ending) && w.count - ending.count >= 4 {
+            w.removeLast(ending.count)
+            break
+        }
+        return w == word ? nil : w
     }
 
     // MARK: Photos

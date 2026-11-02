@@ -128,3 +128,5 @@
 "%lld s" = "%lld s";
 "The AI on this Mac didn’t start. Try again in a moment." = "The AI on this Mac didn’t start. Try again in a moment.";
 "Not in what I read: %@. I worked this out myself, so please check it." = "Not in what I read: %@. I worked this out myself, so please check it.";
+"%@. Your conversations stay on this Mac." = "%@. Your conversations stay on this Mac.";
+"That was too much at once for the AI on this Mac. Ask for a smaller part, for example one document at a time." = "That was too much at once for the AI on this Mac. Ask for a smaller part, for example one document at a time.";

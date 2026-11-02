@@ -103,6 +103,10 @@ public enum PiLocalServer {
         merge("cache", ["enabled": true, "ssd_cache_max_size": "8GB"])
         merge("huggingface", ["endpoint": ""])
         merge("idle_timeout", ["idle_timeout_seconds": idleUnloadSeconds])
+        // Pi sends no sampling of its own, so these are what the model runs with. oMLX's defaults (temperature 1, no
+        // top-k) let stray tokens through: Cyrillic and English fragments in German answers. Qwen 3.5's values for
+        // precise work, which Ornith is fine-tuned from.
+        merge("sampling", ["temperature": 0.6, "top_k": 20, "top_p": 0.95])
         let data = try JSONSerialization.data(withJSONObject: document, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
         if (try? Data(contentsOf: plan.settingsFile)) == data { return }
         try data.write(to: plan.settingsFile, options: .atomic)

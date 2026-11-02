@@ -180,11 +180,11 @@ func runTerminalAutostartChecks() async {
             && !text.contains(plan.key) && fm.fileExists(atPath: plan.settingsFile.path)
     }
 
-    check("oMLX settings.json: port, key and model folder written (0600), the person's and oMLX's other keys stay") {
+    check("oMLX settings.json: port, key, model folder and sampling written (0600), the person's and oMLX's other keys stay") {
         let (roots, env) = try setup("ta-settings")
         let plan = try PiLocalServer.plan(roots: roots, modelID: ornith, physicalMemory: 16 << 30, environment: env)
         try fm.createDirectory(at: plan.baseDirectory, withIntermediateDirectories: true)
-        write(#"{"server": {"port": 1, "custom": "x"}, "auth": {"api_key": "old"}, "sampling": {"temperature": 0.7}, "version": 3}"#, plan.settingsFile)
+        write(#"{"server": {"port": 1, "custom": "x"}, "auth": {"api_key": "old"}, "sampling": {"temperature": 1.0, "repetition_penalty": 1.1}, "version": 3}"#, plan.settingsFile)
         try fm.setAttributes([.posixPermissions: 0o644], ofItemAtPath: plan.settingsFile.path)
         try PiLocalServer.writeServerSettings(plan)
         let doc = try JSONSerialization.jsonObject(with: Data(contentsOf: plan.settingsFile)) as? [String: Any] ?? [:]
@@ -194,7 +194,8 @@ func runTerminalAutostartChecks() async {
             && auth?["api_key"] as? String == plan.key && auth?["allow_unauthenticated_inference"] as? Bool == false
             && model?["model_dirs"] as? [String] == [plan.modelsDirectory.path]
             && (doc["idle_timeout"] as? [String: Any])?["idle_timeout_seconds"] as? Int == PiLocalServer.idleUnloadSeconds
-            && (doc["sampling"] as? [String: Any])?["temperature"] as? Double == 0.7 && doc["version"] as? Int == 3
+            && (doc["sampling"] as? [String: Any])?["temperature"] as? Double == 0.6 && (doc["sampling"] as? [String: Any])?["top_k"] as? Int == 20
+            && (doc["sampling"] as? [String: Any])?["repetition_penalty"] as? Double == 1.1 && doc["version"] as? Int == 3
             && mode == 0o600
     }
 
