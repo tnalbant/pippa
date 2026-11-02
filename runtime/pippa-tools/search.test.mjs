@@ -76,16 +76,25 @@ test("personal places only: no hidden folders, no Library outside the cloud driv
 	assert.ok(!personal("/elsewhere/a.pdf", home));
 });
 
-test("the children's book: PDFs in a folder named like the topic, the named type first", async () => {
+test("the children's book: PDFs in a folder named like the topic; a named type filters, newest first", async () => {
 	const result = await search("Kinderbuchs", undefined, home, { kind: "pdf", run: fakeMdfind });
 	assert.equal(result.status, "ok");
 	assert.deepEqual(result.files.map((f) => f.path.slice(home.length + 1)), [
 		"projects/Kinderbuch/Kinderbuch_35cm_Gesamt.pdf",
 		"projects/Kinderbuch/LayoutSketch.pdf",
-		"Library/Mobile Documents/com~apple~CloudDocs/Kinderbuch Notizen.txt",
-		"Documents/Kinderbuch/Verläge.md",
 	]);
 	assert.equal(result.kind, "pdf");
+	assert.equal(result.total, 2);
+	assert.equal(result.files[0].newest, true);
+	assert.equal(result.newest_file, result.files[0].path);
+	assert.deepEqual(Object.keys(result.files[1]), ["name", "path", "kind", "size", "modified"]);
+	assert.match(result.files[1].modified, /^2020-01-01T00:00:00[+-]\d\d:\d\d$/);
+	const all = await search("Kinderbuchs", undefined, home, { run: fakeMdfind });
+	assert.equal(all.files.at(-1).name, "LayoutSketch.pdf", "without a type: every match, the oldest last");
+	assert.equal(all.files.find((f) => f.name === "Verläge.md").kind, "file");
+	const byName = await search("Kinderbuchs", undefined, home, { run: fakeMdfind, sort: "name" });
+	assert.deepEqual(byName.files.map((f) => f.name), ["Kinderbuch Notizen.txt", "Kinderbuch_35cm_Gesamt.pdf", "LayoutSketch.pdf", "Verläge.md"]);
+	assert.equal(byName.sorted, "by name");
 	// "PDF" in the query works like kind.
 	assert.deepEqual((await search("PDF Kinderbuch", undefined, home, { run: fakeMdfind })).files.slice(0, 2).map((f) => f.name),
 		["Kinderbuch_35cm_Gesamt.pdf", "LayoutSketch.pdf"]);
@@ -112,4 +121,29 @@ test("no home folder: unavailable, nothing searched", async () => {
 	const result = await search("Steuer", undefined, join(home, "missing"), { run: fakeMdfind });
 	assert.equal(result.status, "unavailable");
 	assert.deepEqual(result.files, []);
+});
+
+test("many matches: at most 20, sorted newest first, the rest counted, JSON under the result cap", async () => {
+	const many = join(home, "Documents/Steuer");
+	await mkdir(many, { recursive: true });
+	const names = Array.from({ length: 30 }, (_, i) => `Steuerbescheid Einkommensteuer Anlage Kapitalvermögen ${String(i).padStart(2, "0")}.md`);
+	for (const [i, name] of names.entries()) {
+		await writeFile(join(many, name), i === 3 ? "---\nupdated: 2026-10-01\n---\nSteuer" : "Steuer");
+		await utimes(join(many, name), new Date(2026, 0, 1 + i), new Date(2026, 0, 1 + i));
+	}
+	const run = (args) => Promise.resolve({ stdout: args.at(-1).includes("public.folder") ? "" : names.map((n) => join(many, n)).join("\0") });
+	const result = await search("Steuer", undefined, home, { run });
+	const text = JSON.stringify(result);
+	assert.ok(text.length <= 5_500, `${text.length}`);
+	assert.equal(result.total, 30);
+	assert.ok(result.files.length <= 20);
+	assert.equal(result.left_out, 30 - result.files.length);
+	assert.equal(result.files[0].name, names[29]);
+	assert.equal(result.files[0].newest, true);
+	const times = result.files.map((f) => f.modified);
+	assert.deepEqual([...times].sort().reverse(), times);
+	const byName = await search("Steuer", undefined, home, { run, sort: "name" });
+	assert.equal(byName.files[3].updated, "2026-10-01", "front matter of Markdown files");
+	assert.equal(byName.files[0].newest, undefined);
+	assert.equal(byName.newest_file, join(many, names[29]), "the newest is named even when it is not shown");
 });

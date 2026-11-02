@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
 # Builds dist/Pippa.app (arm64): SwiftPM release, Info.plist, resource bundles,
-# app icon, llama-server built from the pinned llama.cpp source plus Pippa's patches, signing.
+# app icon, Node, Pi payload, fd and ripgrep, signing. The local AI (oMLX runtime and model) is not bundled:
+# setup downloads it (docs/omlx-switch.md).
 #
 #   scripts/build-app.sh
 #
 # Environment:
 #   PIPPA_SIGN_IDENTITY  "Developer ID Application: Name (TEAMID)"; without: ad hoc
 #   PIPPA_SKIP_BUILD=1   use the existing release build (no swift build)
-#   PIPPA_CACHE          download and llama.cpp build cache (default ~/Library/Caches/pippa-build)
-#   PIPPA_CMAKE          cmake to build llama-server with (default: cmake from PATH); PIPPA_NINJA likewise
+#   PIPPA_CACHE          download cache (default ~/Library/Caches/pippa-build)
 #   PIPPA_REQUIRE_DISTRIBUTION=1  Developer ID mandatory (release pipeline)
-#   PIPPA_NATIVE_ACCEPTANCE=1  instrumented signed integration candidate, separate output/scratch; never distribute
-#   PIPPA_BUILD_JOBS     parallel compile jobs for swift build and llama.cpp (default: cores - 2, at least 1),
+#   PIPPA_BUILD_JOBS     parallel compile jobs for swift build (default: cores - 2, at least 1),
 #                        so a build leaves the Mac usable
 set -euo pipefail
 
@@ -21,19 +20,7 @@ PACKAGING="$APP_SRC/Packaging"
 DIST="$ROOT/dist"
 APP="$DIST/Pippa.app"
 CACHE="${PIPPA_CACHE:-$HOME/Library/Caches/pippa-build}"
-RELEASE_JSON="$ROOT/app/Packaging/llama-release.json"
 IDENTITY="${PIPPA_SIGN_IDENTITY:-}"
-ACCEPTANCE="${PIPPA_NATIVE_ACCEPTANCE:-0}"
-if [[ "$ACCEPTANCE" != 0 && "$ACCEPTANCE" != 1 ]]; then
-  printf 'Error: PIPPA_NATIVE_ACCEPTANCE must be 0 or 1.\n' >&2; exit 1
-fi
-if [[ "$ACCEPTANCE" == 1 ]]; then
-  if [[ "${PIPPA_REQUIRE_DISTRIBUTION:-0}" == 1 || "${PIPPA_SKIP_BUILD:-0}" == 1 || "$IDENTITY" != "Developer ID Application:"* ]]; then
-    printf 'Error: native acceptance requires Developer ID, a fresh build and no distribution mode.\n' >&2; exit 1
-  fi
-  DIST="$ROOT/dist/native-acceptance"
-  APP="$DIST/Pippa.app"
-fi
 if [[ "${PIPPA_REQUIRE_DISTRIBUTION:-0}" == 1 && "$IDENTITY" != "Developer ID Application:"* ]]; then
   printf 'Error: a release needs PIPPA_SIGN_IDENTITY with a Developer ID Application.\n' >&2
   exit 1
@@ -62,8 +49,8 @@ COMMITS="$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo 1)"
 BUILD="$(( $(tr -d '[:space:]' < "$ROOT/app/Packaging/build-number-base") + COMMITS ))"
 say "Pippa $VERSION ($BUILD)"
 
-# --- Default models pinned (catalog.json) -----------------------------------
-# A model from ModelSelector's table without revision and SHA256 cannot be downloaded: never ship that.
+# --- Default model pinned (catalog.json) ------------------------------------
+# A catalog model without revision, size and SHA256 per file cannot be downloaded: never ship that.
 # PIPPA_ALLOW_UNPINNED=1 only for local test builds, never for a distribution build.
 if ! python3 "$ROOT/scripts/check-default-models.py"; then
   if [[ "${PIPPA_ALLOW_UNPINNED:-0}" == 1 && "${PIPPA_REQUIRE_DISTRIBUTION:-0}" != 1 ]]; then
@@ -75,116 +62,15 @@ fi
 
 # --- SwiftPM-Release ---------------------------------------------------------
 SWIFT_ARGS=(-c release --arch arm64)
-if [[ "$ACCEPTANCE" == 1 ]]; then
-  SWIFT_ARGS+=(--scratch-path "$ROOT/.build/native-acceptance-swift" -Xswiftc -DPIPPA_NATIVE_ACCEPTANCE)
-  SOURCE_BEFORE="$(python3 "$ROOT/scripts/check-native-acceptance.py" --source-manifest)"
-fi
 if [[ "${PIPPA_SKIP_BUILD:-}" != 1 ]]; then
   say "swift build -c release --arch arm64 ($JOBS jobs)"
   (cd "$APP_SRC" && swift build "${SWIFT_ARGS[@]}" --jobs "$JOBS" --product Pippa)
 fi
 BIN="$(cd "$APP_SRC" && swift build "${SWIFT_ARGS[@]}" --show-bin-path)"
 [[ -x "$BIN/Pippa" ]] || die "no release binary at $BIN/Pippa"
-if [[ "$ACCEPTANCE" == 1 ]]; then
-  SOURCE_AFTER="$(python3 "$ROOT/scripts/check-native-acceptance.py" --source-manifest)"
-  python3 - "$SOURCE_BEFORE" "$SOURCE_AFTER" <<'PY'
-import json, sys
-before, after = map(json.loads, sys.argv[1:])
-if before['appSourceSHA256'] != after['appSourceSHA256'] or before['commit'] != after['commit']:
-    raise SystemExit('Acceptance application source changed during compilation; rerun after edits finish.')
-PY
-fi
 
-# --- llama.cpp (pinned source + Pippa patches, built here) -------------------
-# Not the official binary: the K2 Horizon parser of b11503 needs a patch (app/Packaging/llama-patches).
-# Source tarball and patches are checksum-pinned in llama-release.json ("bundled").
-find_cmake() {
-  if [[ -n "${PIPPA_CMAKE:-}" ]]; then
-    [[ -x "$PIPPA_CMAKE" ]] || die "PIPPA_CMAKE=$PIPPA_CMAKE is not an executable"
-    printf '%s\n' "$PIPPA_CMAKE"
-  elif command -v cmake >/dev/null; then
-    command -v cmake
-  else
-    die "cmake missing: llama-server is built from source. Install cmake (e.g. brew install cmake, or pip install cmake ninja in a venv) or set PIPPA_CMAKE=/path/to/cmake"
-  fi
-}
-CMAKE="$(find_cmake)"
-# Prefer Ninja (also next to a venv cmake), else Makefiles.
-NINJA="${PIPPA_NINJA:-$(command -v ninja || true)}"
-[[ -n "$NINJA" || ! -x "$(dirname "$CMAKE")/ninja" ]] || NINJA="$(dirname "$CMAKE")/ninja"
-if [[ -n "$NINJA" ]]; then GENERATOR=(-G Ninja "-DCMAKE_MAKE_PROGRAM=$NINJA"); else GENERATOR=(-G "Unix Makefiles"); fi
-command -v patch >/dev/null || die "patch missing (Command Line Tools installed?)"
-
-LLAMA_INFO="$(python3 - "$RELEASE_JSON" <<'PY'
-import json, sys
-r = json.load(open(sys.argv[1]))
-b = r["bundled"]
-print(b["tag"]); print(b["source"]); print(b["sourceSha256"])
-print(" ".join(b["cmake"]))
-for p in b["patches"]:
-    print("PATCH " + p["file"] + " " + p["sha256"])
-PY
-)"
-LLAMA_TAG="$(sed -n 1p <<<"$LLAMA_INFO")"
-LLAMA_URL="$(sed -n 2p <<<"$LLAMA_INFO")"
-LLAMA_SHA="$(sed -n 3p <<<"$LLAMA_INFO")"
-read -r -a LLAMA_CMAKE_ARGS <<<"$(sed -n 4p <<<"$LLAMA_INFO")"
-[[ -n "$LLAMA_SHA" && "$LLAMA_URL" == https://github.com/ggml-org/llama.cpp/* ]] || die "bundled source missing or unexpected in $RELEASE_JSON"
 mkdir -p "$CACHE"
-ARCHIVE="$CACHE/llama.cpp-$LLAMA_TAG.tar.gz"
 sha_of() { shasum -a 256 "$1" | cut -d' ' -f1; }
-if [[ -f "$ARCHIVE" && "$(sha_of "$ARCHIVE")" != "$LLAMA_SHA" ]]; then
-  warn "cached file has the wrong checksum, downloading again"
-  rm -f "$ARCHIVE"
-fi
-if [[ ! -f "$ARCHIVE" ]]; then
-  say "Downloading llama.cpp $LLAMA_TAG source"
-  curl -fL --retry 3 --progress-bar -o "$ARCHIVE.part" "$LLAMA_URL"
-  ACTUAL="$(sha_of "$ARCHIVE.part")"
-  if [[ "$ACTUAL" != "$LLAMA_SHA" ]]; then
-    rm -f "$ARCHIVE.part"
-    die "SHA256 of the llama.cpp source does not match: expected $LLAMA_SHA, got $ACTUAL"
-  fi
-  mv "$ARCHIVE.part" "$ARCHIVE"
-fi
-say "llama.cpp $LLAMA_TAG source verified (sha256 $LLAMA_SHA)"
-
-PATCHES=()
-PATCH_KEY=""
-while read -r _ pfile psha; do
-  [[ -f "$PACKAGING/$pfile" ]] || die "patch $pfile missing"
-  [[ "$(sha_of "$PACKAGING/$pfile")" == "$psha" ]] || die "patch $pfile does not match the SHA256 in $RELEASE_JSON"
-  PATCHES+=("$PACKAGING/$pfile")
-  PATCH_KEY+="$psha"
-done < <(grep '^PATCH ' <<<"$LLAMA_INFO")
-
-# Build tree is keyed by source + patches + flags: any change starts from a clean tree, otherwise it is reused (incremental).
-BUILD_KEY="$(printf '%s|%s|%s|%s' "$LLAMA_SHA" "$PATCH_KEY" "${LLAMA_CMAKE_ARGS[*]}" "${GENERATOR[*]}" | shasum -a 256 | cut -c1-12)"
-LLAMA_DIR="$CACHE/llama-$LLAMA_TAG-$BUILD_KEY"
-LLAMA_SRC="$LLAMA_DIR/src"
-LLAMA_BUILD="$LLAMA_DIR/build"
-if [[ ! -f "$LLAMA_DIR/.patched" ]]; then
-  rm -rf "$LLAMA_DIR"
-  mkdir -p "$LLAMA_SRC"
-  tar -xzf "$ARCHIVE" -C "$LLAMA_SRC" --strip-components=1
-  for p in "${PATCHES[@]}"; do
-    say "Applying $(basename "$p")"
-    patch -p1 --batch -d "$LLAMA_SRC" -i "$p" || die "patch $(basename "$p") does not apply to llama.cpp $LLAMA_TAG"
-  done
-  touch "$LLAMA_DIR/.patched"
-fi
-say "Building llama-server $LLAMA_TAG (cmake: $CMAKE, $JOBS jobs)"
-"$CMAKE" -S "$LLAMA_SRC" -B "$LLAMA_BUILD" "${GENERATOR[@]}" \
-  -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
-  "${LLAMA_CMAKE_ARGS[@]}" >"$LLAMA_DIR/configure.log" 2>&1 || { tail -30 "$LLAMA_DIR/configure.log" >&2; die "llama.cpp configure failed (log: $LLAMA_DIR/configure.log)"; }
-"$CMAKE" --build "$LLAMA_BUILD" --target llama-server -j "$JOBS" >"$LLAMA_DIR/build.log" 2>&1 ||
-  { tail -30 "$LLAMA_DIR/build.log" >&2; die "llama.cpp build failed (log: $LLAMA_DIR/build.log)"; }
-LLAMA_BIN="$LLAMA_BUILD/bin/llama-server"
-[[ -x "$LLAMA_BIN" ]] || die "no llama-server at $LLAMA_BIN"
-# Static build: everything except system libraries/frameworks must be inside the binary.
-if otool -L "$LLAMA_BIN" | awk 'NR > 1 { print $1 }' | grep -q '^@rpath/'; then
-  die "llama-server links shared libraries (@rpath); expected a static build (-DBUILD_SHARED_LIBS=OFF in llama-release.json)"
-fi
 
 # --- fd and ripgrep for Pi's find and grep (pinned, checksum-verified) -------
 SEARCH_JSON="$ROOT/app/Packaging/search-tools.json"
@@ -220,15 +106,6 @@ printf 'APPL????' > "$APP/Contents/PkgInfo"
 
 sed -e "s/__VERSION__/$VERSION/g" -e "s/__BUILD__/$BUILD/g" -e "s/__YEAR__/$(date +%Y)/g" \
   "$PACKAGING/Info.plist" > "$APP/Contents/Info.plist"
-if [[ "$ACCEPTANCE" == 1 ]]; then
-  plutil -insert PippaNativeAcceptance -bool true "$APP/Contents/Info.plist"
-  python3 - "$SOURCE_BEFORE" "$SOURCE_AFTER" "$APP/Contents/Resources/native-acceptance-source.json" <<'PY'
-import json, sys
-with open(sys.argv[3], 'w') as output:
-    json.dump({'before': json.loads(sys.argv[1]), 'after': json.loads(sys.argv[2])}, output, sort_keys=True, indent=2)
-    output.write('\n')
-PY
-fi
 plutil -lint "$APP/Contents/Info.plist" >/dev/null
 # Localized Info.plist texts (permission prompts, copyright, document type) and the
 # Services menu title: Contents/Resources/<language>.lproj/{InfoPlist,ServicesMenu}.strings.
@@ -261,11 +138,7 @@ if ((${#frameworks[@]})); then
 fi
 shopt -u nullglob
 
-# llama-server (static build, no dylibs) goes to Helpers.
-cp "$LLAMA_BIN" "$APP/Contents/Helpers/llama-server"
-cp "$LLAMA_SRC/LICENSE" "$APP/Contents/Resources/llama.cpp-LICENSE.txt"
 cp "$ROOT/THIRD_PARTY_NOTICES.md" "$APP/Contents/Resources/THIRD_PARTY_NOTICES.md"
-echo "    Helpers: llama-server $LLAMA_TAG (patched, static, $(du -h "$APP/Contents/Helpers/llama-server" | cut -f1 | tr -d ' '))"
 
 # Pi is bundled by default. Customers never need a separate Node/npm install.
 say "Node, web access, Pi install payload, abilities"
@@ -288,7 +161,7 @@ echo "    Resources: pippa-skills ($(find "$APP/Contents/Resources/pippa-skills"
 # Pippa's Pi extensions (file tools, helps for small models, MCP connection) for the Pi RPC path.
 # Only the sources Pi loads; tests stay out.
 mkdir -p "$APP/Contents/Resources/pippa-tools"
-for f in pippa-policy.ts pippa-tools.ts pippa-assist.ts pippa-memory.ts pippa-context.ts pippa-mcp.ts skill-save.ts files.ts list-folder.ts shell.ts applescript.ts budget.ts search.mjs tool-scope.mjs; do
+for f in pippa-tools.ts pippa-assist.ts pippa-memory.ts pippa-mcp.ts files.ts facts.mjs list-folder.ts document.ts shell.ts budget.ts search.mjs; do
   cp "$ROOT/runtime/pippa-tools/$f" "$APP/Contents/Resources/pippa-tools/$f"
 done
 # ChatGPT sign-in through Pi's own sign-in (PiSubscriptionAuth.swift); tests stay out.
@@ -339,14 +212,14 @@ fi
 # No App Sandbox (Pi has to work in the home folder and run commands the person approves): Pippa.entitlements
 # holds only Hardened Runtime rights, Node.entitlements JIT + library validation off
 # (it is copied to ~/.local/share/pi-node for the terminal Pi), all other helpers
-# (llama-server, esbuild) carry no entitlements at all.
+# (fd, rg, esbuild) carry no entitlements at all.
 if [[ -n "$IDENTITY" ]]; then
-  SIGN_LLAMA=("${SIGN[@]}")
+  SIGN_HELPER=("${SIGN[@]}")
 else
-  SIGN_LLAMA=(codesign --force --timestamp=none --sign -)
+  SIGN_HELPER=(codesign --force --timestamp=none --sign -)
 fi
 # Inside out: dylibs, helpers, app. No --deep signing (it overwrites entitlements).
-for lib in "$APP"/Contents/Frameworks/*.dylib; do [[ -e "$lib" ]] && "${SIGN_LLAMA[@]}" "$lib"; done
+for lib in "$APP"/Contents/Frameworks/*.dylib; do [[ -e "$lib" ]] && "${SIGN_HELPER[@]}" "$lib"; done
 for fw in "$APP"/Contents/Frameworks/*.framework; do
   if [[ -e "$fw" ]]; then
     if [[ "$(basename "$fw")" == Sparkle.framework ]]; then
@@ -362,21 +235,20 @@ for fw in "$APP"/Contents/Frameworks/*.framework; do
   fi
 done
 while IFS= read -r -d '' addon; do
-  "${SIGN_LLAMA[@]}" "$addon"
+  "${SIGN_HELPER[@]}" "$addon"
 done < <(find "$APP/Contents/Resources/pi-payload" "$APP/Contents/Resources/pippa-web" -type f -name '*.node' -print0)
 # esbuild (used by Pi extension loading) is a real native executable too.
 # Sign every executable Mach-O in the dependency tree, not just .node add-ons. No entitlements:
 # the installer copies them out of the bundle with their signature, and they run without a sandbox.
 while IFS= read -r -d '' helper; do
   if [[ "$helper" != *.node ]] && file -b "$helper" | grep -q 'Mach-O.*executable'; then
-    "${SIGN_LLAMA[@]}" "$helper"
+    "${SIGN_HELPER[@]}" "$helper"
   fi
 done < <(find "$APP/Contents/Resources/pi-payload" "$APP/Contents/Resources/pippa-web" -type f -perm -111 -print0)
-"${SIGN_LLAMA[@]}" --identifier io.github.tschnorpfeil.pippa.node \
+"${SIGN_HELPER[@]}" --identifier io.github.tschnorpfeil.pippa.node \
   --entitlements "$PACKAGING/Node.entitlements" "$APP/Contents/Helpers/node"
-"${SIGN_LLAMA[@]}" --identifier io.github.tschnorpfeil.pippa.llama-server "$APP/Contents/Helpers/llama-server"
-"${SIGN_LLAMA[@]}" --identifier io.github.tschnorpfeil.pippa.fd "$APP/Contents/Helpers/fd"
-"${SIGN_LLAMA[@]}" --identifier io.github.tschnorpfeil.pippa.rg "$APP/Contents/Helpers/rg"
+"${SIGN_HELPER[@]}" --identifier io.github.tschnorpfeil.pippa.fd "$APP/Contents/Helpers/fd"
+"${SIGN_HELPER[@]}" --identifier io.github.tschnorpfeil.pippa.rg "$APP/Contents/Helpers/rg"
 "${SIGN[@]}" --entitlements "$PACKAGING/Pippa.entitlements" "$APP"
 codesign --verify --deep --strict "$APP"
 

@@ -8,9 +8,8 @@ import PippaCore
 enum BundleVerification {
     static func run() throws {
         progress("start")
-        DisplayFont.register()
         let bundle = Bundle.main.bundleURL
-        // Checks what the Pi RPC path needs: install payload, skills, llama-server, Node, Pi and the web access package.
+        // Checks what the Pi RPC path needs: install payload, skills, Node, Pi and the web access package.
         let release = bundle.appendingPathComponent("Contents/Resources/pi-payload/release")
         let web = bundle.appendingPathComponent("Contents/Resources/pippa-web")
         let piManifest = try JSONSerialization.jsonObject(with: Data(contentsOf: release.appendingPathComponent("package.json"))) as? [String: Any]
@@ -21,9 +20,6 @@ enum BundleVerification {
         let manifest = try JSONSerialization.jsonObject(with: Data(contentsOf: bundle.appendingPathComponent("Contents/Resources/node-release.json"))) as? [String: Any]
         guard let version = manifest?["version"] as? String else { throw Failure.nodeVersion }
         progress("resources_ok")
-        let llama = try child(bundle, "llama-server", ["--version"])
-        guard llama.contains("version:") else { throw Failure.llama }
-        progress("llama_ok")
         // esbuild came with Pi 1.1 and is tested when present; Pi 1.2 no longer ships it.
         let native = release.appendingPathComponent("node_modules/@earendil-works/pi-tui/native/darwin/prebuilds/darwin-arm64/darwin-platform.node")
         let js = """
@@ -79,5 +75,5 @@ enum BundleVerification {
         return String(decoding: data, as: UTF8.self)
     }
 
-    enum Failure: Error { case missingSkills, nodeVersion, piVersion, llama, web(String), child(String, Int32) }
+    enum Failure: Error { case missingSkills, nodeVersion, piVersion, web(String), child(String, Int32) }
 }

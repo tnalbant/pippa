@@ -10,8 +10,6 @@ public enum ResultCard: Codable, Sendable, Equatable {
     case reminders(ReminderCard)
     case web(WebSourcesCard)
     case preparedFiles(PreparedFilesCard)
-    case chart(ChartCard)
-    case filledForm(FilledFormCard)
 }
 
 /// Mails a search found: sender, subject, date, the start of the text; a click opens the mail in Mail.
@@ -195,50 +193,6 @@ public struct WebSourcesCard: Codable, Sendable, Equatable {
         guard let pattern = try? NSRegularExpression(pattern: #"https?://[^\s<>()\[\]"'`]+"#) else { return [] }
         return pattern.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { match in
             Range(match.range, in: text).flatMap { webURL(String(text[$0]).trimmingCharacters(in: CharacterSet(charactersIn: ".,;:!?*"))) }
-        }
-    }
-}
-
-/// Files a search found, for the files card under the answer (Pippa's own search result, never the model's text).
-public enum FoundFiles {
-    public static let maxRows = 8
-
-    /// Files the answer names come first (in search order), then the rest; folders and files that are gone stay out.
-    public static func ordered(_ files: [URL], answer: String, exists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) }) -> [URL] {
-        let present = files.filter { !$0.hasDirectoryPath && exists($0) }
-        let named = present.filter { answer.contains($0.lastPathComponent) || answer.contains($0.absoluteString) }
-        return named + present.filter { !named.contains($0) }
-    }
-
-    /// The folder shown under each name: its folder's name, unless another file of the same name sits in a folder of the
-    /// same name (copies in a backup, "quellen" in two projects). Then the first folder up that tells them apart comes
-    /// first: "Pippa-Backup › … › quellen", so the rows no longer look like the same file twice.
-    public static func folderLabels(_ files: [URL]) -> [URL: String] {
-        func parents(_ file: URL) -> [String] { file.deletingLastPathComponent().standardizedFileURL.pathComponents.filter { $0 != "/" } }
-        var labels: [URL: String] = [:]
-        for file in files {
-            let own = parents(file)
-            let folder = own.last ?? "/"
-            let twins = files.filter { $0 != file && $0.lastPathComponent == file.lastPathComponent && parents($0).last == own.last }
-                .map(parents)
-            labels[file] = folder
-            guard !twins.isEmpty, own.count > 1 else { continue }
-            for depth in 2...own.count where !twins.contains(where: { Array($0.suffix(depth)) == Array(own.suffix(depth)) }) {
-                labels[file] = own[own.count - depth] + (depth == 2 ? " › " : " › … › ") + folder
-                break
-            }
-        }
-        return labels
-    }
-
-    /// Files a folder listing or shell command showed (not a search) join the card only when the answer names them:
-    /// a listed folder of 80 files must not become a card of 80. Name, link or path; Markdown escapes ("a\_b") count.
-    public static func named(_ listed: [URL], answer: String, exists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) }) -> [URL] {
-        let plain = answer.replacingOccurrences(of: "\\", with: "")
-        var seen = Set<URL>()
-        return listed.filter { file in
-            !file.hasDirectoryPath && seen.insert(file).inserted && exists(file)
-                && (plain.contains(file.lastPathComponent) || answer.contains(file.absoluteString) || plain.contains(file.path))
         }
     }
 }

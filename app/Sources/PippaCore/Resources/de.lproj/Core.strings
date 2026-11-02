@@ -38,30 +38,14 @@
 "It’s on a different drive." = "Liegt auf einem anderen Laufwerk.";
 "There’s no space left." = "Kein Platz mehr frei.";
 "That didn’t work just now." = "Das ging gerade nicht.";
-"1 file tidied" = "1 Datei geordnet";
-"%lld files tidied" = "%lld Dateien geordnet";
-"It’s outside the folder, so it stays where it is." = "Liegt außerhalb des Ordners, bleibt, wo sie ist.";
-"It changed since the preview, so it stays where it is." = "Wurde seit der Vorschau geändert, bleibt, wo sie ist.";
-"It’s only in the cloud, and I don’t download anything." = "Liegt nur in der Cloud, ich lade nichts herunter.";
-"It’s on a different drive. I can’t move it there yet." = "Liegt auf einem anderen Laufwerk. Das kann ich noch nicht verschieben.";
 "In 1 folder" = "In 1 Ordner";
 "In %lld folders" = "In %lld Ordnern";
 "1 stays put" = "1 bleibt liegen";
 "%lld stay put" = "%lld bleiben liegen";
 "Nothing changed" = "Nichts geändert";
-"It’s outside the folder." = "Liegt außerhalb des Ordners.";
-"There’s a file where the folder should be." = "Am Zielort liegt eine Datei statt eines Ordners.";
-"I couldn’t create the folder “%@”. %@" = "Den Ordner „%@“ konnte ich nicht anlegen. %@";
 "The file has changed since then, so it stays." = "Die Datei wurde inzwischen geändert und bleibt.";
 "Something else is in the old place now." = "Der alte Platz ist inzwischen belegt.";
 "Something else is in it now, so the folder stays." = "Darin liegt inzwischen etwas anderes, der Ordner bleibt.";
-"The reminder is gone again." = "Die Erinnerung ist wieder weg.";
-"The event is gone again." = "Der Termin ist wieder weg.";
-"Interrupted: tidying “%@”" = "Unterbrochen: „%@“ ordnen";
-"1 file already done" = "1 Datei schon erledigt";
-"%lld files already done" = "%lld Dateien schon erledigt";
-"New file: %@" = "Neue Datei: %@";
-"interrupted" = "unterbrochen";
 "Development" = "Entwicklung";
 "That didn’t work just now. Please try again. If it keeps happening, choose “Report a Problem…” in the Help menu." = "Das hat gerade nicht geklappt. Versuch es bitte noch einmal. Wenn es öfter passiert, wähle „Problem melden …“ im Menü Hilfe.";
 "%@ Check the folder or the free space and try again." = "%@ Prüf den Ordner oder den freien Platz und versuch es noch einmal.";
@@ -71,80 +55,6 @@
 "The answer didn’t come through just now. Please try again in a moment." = "Die Antwort kam gerade nicht zustande. Versuch es gleich noch einmal.";
 "The request was turned down. Please check the online AI and address under Settings › Online AI." = "Die Anfrage wurde abgelehnt. Prüf die Online-KI und die Adresse unter Einstellungen › Online-KI.";
 "The online AI you chose didn’t let me in. Please check the key under Settings › Online AI." = "Die gewählte Online-KI hat den Zugang abgelehnt. Prüf den Schlüssel unter Einstellungen › Online-KI.";
-"Sample answer: Here you can ask Pippa a question or attach files for context. In the finished app, Pippa answers right here on your Mac." = "Beispielantwort: Hier kannst du Pippa eine Frage stellen oder Dateien als Kontext anhängen. In der fertigen App antwortet Pippa direkt auf deinem Mac.";
-"Sender" = "Absender";
-"Date" = "Datum";
-"Amount" = "Betrag";
-"Deadline" = "Frist";
-"Subject" = "Betreff";
-"Period" = "Zeitraum";
-"%@ · 1 page" = "%@ · 1 Seite";
-"%@ · %lld pages" = "%@ · %lld Seiten";
-"%@ · 1 attachment" = "%@ · 1 Anhang";
-"%@ · %lld attachments" = "%@ · %lld Anhänge";
-"From %@" = "Von %@";
-"Text" = "Text";
-"%lld characters" = "%lld Zeichen";
-"Selection" = "Auswahl";
-"%lld files" = "%lld Dateien";
-"Sender and invoice date on page 1" = "Absender und Rechnungsdatum auf Seite 1";
-"Date taken, from the photo’s details" = "Aufnahmedatum aus den Fotodaten";
-"Heading “%@”, signed on %@" = "Überschrift „%@“, unterschrieben am %@";
-"Letterhead and invoice date %@" = "Briefkopf und Rechnungsdatum %@";
-"Recognized: practice name and date" = "Praxisname und Datum erkannt";
-"No signature, so it’s a draft" = "Keine Unterschrift, daher Entwurf";
-"Nothing to go by" = "Kein Anlass erkennbar";
-"Sender and date on page 1" = "Absender und Datum auf Seite 1";
-"Subject “%@”" = "Betreff „%@“";
-"Heading on page 1" = "Überschrift auf Seite 1";
-"New folder" = "Neuer Ordner";
-"I can’t make out any text. I won’t guess, so the file stays where it is." = "Kein Text erkennbar. Ich rate nicht, die Datei bleibt, wo sie ist.";
-"Reading this one took too long. It stays where it is for now." = "Das Lesen hat zu lange gedauert. Die Datei bleibt erst einmal, wo sie ist.";
-"Added to Reminders" = "In Erinnerungen eingetragen";
-"Added to Calendar" = "Im Kalender eingetragen";
-"I don’t have anything suitable for this Mac right now." = "Für diesen Mac habe ich gerade nichts Passendes.";
-"Part of the app is missing. Please open Pippa from the Applications folder." = "Ein Teil der App fehlt. Bitte Pippa aus dem Programme-Ordner starten.";
-"Linked files weren’t searched." = "Verknüpfte Dateien wurden nicht durchsucht.";
-"Deeper subfolders weren’t searched." = "Tiefer verschachtelte Unterordner wurden nicht durchsucht.";
-"Some folders couldn’t be read." = "Einige Ordner konnten nicht gelesen werden.";
-"At most %lld files were included." = "Es wurden höchstens %lld Dateien berücksichtigt.";
-"1 word" = "1 Wort";
-"%lld words" = "%lld Wörter";
-"I haven’t opened the link. Nothing has left this Mac." = "Den Link habe ich nicht geöffnet. Nichts hat diesen Mac verlassen.";
-"1 file" = "1 Datei";
-"No readable text" = "Ohne lesbaren Text";
-"Only in the cloud" = "Nur in der Cloud";
-"Photo" = "Foto";
-"Note" = "Hinweis";
-"Protected, so I can’t look inside." = "Geschützt, ich kann nicht hineinsehen.";
-"%@ · and %lld more" = "%@ · und %lld weitere";
-"It’s only a link, so it stays where it is." = "Ist nur eine Verknüpfung, bleibt, wo sie ist.";
-"Image without camera details, no receipt recognized" = "Bild ohne Kameradaten, kein Beleg erkannt";
-"Protected. I can’t look inside, so the file stays where it is." = "Geschützt. Ich kann nicht hineinsehen, die Datei bleibt, wo sie ist.";
-"sender" = "Absender";
-"invoice date" = "Rechnungsdatum";
-"date" = "Datum";
-"heading “%@”" = "Überschrift „%@“";
-" and " = " und ";
-"Recognized: %@" = "%@ erkannt";
-"Suggested from the content" = "Nach dem Inhalt vorgeschlagen";
-"%@ in the pages read" = "%@ im gelesenen Dokument";
-"%@ (text read from the image)" = "%@ (Text aus dem Bild gelesen)";
-"%@, marked as a draft" = "%@, als Entwurf markiert";
-"Not sorted yet" = "Noch nicht eingeordnet";
-"%@. The kind of document isn’t confirmed by its text" = "%@. Beleg für die Art nicht bestätigt";
-"Event" = "Termin";
-"Reminder" = "Erinnerung";
-"Entry" = "Eintrag";
-"changed in the meantime" = "inzwischen geändert";
-"It has changed since then, so it stays." = "Wurde inzwischen geändert und bleibt.";
-"The conversation history couldn’t be read. The saved file is kept." = "Der Gesprächsverlauf konnte nicht gelesen werden. Die gespeicherte Datei bleibt erhalten.";
-"This conversation history comes from a newer version of Pippa. The saved file is kept." = "Dieser Gesprächsverlauf stammt aus einer neueren Pippa-Version. Die gespeicherte Datei bleibt erhalten.";
-"I can’t find this conversation anymore." = "Dieses Gespräch finde ich nicht mehr.";
-"The conversation history was changed outside this window. Please open Pippa again." = "Der Gesprächsverlauf wurde außerhalb dieses Fensters geändert. Bitte öffne Pippa erneut.";
-"New Conversation" = "Neues Gespräch";
-"With this context, you can attach at most %lld files." = "Mit diesem Kontext können höchstens %lld Dateien angehängt werden.";
-"That isn’t possible here right now." = "Das geht hier gerade nicht.";
 "Pippa needs a Mac with Apple silicon (M1 or later)." = "Pippa braucht einen Mac mit Apple-Chip (M1 oder neuer).";
 "%.1f GB" = "%.1f GB";
 "a few minutes" = "wenige Minuten";
@@ -168,34 +78,7 @@
 "Please enter a valid model ID." = "Bitte eine gültige Modell-ID angeben.";
 "The context size must be between 4,096 and 1,048,576." = "Die Gesprächslänge muss zwischen 4.096 und 1.048.576 liegen.";
 
-
-
-"This draft can no longer be changed or opened again. Start a new draft to try again." = "Dieser Entwurf kann nicht mehr geändert oder erneut geöffnet werden. Erstelle einen neuen Entwurf, um es noch einmal zu versuchen.";
-
-
 "On {date}, {sender} wrote:" = "Am {date} schrieb {sender}:";
-
-"Whether the details match therefore remains open." = "Ob die Angaben übereinstimmen, bleibt deshalb offen.";
-
-"Open:" = "Offen:";
-
-"I can’t confirm that from the sources I read." = "Das kann ich aus den gelesenen Quellen nicht bestätigen.";
-
-"please check: not in this source" = "bitte prüfen: steht so nicht in dieser Quelle";
-
-"please check: not in the sources I read" = "bitte prüfen: steht so nicht in den gelesenen Quellen";
-
-"%@ (source %lld)" = "%@ (Quelle %lld)";
-
-"I could read only part of “%@”; the rest is unknown." = "Von „%@“ konnte ich nur einen Teil lesen; der Rest ist unbekannt.";
-
-"I couldn’t read any text in “%@”." = "In „%@“ konnte ich keinen Text lesen.";
-
-"Of “%@” I know only the names, not the contents." = "Von „%@“ kenne ich nur die Namen, nicht den Inhalt.";
-
-"“%@” is not available, so I couldn’t read it." = "„%@“ ist nicht verfügbar; ihren Inhalt kenne ich nicht.";
-
-"I looked only at excerpts of “%@” for this answer; anything else in it is unchecked." = "Von „%@“ habe ich für diese Antwort nur Ausschnitte angesehen; was sonst darin steht, ist nicht geprüft.";
 
 /* R10: eigener Online-Dienst und KI-Wahl im RPC-Weg */
 "I didn’t ask %@. Nothing left your Mac." = "Ich habe %@ nicht gefragt. Nichts hat deinen Mac verlassen.";
@@ -204,15 +87,5 @@
 "It’s no longer in the Trash." = "Die Datei liegt nicht mehr im Papierkorb.";
 "Photos" = "Fotos";
 
-/* Was Pippa darf (MacPermissions.swift) */
-"Notes" = "Notizen";
-"When you connect a drive, your Mac asks the first time Pippa opens it." = "Wenn du ein Laufwerk ansteckst, fragt dein Mac, sobald Pippa es zum ersten Mal öffnet.";
-
-/* Undo of a conversation's file changes (AgentChange.swift, Executor.recordAgentChanges) */
-"Changed “%@”" = "„%@“ geändert";
-"%lld files changed" = "%lld Dateien geändert";
-"In the conversation" = "Im Gespräch";
 "The old version is no longer there." = "Die alte Version ist nicht mehr da.";
-
-/* Missing source evidence on the Pi RPC path */
-"I couldn’t read the files needed for this answer: %@. Ask me to read the relevant file." = "Ich konnte die für diese Antwort nötigen Dateien nicht lesen: %@. Bitte mich, die betreffende Datei zu lesen.";
+"Pippa’s AI on this Mac needs 16 GB of memory. Use an online AI in Settings instead." = "Pippas KI auf diesem Mac braucht 16 GB Arbeitsspeicher. Nutze stattdessen eine Online-KI in den Einstellungen.";

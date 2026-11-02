@@ -20,7 +20,6 @@ const build = join(here, "../../.build");
 
 for (const scenario of [
 	{ name: "native write followed by a lost reply", tool: "mcp__pippa__reminder_add", args: () => ({ title: "Fixture" }), attempts: 4, native: true },
-	{ name: "rejected document reads", tool: "read", args: () => ({ path: "/fake/invoice.pdf" }), attempts: 5 },
 	{ name: "unknown tools", tool: "invented_tool", args: () => ({ query: "invoice" }), attempts: 5 },
 	{ name: "invalid arguments", tool: "read", args: () => ({ wrong_path: "/fake/invoice.txt" }), attempts: 5 },
 	{ name: "reordered duplicate writes", tool: "write", args: (n) => n % 2

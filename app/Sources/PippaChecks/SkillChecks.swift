@@ -15,9 +15,7 @@ func runSkillChecks() {
             && Set(shipped) == ["text-kuerzen", "dokument-einordnen", "fristen-erkennen", "antwort-schreiben", "brief-verstehen", "tabelle-pruefen", "text-verbessern", "zusammenfassen",
                                   "online-pruefen", "termin-aus-mail", "text-korrigieren", "checkliste"]
     }
-    // One skill acts through Pi's tools on purpose: deadlines (calendar_add). All others change nothing.
-    let acting: Set<String> = ["fristen-erkennen"]
-    check("Skills: SKILL.md follows Pi's header rules (name like folder, lowercase with hyphens, description), explicit invocation only, short, no tool names, changes nothing unless meant to") {
+    check("Skills: SKILL.md follows Pi's header rules (name like folder, lowercase with hyphens, description), explicit invocation only, short") {
         var bad: [String] = []
         for name in shipped {
             let parts = read(name).components(separatedBy: "---\n")
@@ -25,8 +23,7 @@ func runSkillChecks() {
             let head = parts[1], body = parts.dropFirst(2).joined(separator: "---\n")
             let ok = head.contains("name: \(name)\n") && PippaSkill.isValid(name: name) && head.contains("description: ")
                 && head.contains("disable-model-invocation: true\n")
-                && body.count <= 1300 && !body.contains("list_context") && !body.contains("read_context") && !body.contains("http")
-                && (acting.contains(name) || body.contains("Du änderst keine Datei"))
+                && body.count <= 1300
             if !ok { bad.append(name) }
         }
         if !bad.isEmpty { print("   ", bad) }
@@ -58,58 +55,6 @@ func runSkillChecks() {
             && untranslated?.title == "Go" && untranslated?.prompt == "Go"
             && !labeled.isEmpty && translated
             && germanSkills.first { $0.name == "brief-verstehen" }?.title == "Einfach erklären"
-    }
-    check("Skills: a new folder with SKILL.md shows up as a suggestion without a Swift change") {
-        let extra = dir("skills-extra")
-        let one = extra.appendingPathComponent("neu-hier")
-        try fm.createDirectory(at: one, withIntermediateDirectories: true)
-        write("---\nname: neu-hier\ndescription: Neu.\npippa-label: Neu\npippa-suggest: dokument\n---\nAnleitung", one.appendingPathComponent("SKILL.md"))
-        let loaded = PippaSkill.load(from: extra)
-        return loaded.map(\.name) == ["neu-hier"] && PippaSkill.suggestions(for: .dokument, in: loaded).count == 1 && PippaSkill.suggestions(for: .tabelle, in: loaded).isEmpty
-    }
-    check("Skills: objection says \"keine Rechtsberatung\" and names the deadline, drafts send nothing") {
-        let answer = read("antwort-schreiben")
-        return answer.contains("keine Rechtsberatung") && answer.contains("Frist") && answer.contains("Kündigung")
-            && skills.filter(\.writesDraft).allSatisfy { read($0.name).contains("Du verschickst nichts") }
-    }
-    check("Skills: sheet check knows error kinds and German function names") {
-        let sheet = read("tabelle-pruefen")
-        return sheet.contains("#BEZUG!") && sheet.contains("$") && sheet.contains("SUMME")
-    }
-    check("Skills: few suggestions per place, every skill with a button reachable somewhere, folders, links and slides without buttons") {
-        let all = Set(PippaSkill.Place.allCases.flatMap { PippaSkill.suggestions(for: $0, in: skills) }.map(\.name))
-        return PippaSkill.Place.allCases.allSatisfy { (0...5).contains(PippaSkill.suggestions(for: $0, in: skills).count) } && all == Set(skills.filter { $0.title != nil }.map(\.name))
-            && PippaSkill.suggestions(for: .tabelle, in: skills).map(\.name) == ["tabelle-pruefen", "zusammenfassen"]
-            && PippaSkill.suggestions(for: .immer, in: skills).isEmpty
-            && PippaSkill.place(for: .pdf) == nil && PippaSkill.place(for: .image) == nil && PippaSkill.place(for: .mail) == nil
-            && PippaSkill.place(for: .office, fileExtension: "XLSX") == .tabelle && PippaSkill.place(for: .office, fileExtension: "docx") == nil
-            && PippaSkill.place(for: .office, fileExtension: "pages") == nil && PippaSkill.place(for: .text, fileExtension: "csv") == .tabelle
-            && PippaSkill.place(for: .text, fileExtension: "txt") == nil && PippaSkill.place(for: .office, fileExtension: "pptx") == nil
-            && PippaSkill.place(for: .folder) == nil && PippaSkill.place(for: .link) == nil && PippaSkill.place(for: .mixed) == nil
-            && skills.first { $0.name == "brief-verstehen" }?.writesDraft == false && skills.first { $0.name == "antwort-schreiben" }?.writesDraft == true
-    }
-    check("Suggestions: generic files abstain while explicit selection palette remains available") {
-        PippaSkill.place(for: .text, fileExtension: "md") == nil
-            && PippaSkill.place(for: .office, fileExtension: "rtf") == nil
-            && PippaSkill.place(for: .mail, fileExtension: "eml") == nil
-            && !PippaSkill.suggestions(for: .text, in: skills).isEmpty
-            && PippaSkill.suggestions(for: .brief, in: skills).contains { $0.name == "antwort-schreiben" }
-    }
-    check("Skills: suggestions in the conversation classify by extension like the engine (slides and folders without buttons)") {
-        let place = { (path: String, folder: Bool) in
-            let url = URL(fileURLWithPath: path, isDirectory: folder)
-            return PippaSkill.place(for: DropKind.guess(for: url), fileExtension: url.pathExtension)
-        }
-        return place("/x/Brief.PDF", false) == nil && place("/x/Scan.heic", false) == nil && place("/x/Haushalt.numbers", false) == (NumbersExport.isInstalled ? PippaSkill.Place.tabelle : nil)
-            && place("/x/Bericht.odt", false) == nil && place("/x/Notiz.txt", false) == nil && place("/x/Liste.csv", false) == .tabelle
-            && place("/x/Folien.pptx", false) == nil && place("/x/Steuer", true) == nil
-            && DropKind.officeExtensions.isSuperset(of: ["docx", "xlsx", "pages", "numbers", "pptx", "rtf"])
-    }
-    check("Skills: buttons and messages in plain English and German, no jargon") {
-        let both = PippaSkill.load(from: folder, german: false) + PippaSkill.load(from: folder, german: true)
-        let texts = both.flatMap { [$0.title ?? "", $0.prompt] }
-        let jargon = ["Skill", "Prompt", "Modell", "Model", "KI", "AI ", "Agent", "Token", "Pi "]
-        return !texts.isEmpty && texts.allSatisfy { text in !jargon.contains { text.contains($0) } }
     }
     check("Read Excel: formulas with results, values, text cells, sheet names (stored and deflate)") {
         let sheet = """
@@ -148,12 +93,6 @@ func runSkillChecks() {
         // The reader puts what code recomputed (the total "Summe") before the cells.
         return XLSXReader.read(stored.finish())?.text == expected && XLSXReader.read(packedData)?.text == expected
             && viaReader.fullText.hasSuffix("\n\n" + expected) && viaReader.fullText.hasPrefix("[Pippa hat diese Tabelle") && viaReader.problem == .none && TextReader.read(broken).problem == .damaged
-    }
-    check("Skills: draft flag is kept in the history, older histories count as no draft") {
-        let draft = ConversationMessage(role: .assistant, text: "Sehr geehrte …", draft: true)
-        let decoded = try JSONDecoder().decode(ConversationMessage.self, from: JSONEncoder().encode(draft))
-        let old = try JSONDecoder().decode(ConversationMessage.self, from: Data(#"{"id":"\#(UUID().uuidString)","role":"assistant","text":"Alt","timestamp":0,"attachments":[]}"#.utf8))
-        return decoded.draft == true && old.draft == nil && ConversationMessage(role: .assistant, text: "x").draft == nil
     }
     check("Read ZIP: truncated archives, wrong offsets and CRC are rejected; empty entries are fine") {
         var writer = ZipWriter()

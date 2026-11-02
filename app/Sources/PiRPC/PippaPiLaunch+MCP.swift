@@ -1,6 +1,6 @@
 import Foundation
 
-/// Attaches Pippa's MCP server (Calendar, Reminders, Mail, read Excel) to a
+/// Attaches Pippa's MCP server (Calendar, Reminders, Mail, Photos, documents, PDF building) to a
 /// Pi launch. Deliberately its own file and function, separate from the rest of the launch (`PippaPiLaunch.swift`).
 ///
 /// The server runs in the app itself on 127.0.0.1 (PippaCore/MCP/PippaMCPServer.swift). The extension

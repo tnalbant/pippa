@@ -10,37 +10,6 @@ import UniformTypeIdentifiers
 /// Which tool. The raw value is the identifier in the job log.
 public enum ToolID: String, Sendable, Codable, CaseIterable {
     case makeOnePDF = "make-one-pdf", makeSmaller = "make-smaller", asPDF = "as-pdf"
-    case asJPEG = "as-jpg", asPNG = "as-png"
-    case invoiceTable = "invoice-table"
-    case extractText = "extract-text", removeLocation = "remove-location"
-
-    /// Plain verb for the button.
-    public var title: String {
-        switch self {
-        case .makeOnePDF: L("Make one PDF", table: "Tools")
-        case .makeSmaller: L("Make smaller", table: "Tools")
-        case .asPDF: L("As PDF", table: "Tools")
-        case .asJPEG: L("As JPG", table: "Tools")
-        case .asPNG: L("As PNG", table: "Tools")
-        case .invoiceTable: L("Invoices as a Spreadsheet", table: "Tools")
-        case .extractText: L("Extract Text", table: "Tools")
-        case .removeLocation: L("Remove Location", table: "Tools")
-        }
-    }
-
-    /// For the progress line ("Making one PDF · 2 of 3 pages").
-    public var workingTitle: String {
-        switch self {
-        case .makeOnePDF: L("Making one PDF", table: "Tools")
-        case .makeSmaller: L("Making it smaller", table: "Tools")
-        case .asPDF: L("Making a PDF", table: "Tools")
-        case .asJPEG: L("Making a JPG", table: "Tools")
-        case .asPNG: L("Making a PNG", table: "Tools")
-        case .invoiceTable: L("Reading invoices", table: "Tools")
-        case .extractText: L("Extracting text", table: "Tools")
-        case .removeLocation: L("Removing location", table: "Tools")
-        }
-    }
 }
 
 /// Progress in pages (One PDF) or files (all other tools).
@@ -108,11 +77,6 @@ public enum ResultsFolder {
             let custom = String(cString: raw)
             if !custom.isEmpty { return URL(fileURLWithPath: custom, isDirectory: true) }
         }
-        #if DEBUG
-        if let snapshot = ProcessInfo.processInfo.environment["PIPPA_SNAPSHOT"], !snapshot.isEmpty {
-            return URL(fileURLWithPath: snapshot, isDirectory: true).appendingPathComponent("results", isDirectory: true)
-        }
-        #endif
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         return caches.appendingPathComponent("Pippa/Results", isDirectory: true)
     }
@@ -173,16 +137,6 @@ public enum ResultNaming {
             return compose(base(inputs) + (german ? " (kleiner)" : " (smaller)"), ext: ext ?? guessedExt(tool, inputs.first))
         case .asPDF:
             return compose(base(inputs), ext: "pdf")
-        case .asJPEG:
-            return compose(base(inputs), ext: "jpg")
-        case .asPNG:
-            return compose(base(inputs), ext: "png")
-        case .invoiceTable:
-            return compose(german ? "Rechnungen" : "Invoices", ext: "xlsx")
-        case .extractText:
-            return compose(base(inputs) + (german ? " (Text)" : " (text)"), ext: "txt")
-        case .removeLocation:
-            return compose(base(inputs) + (german ? " (ohne Standort)" : " (no location)"), ext: "png")
         }
     }
 
@@ -207,37 +161,14 @@ public enum ResultNaming {
     }
 }
 
-/// Entry point for the row and checks.
+/// Which files a tool can use.
 public enum OneAnswerTools {
     /// Can `tool` do anything with this file?
     public static func accepts(_ tool: ToolID, _ url: URL) -> Bool {
         let kind = ToolFiles.kind(of: url)
         switch tool {
         case .makeOnePDF, .makeSmaller: return kind != .other
-        case .asPDF, .asJPEG, .asPNG: return kind == .image
-        case .invoiceTable: return kind != .other || ["docx", "txt", "eml", "rtf", "odt", "md"].contains(url.pathExtension.lowercased())
-        case .extractText: return kind == .image || kind == .pdf
-        case .removeLocation: return kind == .image
-        }
-    }
-
-    /// Never touches the inputs; writes only into a fresh subfolder of `ResultsFolder`. Cancellable per page.
-    public static func run(_ tool: ToolID, inputs: [URL], passwords: [URL: String] = [:],
-                           progress: @escaping @Sendable (ToolProgress) -> Void = { _ in }) async throws -> ToolOutput {
-        try Task.checkCancellation()
-        switch tool {
-        case .makeOnePDF: return try await MakePDF.combine(inputs, passwords: passwords, progress: progress)
-        case .makeSmaller: return try await Shrink.run(inputs, passwords: passwords, progress: progress)
-        case .asPDF, .asJPEG, .asPNG: return try await Convert.run(tool, inputs: inputs, progress: progress)
-        case .extractText: return try await ExtractText.run(inputs, passwords: passwords, progress: progress)
-        case .removeLocation: return try await RemoveLocation.run(inputs, progress: progress)
-        case .invoiceTable:
-            // A dropped folder counts with the files in it (one level, like "Make one PDF" from a folder); what Pippa
-            // cannot read as an invoice is named, not dropped silently.
-            let files = LocalEngine.files(in: inputs, depth: 0, limit: 200)
-            let rejected = files.filter { !accepts(.invoiceTable, $0) }
-                .map { FileReason(name: $0.lastPathComponent, why: L("I can only read invoices as PDFs, photos or text.", table: "Tools")) }
-            return try await InvoiceTable.run(files.filter { accepts(.invoiceTable, $0) }, skipped: rejected, progress: progress)
+        case .asPDF: return kind == .image
         }
     }
 }
@@ -265,12 +196,7 @@ enum ToolText {
         let n = files.count
         switch tool {
         case .makeOnePDF, .asPDF: return L("%lld images as PDF", table: "Tools", n)
-        case .asJPEG: return L("%lld images as JPG", table: "Tools", n)
-        case .asPNG: return L("%lld images as PNG", table: "Tools", n)
         case .makeSmaller: return L("%lld files made smaller", table: "Tools", n)
-        case .invoiceTable: return files[0].lastPathComponent
-        case .extractText: return L("%lld text files extracted", table: "Tools", n)
-        case .removeLocation: return L("%lld photos without location", table: "Tools", n)
         }
     }
 }
@@ -384,15 +310,6 @@ enum ToolImages {
     static func thumbnail(_ url: URL, maxPixel: Int?) -> CGImage? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
         return thumbnail(source, maxPixel: maxPixel)
-    }
-
-    /// Full size, rotated per EXIF, first image.
-    static func fullImage(_ source: CGImageSource) -> CGImage? {
-        let props = properties(source)
-        let width = (props[kCGImagePropertyPixelWidth as String] as? NSNumber)?.intValue ?? 0
-        let height = (props[kCGImagePropertyPixelHeight as String] as? NSNumber)?.intValue ?? 0
-        let side = max(width, height)
-        return thumbnail(source, maxPixel: side > 0 ? side : nil)
     }
 
     static func properties(_ source: CGImageSource) -> [String: Any] {

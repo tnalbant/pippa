@@ -2,10 +2,10 @@
 # Pin a catalog model to a fixed Hugging Face revision: revision + path, size and SHA256 of each file.
 #
 #   scripts/pin-model.sh <catalog-key> <hf-repo> [<file> ...]
-#   scripts/pin-model.sh k2-horizon-7b IFM/K2-Horizon-7B-GGUF
+#   scripts/pin-model.sh ornith-1.5-9b-mlx-4bit ornith-ai/Ornith-1.5-9B-MLX-4bit
 #
-# Without <file>, every .gguf in the repo whose name contains the entry's `quant` (e.g. Q4_K_M) is taken, split files
-# included; the script stops if that is not exactly one model. The SHA256 is the LFS oid from the Hugging Face API
+# Without <file>, every file of the MLX model repo is taken except the model card, images and .gitattributes
+# (config, chat template, tokenizer, safetensors and their index). The SHA256 is the LFS oid from the Hugging Face API
 # (`/api/models/<repo>/tree/<revision>`), which is the SHA256 of the file content; the app verifies it after the download.
 # Writes `pinned`, `approxBytes` and `repo` into every copy of catalog.json and removes `pending`. Needs network access
 # to Hugging Face (PIPPA_HF_ENDPOINT overrides it, like in the app) and python3. Nothing else is changed.
@@ -51,12 +51,10 @@ if catalog_entry is None:
     sys.exit(f"{key} is not in {', '.join(catalogs)}")
 
 if not files:
-    quant = catalog_entry["quant"].lower()
-    files = sorted(p for p in entries if p.endswith(".gguf") and quant in posixpath.basename(p).lower()
-                   and "mmproj" not in p.lower())
-    stems = {re.sub(r"-\d{5}-of-\d{5}\.gguf$", "", f) for f in files}
-    if len(stems) != 1:
-        sys.exit(f"Name the file: {len(stems)} candidates for quant {catalog_entry['quant']} in {repo}: {files}")
+    skip = (".md", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp")
+    files = sorted(p for p in entries if posixpath.basename(p) != ".gitattributes" and not p.lower().endswith(skip))
+    if not any(p.endswith(".safetensors") for p in files):
+        sys.exit(f"No .safetensors in {repo}: {files}")
 
 pinned = []
 for path in files:

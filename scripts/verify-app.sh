@@ -33,12 +33,6 @@ fail() { printf '  \033[31mFAIL\033[0m  %s\n' "$*" >&2; exit 1; }
 
 entitlements() { codesign -d --entitlements - --xml "$1" 2>/dev/null; }
 plutil -lint "$APP/Contents/Info.plist" >/dev/null || fail "Info.plist invalid"
-if /usr/libexec/PlistBuddy -c 'Print :PippaNativeAcceptance' "$APP/Contents/Info.plist" >/dev/null 2>&1; then
-  fail "instrumented native acceptance bundles must never be distributed"
-fi
-if LC_ALL=C strings -a "$APP/Contents/MacOS/Pippa" | grep -F 'PIPPA_NATIVE_ACCEPTANCE_BUILD_1' >/dev/null; then
-  fail "native acceptance code is present in the executable; rebuild without instrumentation"
-fi
 ok "Info.plist (plutil -lint)"
 codesign --verify --deep --strict "$APP" || fail "codesign --verify --deep --strict"
 ok "codesign --verify --deep --strict"
@@ -71,10 +65,10 @@ has_runtime() {
 ents="$(entitlements "$APP")"
 ! grep -q 'com.apple.security.app-sandbox' <<<"$ents" || fail "App Sandbox still on"
 ! grep -q 'com.apple.security.inherit' <<<"$ents" || fail "app carries com.apple.security.inherit"
-# Only what the Hardened Runtime itself requires: Apple Events (Mail, Excel, Photos search), the microphone (dictation),
-# EventKit (Calendar + Reminders), Contacts and PhotoKit (photo previews), see app/Packaging/Pippa.entitlements.
-expect_entitlements "$APP" "Pippa.app" "com.apple.security.automation.apple-events com.apple.security.device.audio-input com.apple.security.personal-information.addressbook com.apple.security.personal-information.calendars com.apple.security.personal-information.photos-library"
-ok "no App Sandbox; app entitlements exactly Apple Events + Microphone + Calendars/Reminders + Contacts + Photos"
+# Only what the Hardened Runtime itself requires: Apple Events (Mail, Excel, Photos search), EventKit (Calendar +
+# Reminders) and PhotoKit (photo previews), see app/Packaging/Pippa.entitlements.
+expect_entitlements "$APP" "Pippa.app" "com.apple.security.automation.apple-events com.apple.security.personal-information.calendars com.apple.security.personal-information.photos-library"
+ok "no App Sandbox; app entitlements exactly Apple Events + Calendars/Reminders + Photos"
 if ((DEVELOPER_ID)); then
   has_runtime "$APP" || fail "Hardened Runtime missing on Pippa.app"
   ok "Hardened Runtime on Pippa.app (Developer ID, team $team)"
@@ -83,8 +77,8 @@ else
 fi
 # Permission prompt texts: without the sandbox TCC asks for the folders.
 usage_keys=(NSCalendarsFullAccessUsageDescription NSRemindersFullAccessUsageDescription NSAppleEventsUsageDescription
-  NSContactsUsageDescription NSPhotoLibraryUsageDescription NSDesktopFolderUsageDescription NSDocumentsFolderUsageDescription NSDownloadsFolderUsageDescription
-  NSMicrophoneUsageDescription NSSpeechRecognitionUsageDescription)
+  NSPhotoLibraryUsageDescription NSDesktopFolderUsageDescription NSDocumentsFolderUsageDescription NSDownloadsFolderUsageDescription
+  )
 for key in "${usage_keys[@]}"; do
   /usr/libexec/PlistBuddy -c "Print :$key" "$APP/Contents/Info.plist" >/dev/null 2>&1 || fail "Info.plist: $key missing"
   for lang in en de; do
@@ -92,12 +86,14 @@ for key in "${usage_keys[@]}"; do
       fail "$lang.lproj/InfoPlist.strings: $key missing"
   done
 done
-ok "Info.plist + en/de: texts for Calendar, Reminders, Apple Events, Contacts, Photos, Desktop, Documents, Downloads, Microphone, Speech Recognition"
+ok "Info.plist + en/de: texts for Calendar, Reminders, Apple Events, Photos, Desktop, Documents, Downloads"
 
 # Helpers: run without a sandbox, also outside the bundle (the installer copies Node and esbuild to the home folder).
 [[ -x "$APP/Contents/Helpers/node" ]] || fail "bundled Node runtime missing"
 # fd and rg for Pi's find and grep (next to Node, first in Pi's PATH).
 for tool in fd rg; do [[ -x "$APP/Contents/Helpers/$tool" ]] || fail "bundled $tool missing"; done
+# The local AI (oMLX runtime and model) is downloaded at setup; nothing of the old llama.cpp engine ships.
+[[ ! -e "$APP/Contents/Helpers/llama-server" ]] || fail "old llama-server still in Contents/Helpers"
 WEB="$APP/Contents/Resources/pippa-web"
 for path in index.ts package-lock.json node_modules/pi-web-access/dist/index.js; do
   [[ -f "$WEB/$path" ]] || fail "pippa-web/$path missing (web access)"
@@ -117,24 +113,14 @@ ok "Pippa's abilities: $found_skills in Contents/Resources/pippa-skills, same as
 # The old conversation core is gone and must not come along from an old build.
 [[ ! -e "$APP/Contents/Resources/pi-runtime" ]] || fail "old conversation core (Contents/Resources/pi-runtime) still in the bundle"
 # The Pi RPC path starts Pi with Pippa's extensions from the bundle.
-for f in pippa-policy.ts pippa-tools.ts pippa-assist.ts pippa-memory.ts pippa-context.ts pippa-mcp.ts skill-save.ts files.ts list-folder.ts shell.ts applescript.ts budget.ts search.mjs tool-scope.mjs; do
+for f in pippa-tools.ts pippa-assist.ts pippa-memory.ts pippa-mcp.ts files.ts facts.mjs list-folder.ts document.ts shell.ts budget.ts search.mjs; do
   cmp -s "$ROOT/runtime/pippa-tools/$f" "$APP/Contents/Resources/pippa-tools/$f" || fail "pippa-tools/$f missing or stale (Pi extensions)"
 done
 [[ ! -e "$APP/Contents/Resources/pippa-guard" ]] || fail "old guard (Contents/Resources/pippa-guard) still in the bundle"
 ok "Pippa's Pi extensions in Contents/Resources/pippa-tools"
 expect_entitlements "$APP/Contents/Helpers/node" "Helpers/node" "com.apple.security.cs.allow-jit com.apple.security.cs.disable-library-validation"
-expect_entitlements "$APP/Contents/Helpers/llama-server" "Helpers/llama-server" "-"
 expect_entitlements "$APP/Contents/Helpers/fd" "Helpers/fd" "-"
 expect_entitlements "$APP/Contents/Helpers/rg" "Helpers/rg" "-"
-# llama-server is built by build-app.sh: static (only system libraries) and with Pippa's K2 Horizon patch.
-LLAMA_BIN="$APP/Contents/Helpers/llama-server"
-if otool -L "$LLAMA_BIN" | awk 'NR > 1 { print $1 }' | grep -qv '^/\(usr/lib\|System/Library\)/'; then
-  fail "llama-server links libraries outside the system (otool -L): $(otool -L "$LLAMA_BIN" | awk 'NR > 1 { print $1 }' | grep -v '^/\(usr/lib\|System/Library\)/' | tr '\n' ' ')"
-fi
-llama_strings="$(strings -a "$LLAMA_BIN")"
-[[ "$llama_strings" == *'</ifm|think_faster>'* && "$llama_strings" == *'</ifm|think_fast>'* ]] ||
-  fail "llama-server lacks the K2 Horizon end tags (app/Packaging/llama-patches not applied?)"
-ok "llama-server: static, only system libraries, K2 Horizon think-tag patch included"
 native_executables=()
 while IFS= read -r -d '' file; do
   if [[ "$file" != *.node ]] && file -b "$file" | grep -q 'Mach-O.*executable'; then native_executables+=("$file"); fi
@@ -142,7 +128,7 @@ done < <(find "$APP/Contents/Resources/pi-payload" "$APP/Contents/Resources/pipp
 for file in ${native_executables[@]+"${native_executables[@]}"}; do
   expect_entitlements "$file" "${file#"$APP/"}" "-"
 done
-signed_helpers=("$APP/Contents/Helpers/node" "$APP/Contents/Helpers/llama-server" "$APP/Contents/Helpers/fd" "$APP/Contents/Helpers/rg" ${native_executables[@]+"${native_executables[@]}"})
+signed_helpers=("$APP/Contents/Helpers/node" "$APP/Contents/Helpers/fd" "$APP/Contents/Helpers/rg" ${native_executables[@]+"${native_executables[@]}"})
 while IFS= read -r -d '' file; do signed_helpers+=("$file"); done < <(find "$APP/Contents/Resources/pi-payload" "$APP/Contents/Resources/pippa-web" -type f -name '*.node' -print0)
 for file in "${signed_helpers[@]}"; do
   codesign --verify --strict "$file" 2>/dev/null || fail "${file#"$APP/"} invalidly signed"
@@ -150,7 +136,7 @@ for file in "${signed_helpers[@]}"; do
   [[ "$helper_team" == "$team" ]] || fail "${file#"$APP/"}: team $helper_team, app $team"
   if ((DEVELOPER_ID)) && [[ "$file" != *.node ]]; then has_runtime "$file" || fail "${file#"$APP/"} without Hardened Runtime"; fi
 done
-ok "helpers without sandbox: node (JIT, own add-ons), llama-server and ${#native_executables[@]} esbuild binaries without entitlements; ${#signed_helpers[@]} Mach-O signed by the app's team"
+ok "helpers without sandbox: node (JIT, own add-ons), fd, rg and ${#native_executables[@]} esbuild binaries without entitlements; ${#signed_helpers[@]} Mach-O signed by the app's team"
 
 # Pi install payload (PiInstaller): pinned release in layout releases-v1 plus npm.
 PAYLOAD="$APP/Contents/Resources/pi-payload"
@@ -232,7 +218,7 @@ then
 fi
 if ((RUNTIME)); then
   grep -q '^pippa_bundle_ok ' "$WORK/probe.log" || fail "bundle does not know the runtime probe, or it is incomplete"
-  ok "original bundle: resources, skills, llama-server, Pi/Node, native add-on and esbuild ($(grep '^pippa_bundle_ok ' "$WORK/probe.log"))"
+  ok "original bundle: resources, skills, Pi/Node, native add-on and esbuild ($(grep '^pippa_bundle_ok ' "$WORK/probe.log"))"
   # The original signature must still be valid after the run.
   codesign --verify --deep --strict "$APP" || fail "app signature invalid after runtime probe"
 fi

@@ -51,13 +51,6 @@ public struct ActionReceipt: Codable, Sendable, Equatable {
 
         public var happened: Bool { outcome == "done" }
 
-        /// Journal-backed file creation participates in late native confirmations without using app-specific wording.
-        public var isNativeWrite: Bool { Self.appActions.contains(action) || (action == "create" && operationID != nil) }
-
-        /// Only looked something up, and it worked (Pippa's reader, a web search, a page read online): the line folds
-        /// into the receipt under the answer. Everything that changed something, was declined or failed stays in view.
-        public var isQuiet: Bool { happened && permissionRepairTarget == nil && ["read", "webSearch", "webPage"].contains(action) }
-
         /// Pippa's memory (`remember`): `name` what was kept, `toName` what was let go ("*": everything).
         func memoryLine(language: String?) -> String {
             switch (outcome, name, toName) {
@@ -205,25 +198,10 @@ public struct ActionReceipt: Codable, Sendable, Equatable {
     }
 
     public var items: [Item]
-    /// Added later (MailDraftOffer.swift): "Als Entwurf in Mail" under an answer without a draft. Missing in older histories.
-    public var mailOffer: MailDraftOffer?
     /// Native read/write results and web sources, as cards under the answer (ResultCard). Missing in older histories.
     public var cards: [ResultCard]?
-    public init(items: [Item], mailOffer: MailDraftOffer? = nil, cards: [ResultCard]? = nil) {
-        self.items = items; self.mailOffer = mailOffer; self.cards = cards?.isEmpty == false ? cards : nil
-    }
-
-    /// Native confirmations may arrive after Stop. Preserve every other action and never offer a duplicate draft.
-    public mutating func mergeNativeWrite(_ item: Item) {
-        guard let id = item.operationID, item.isNativeWrite else { return }
-        let matches = items.indices.filter { items[$0].operationID == id }
-        if let revision = matches.compactMap({ items[$0].nativeRevision }).max(), (item.nativeRevision ?? -1) < revision { return }
-        if matches.isEmpty { items.append(item) }
-        else { for index in matches { items[index] = item } }
-        if item.action == "mailDraft", ["done", "unclear"].contains(item.outcome) {
-            items.removeAll { $0.action == "mailDraft" && $0.outcome == "notYet" }
-            mailOffer = nil
-        }
+    public init(items: [Item], cards: [ResultCard]? = nil) {
+        self.items = items; self.cards = cards?.isEmpty == false ? cards : nil
     }
 
     /// A card this version does not know (a newer app wrote it) or cannot read is dropped: the answer and its
@@ -231,7 +209,6 @@ public struct ActionReceipt: Codable, Sendable, Equatable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         items = try c.decode([Item].self, forKey: .items)
-        mailOffer = try c.decodeIfPresent(MailDraftOffer.self, forKey: .mailOffer)
         let known = (try? c.decodeIfPresent([LenientCard].self, forKey: .cards))?.compactMap(\.card)
         cards = known?.isEmpty == false ? known : nil
     }

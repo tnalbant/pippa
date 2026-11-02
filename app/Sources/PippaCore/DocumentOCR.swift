@@ -22,7 +22,6 @@ public enum DocumentOCR {
         var lines: [OCRLine]
         public var tables: Int
         public var engine: Engine
-        public var lineCount: Int { lines.count }
     }
 
     /// The engine for reading (chat, tools, Thought Line). Classic `.accurate`: measured faster and more exact than the

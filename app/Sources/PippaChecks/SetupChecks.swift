@@ -58,14 +58,22 @@ private func roots(_ home: URL, _ payload: PiPayload) -> PiInstallRoots {
     PiInstallRoots(home: home, payload: payload, searchPath: [home.appendingPathComponent(".npm-global/bin"), home.appendingPathComponent(".local/bin")])
 }
 
-/// Small model from random bytes plus a catalog entry with its SHA-256 (never the real GGUFs).
-private func dummyModel(name: String = "Dummy-1B-Q4_K_M.gguf", bytes: Int = 1_048_576, key: String = "dummy-1b") -> (CatalogModel, Data) {
+/// Small model from random bytes plus a catalog entry with its SHA-256 (never the real model files).
+private func dummyModel(name: String = "model.safetensors", bytes: Int = 1_048_576, key: String = "dummy-1b") -> (CatalogModel, Data) {
     let data = Data((0..<bytes).map { _ in UInt8.random(in: 0...255) })
     let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-    let json: [String: Any] = ["key": key, "label": "Dummy 1B", "repo": "fixture/dummy", "quant": "Q4_K_M", "memGiB": 1, "ctx": 4096, "rank": 1,
+    let json: [String: Any] = ["key": key, "label": "Dummy 1B", "repo": "fixture/dummy", "quant": "MLX 4-bit", "memGiB": 1, "ctx": 4096,
                                "pinned": ["revision": "test", "files": [["path": name, "size": bytes, "sha256": hash]]]]
     let model = try! JSONDecoder().decode(CatalogModel.self, from: JSONSerialization.data(withJSONObject: json))
     return (model, data)
+}
+
+/// `<Support>/omlx/models`, the installer's models folder, and a model's own folder in it.
+private func modelsFolder(_ r: PiInstallRoots) -> URL {
+    PiLocalServer.baseDirectory(support: r.support).appendingPathComponent("models", isDirectory: true)
+}
+private func modelFolder(_ r: PiInstallRoots, _ model: CatalogModel) -> URL {
+    modelsFolder(r).appendingPathComponent(model.key, isDirectory: true)
 }
 
 private func shell(_ executable: String, _ arguments: [String], environment: [String: String]) -> String? {
@@ -89,51 +97,18 @@ private func inode(_ url: URL) -> Int? { (try? fm.attributesOfItem(atPath: url.p
 private func linkCount(_ url: URL) -> Int? { (try? fm.attributesOfItem(atPath: url.path)[.referenceCount] as? NSNumber)?.intValue }
 
 func runSetupChecks() async {
-    check("Local server: a stale 32K provider cannot enlarge the smaller model's 16K profile or enable the RAM cache") {
-        let home = fakeHome("server-context-budget"); defer { discard(home) }
-        let payload = try fakePayload(in: home.appendingPathComponent("src"))
-        let r = roots(home, payload)
-        try PippaSettings(llamaPort: 18_471).save(to: r.support)
-        try fm.createDirectory(at: r.agentDirectory, withIntermediateDirectories: true)
-        let provider = PiInstaller.providerEntry(models: [PiProviderModel(id: "qwen3.5-9b-q4", name: "Qwen", contextWindow: 32768)],
-                                               port: 18_471, keyFile: r.llamaKeyFile)
-        try JSONSerialization.data(withJSONObject: ["providers": ["pippa-local": provider]]).write(to: r.modelsJSON)
-        let file = home.appendingPathComponent("model.gguf")
-        write("fixture", file)
-        let plan = try PiLocalServer.plan(roots: r, modelID: "qwen3.5-9b-q4", legacySupport: r.support,
-                                          physicalMemory: 24 << 30, binary: URL(fileURLWithPath: "/bin/echo"),
-                                          environment: ["PIPPA_MODEL_FILE": file.path])
-        let args = LlamaServer.arguments(choice: plan.choice, model: file, port: plan.port, supported: nil)
-        return plan.choice.ctx == 16384 && plan.choice.extra["cache-ram"] == "0"
-            && args.joined(separator: " ").contains("--ctx-size 16384")
-            && args.joined(separator: " ").contains("--cache-ram 0")
-    }
-    await runPiPivotChecks()
-    check("Settings: explicit local model survives port updates; table preference clears it") {
-        let home = fakeHome("local-model"); defer { discard(home) }
-        let key = "qwen3.8-saluki-27b-iq2"
-        try PippaSettings(llamaPort: 65070, localModelKey: key).save(to: home)
-        var saved = PippaSettings.load(from: home)
-        saved.llamaIdleMinutes = 3
-        try saved.save(to: home)
-        let selected = PiSetupFlow.choice(override: PippaSettings.load(from: home).localModelKey)
-        let memory: UInt64 = 24 * 1024 * 1024 * 1024
-        let fallback = PiSetupFlow.choice(override: "missing-model", physicalMemory: memory)
-        let standard = PiSetupFlow.choice(override: nil, physicalMemory: memory)
-        try PippaSettings.savePreference(.standard, to: home)
-        let cleared = PippaSettings.load(from: home)
-        return selected?.model.key == key && selected?.ctx == 16384
-            && fallback?.model.key == standard?.model.key
-            && cleared.localModelKey == nil && cleared.llamaPort == 65070 && cleared.llamaIdleMinutes == 3
-    }
-    check("Settings: a saved 9B selection on 24 GB keeps the table's 16K profile; a saved 35B there is an explicit pick, not the standard") {
-        let memory: UInt64 = 24 * 1024 * 1024 * 1024
-        let selected = PiSetupFlow.choice(override: "qwen3.5-9b-q4", physicalMemory: memory)
-        let standard = PiSetupFlow.choice(override: nil, physicalMemory: memory)
-        let large = PiSetupFlow.choice(override: "qwen3.6-35b-a3b-q3", physicalMemory: memory)
-        return selected == standard && selected?.ctx == 16384 && selected?.model.thinking == "medium"
-            && selected?.extra["cache-ram"] == "0" && selected?.extra["ctx-checkpoints"] == "4"
-            && large?.model.key == "qwen3.6-35b-a3b-q3" && large?.ctx == 16384 && large != standard
+    check("Upgrade from 0.3: Pippa's old GGUF folder, prompt cache and her own files in ~/models go; the person's stay") {
+        let home = fakeHome("old-models"); defer { discard(home) }
+        let support = home.appendingPathComponent("Library/Application Support/Pippa", isDirectory: true)
+        let shared = home.appendingPathComponent("models", isDirectory: true)
+        for folder in ["models", "llama-slots", "omlx/models"] { try fm.createDirectory(at: support.appendingPathComponent(folder), withIntermediateDirectories: true) }
+        try fm.createDirectory(at: shared, withIntermediateDirectories: true)
+        let mine = shared.appendingPathComponent("Qwen3.5-9B-Q4_K_M.gguf"), theirs = shared.appendingPathComponent("their.gguf")
+        for file in [mine, theirs] { try Data("x".utf8).write(to: file) }
+        var state = PiInstallState()
+        state.created = [mine.standardizedFileURL.path]
+        let found = Set(PiInstaller.oldModelFiles(support: support, home: home, state: state).map(\.lastPathComponent))
+        return found == ["models", "llama-slots", "Qwen3.5-9B-Q4_K_M.gguf"]
     }
     check("Installer: fresh HOME gets the official layout (marker, current-version, launcher, ~/.local/bin/pi, Node)") {
         let home = fakeHome("fresh"); defer { discard(home) }
@@ -141,7 +116,7 @@ func runSetupChecks() async {
         let (model, data) = dummyModel()
         let lmstudio = home.appendingPathComponent(".lmstudio/models/fixture/dummy", isDirectory: true)
         try fm.createDirectory(at: lmstudio, withIntermediateDirectories: true)
-        try data.write(to: lmstudio.appendingPathComponent("Dummy-1B-Q4_K_M.gguf"))
+        try data.write(to: lmstudio.appendingPathComponent("model.safetensors"))
         let r = roots(home, payload)
         let installer = PiInstaller(roots: r)
         let results = installer.run(options(model, roots: ExistingModels.defaultRoots(home: home)))
@@ -270,7 +245,7 @@ func runSetupChecks() async {
         return first.outcome == .providerWritten(port: 18_471, backup: installer.state.modelsJSONBackup.map(URL.init(fileURLWithPath:)), changed: true)
             && again.outcome == .providerWritten(port: 18_471, backup: installer.state.modelsJSONBackup.map(URL.init(fileURLWithPath:)), changed: false)
             && moved.isDone && ours?["baseUrl"] as? String == "http://127.0.0.1:18472/v1"
-            && ours?["apiKey"] as? String == "!/bin/cat '\(r.llamaKeyFile.path)'" && ours?["api"] as? String == "openai-completions"
+            && ours?["apiKey"] as? String == "!/bin/cat '\(PiInstaller.keyFile(support: r.support).path)'" && ours?["api"] as? String == "openai-completions"
             && ((ours?["models"] as? [[String: Any]])?.first?["id"] as? String) == "qwen3.5-9b-q4"
             && ollama?["apiKey"] as? String == "ollama" && (doc?["custom"] as? [String: Any])?["keep"] as? Bool == true
             && backups.count == 1 && backupText == original && mode == 0o600 && leftovers.isEmpty
@@ -283,93 +258,89 @@ func runSetupChecks() async {
         let home = fakeHome("pi-settings"); defer { discard(home) }
         let payload = try fakePayload(in: home.appendingPathComponent("src"))
         let r = roots(home, payload)
+        let ornith = "ornith-1.5-9b-mlx-4bit"
         try fm.createDirectory(at: r.agentDirectory, withIntermediateDirectories: true)
-        write(#"{"theme": "dark", "modelThinkingLevels": {"pippa-local/qwen3.5-4b-q4": "medium"}}"#, r.piSettingsJSON)
-        let models = [PiProviderModel(id: "k2-horizon-7b", name: "K2", contextWindow: 16384),
-                      PiProviderModel(id: "qwen3.5-4b-q4", name: "Qwen", contextWindow: 32768)]
+        write(#"{"theme": "dark", "modelThinkingLevels": {"pippa-local/other-model": "high"}}"#, r.piSettingsJSON)
+        let models = [PiProviderModel(id: ornith, name: "Ornith", contextWindow: 16384),
+                      PiProviderModel(id: "other-model", name: "Other", contextWindow: 32768)]
         let wrote = PiInstaller(roots: r).writeModelTuning(models: models)
         let doc = try JSONSerialization.jsonObject(with: Data(contentsOf: r.piSettingsJSON)) as? [String: Any]
         let overrides = (doc?["compaction"] as? [String: Any])?["modelOverrides"] as? [String: [String: Int]]
         let levels = doc?["modelThinkingLevels"] as? [String: String]
-        let k2 = overrides?["pippa-local/k2-horizon-7b"], qwen = overrides?["pippa-local/qwen3.5-4b-q4"]
-        // Pippa's old default "high" moves to the new default; a level the person chose stays.
-        let k2Only = [PiProviderModel(id: "k2-horizon-7b", name: "K2", contextWindow: 32768)]
-        let migrated = PiModelTuning.merge(into: ["modelThinkingLevels": ["pippa-local/k2-horizon-7b": "high"]], models: k2Only)["modelThinkingLevels"] as? [String: String]
-        let kept = PiModelTuning.merge(into: ["modelThinkingLevels": ["pippa-local/k2-horizon-7b": "low"]], models: k2Only)["modelThinkingLevels"] as? [String: String]
-        // Provider entry: K2 thinks via reasoning_effort (medium as asked, the rest "high", see PiReasoningStyle), Qwen via enable_thinking.
-        let entry = PiInstaller.providerEntry(models: models, port: 1, keyFile: r.llamaKeyFile)
+        let small = overrides?["pippa-local/\(ornith)"], large = overrides?["pippa-local/other-model"]
+        // A level the person chose stays; Pippa's default (the catalog's "medium") only goes where none is set.
+        let kept = PiModelTuning.merge(into: ["modelThinkingLevels": ["pippa-local/\(ornith)": "off"]],
+                                       models: [models[0]])["modelThinkingLevels"] as? [String: String]
+        // Provider entry: Ornith thinks via enable_thinking (Qwen chat template), only off and medium.
+        let entry = PiInstaller.providerEntry(models: models, port: 1, keyFile: PiInstaller.keyFile(support: r.support))
         let listed = entry["models"] as? [[String: Any]] ?? []
-        let k2Compat = listed.first?["compat"] as? [String: Any]
-        let k2Kwargs = k2Compat?["chatTemplateKwargs"] as? [String: Any]
-        let qwenCompat = listed.last?["compat"] as? [String: Any]
-        let unknown = PiInstaller.providerEntry(models: [PiProviderModel(id: "other", name: "O", contextWindow: 8192)], port: 1, keyFile: r.llamaKeyFile)
+        let map = listed.first?["thinkingLevelMap"] as? [String: Any]
+        let compat = listed.first?["compat"] as? [String: Any]
         return wrote && doc?["theme"] as? String == "dark"
-            && k2?["reserveTokens"] == 4096 && k2?["keepRecentTokens"] == 6144
-            && qwen?["reserveTokens"] == 4096 && qwen?["keepRecentTokens"] == 12288
-            && levels?["pippa-local/k2-horizon-7b"] == "medium" && levels?["pippa-local/qwen3.5-4b-q4"] == "medium"
-            && migrated?["pippa-local/k2-horizon-7b"] == "medium" && kept?["pippa-local/k2-horizon-7b"] == "low"
-            && (listed.first?["thinkingLevelMap"] as? [String: Any])?["medium"] as? String == "medium"
-            && listed.first?["reasoning"] as? Bool == true && k2Compat?["thinkingFormat"] as? String == "chat-template"
-            && (k2Kwargs?["reasoning_effort"] as? [String: String])?["$var"] == "thinking.effort"
-            && (listed.first?["thinkingLevelMap"] as? [String: Any])?["off"] as? String == "high"
-            && qwenCompat?["thinkingFormat"] as? String == "qwen-chat-template"
-            && (unknown["models"] as? [[String: Any]])?.first?["reasoning"] == nil
-            && LlamaServer.arguments(choice: ModelSelector.named("qwen3.5-9b-q4", physicalMemory: 16 << 30)!, model: URL(fileURLWithPath: "/m.gguf"),
-                                     port: 1, supported: nil, alias: "qwen3.5-9b-q4").contains("--reasoning") == false
+            && small?["reserveTokens"] == 4096 && small?["keepRecentTokens"] == 6144
+            && large?["reserveTokens"] == 4096 && large?["keepRecentTokens"] == 12288
+            && levels?["pippa-local/\(ornith)"] == "medium" && levels?["pippa-local/other-model"] == "high"
+            && kept?["pippa-local/\(ornith)"] == "off"
+            && PiReasoningStyle.of(modelKey: ornith) == .enableThinking && PiReasoningStyle.of(modelKey: "other-model") == nil
+            && listed.first?["reasoning"] as? Bool == true
+            && map?["off"] as? String == "off" && map?["medium"] as? String == "medium" && map?["high"] is NSNull && map?["low"] is NSNull
+            && compat?["thinkingFormat"] as? String == "qwen-chat-template"
+            && listed.last?["reasoning"] == nil && listed.last?["thinkingLevelMap"] == nil
     }
 
-    check("Installer: model adopted without asking via clone, hardlink or copy; existing ~/models reused; originals stay") {
+    check("Installer: model adopted without asking via clone, hardlink or copy into <models>/<key>/; originals stay") {
         let home = fakeHome("adopt"); defer { discard(home) }
         let payload = try fakePayload(in: home.appendingPathComponent("src"))
         let r = roots(home, payload)
         let (model, data) = dummyModel()
-        let file = "Dummy-1B-Q4_K_M.gguf"
+        let file = "model.safetensors"
         let lmstudio = home.appendingPathComponent(".lmstudio/models/fixture/dummy/\(file)")
         try fm.createDirectory(at: lmstudio.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: lmstudio)
-        let search = ExistingModels.defaultRoots(home: home)
 
-        // Clone (APFS): separate file, same content, original unchanged. ~/models already exists: Pippa shares it.
-        try fm.createDirectory(at: r.sharedModels, withIntermediateDirectories: true)
+        // Clone (APFS): separate file, same content, original unchanged.
         let clone = PiInstaller(roots: r)
         _ = clone.prepareModelsFolder()
-        let cloned = clone.provideModel(model, searchRoots: search)
-        let dest = r.sharedModels.appendingPathComponent(file)
+        let cloned = clone.provideModel(model, searchRoots: ExistingModels.defaultRoots(home: home))
+        let dest = modelFolder(r, model).appendingPathComponent(file)
         let cloneOK = cloned.outcome == .modelReady(file: dest, method: .clone, source: "LM Studio")
             && (try? Data(contentsOf: dest)) == data && (try? Data(contentsOf: lmstudio)) == data && inode(dest) != inode(lmstudio)
 
-        // Hardlink (when cloning is impossible): original stays, two names for the same content.
+        // Hardlink (when cloning is impossible), from the Hugging Face cache: the snapshot's symlink leads to the blob.
         let homeB = fakeHome("adopt-link"); defer { discard(homeB) }
         let rB = roots(homeB, payload)
-        let sourceB = homeB.appendingPathComponent(".cache/huggingface/hub/models--fixture--dummy/blobs/\(file)")
-        try fm.createDirectory(at: sourceB.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try data.write(to: sourceB)
+        let hub = homeB.appendingPathComponent(".cache/huggingface/hub/models--fixture--dummy")
+        let blob = hub.appendingPathComponent("blobs/\(model.pinned!.files[0].sha256)")
+        try fm.createDirectory(at: blob.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try fm.createDirectory(at: hub.appendingPathComponent("snapshots/rev1"), withIntermediateDirectories: true)
+        try data.write(to: blob)
+        try fm.createSymbolicLink(atPath: hub.appendingPathComponent("snapshots/rev1/\(file)").path,
+                                  withDestinationPath: "../../blobs/\(model.pinned!.files[0].sha256)")
         let link = PiInstaller(roots: rB)
         link.adoptionMethods = [.hardlink, .copy]
-        _ = link.prepareModelsFolder()   // no ~/models: Pippa's support folder is used, ~/models is not created
+        _ = link.prepareModelsFolder()
         let linked = link.provideModel(model, searchRoots: ExistingModels.defaultRoots(home: homeB))
-        let destB = rB.pippaModels.appendingPathComponent(file)
+        let destB = modelFolder(rB, model).appendingPathComponent(file)
         let linkOK = linked.outcome == .modelReady(file: destB, method: .hardlink, source: "Hugging Face")
-            && fm.fileExists(atPath: sourceB.path) && linkCount(sourceB) == 2 && inode(destB) == inode(sourceB)
-            && link.state.adopted.first?.method == .hardlink && link.state.modelsFolderShared == false
-            && !fm.fileExists(atPath: rB.sharedModels.path)
+            && fm.fileExists(atPath: blob.path) && linkCount(blob) == 2 && inode(destB) == inode(blob)
+            && link.state.adopted.first?.method == .hardlink
 
-        // Only copy possible: copied without asking (enough space). Old sandbox container as source.
+        // Only copy possible: copied without asking (enough space), from oMLX's own folder.
         let homeC = fakeHome("adopt-copy"); defer { discard(homeC) }
         let rC = roots(homeC, payload)
-        let container = rC.containerModels.appendingPathComponent(file)
-        try fm.createDirectory(at: container.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try data.write(to: container)
+        let omlx = homeC.appendingPathComponent(".omlx/models/dummy/\(file)")
+        try fm.createDirectory(at: omlx.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: omlx)
         let copy = PiInstaller(roots: rC)
         copy.adoptionMethods = [.copy]
         _ = copy.prepareModelsFolder()
-        let copied = copy.provideModel(model, searchRoots: [])
-        let copyOK = !fm.fileExists(atPath: rC.pippaModels.appendingPathComponent(file).path + ".import")
-            && copied.outcome == .modelReady(file: rC.pippaModels.appendingPathComponent(file), method: .copy, source: "Pippa")
-            && (try? Data(contentsOf: container)) == data
+        let copied = copy.provideModel(model, searchRoots: ExistingModels.defaultRoots(home: homeC))
+        let destC = modelFolder(rC, model).appendingPathComponent(file)
+        let copyOK = !fm.fileExists(atPath: destC.path + ".import")
+            && copied.outcome == .modelReady(file: destC, method: .copy, source: "oMLX")
+            && (try? Data(contentsOf: omlx)) == data && (try? Data(contentsOf: destC)) == data
 
-        // Wrong content (same size): nothing adopted, source untouched, the right one is downloaded instead (setup
-        // used to stop here for good, as "Try again" found the same file again).
+        // Wrong content (same size): nothing adopted, source untouched, the right one is downloaded instead.
         let homeD = fakeHome("adopt-bad"); defer { discard(homeD) }
         let rD = roots(homeD, payload)
         var wrong = data; wrong[0] ^= 0xFF
@@ -380,43 +351,29 @@ func runSetupChecks() async {
         _ = mismatch.prepareModelsFolder()
         let skipped = mismatch.provideModel(model, searchRoots: ExistingModels.defaultRoots(home: homeD))
         let badOK = skipped.outcome == .needsDownload(bytes: Int64(data.count))
-            && !fm.fileExists(atPath: rD.pippaModels.appendingPathComponent(file).path)
+            && !fm.fileExists(atPath: modelFolder(rD, model).appendingPathComponent(file).path)
             && (try? Data(contentsOf: bad)) == wrong
         if !(cloneOK && linkOK && copyOK && badOK) { print("   ", cloneOK, linkOK, copyOK, badOK, cloned.outcome, linked.outcome, copied.outcome, skipped.outcome) }
         return cloneOK && linkOK && copyOK && badOK
     }
 
-    check("Installer: a wrong model file of Pippa's own is loaded again; the person's own in ~/models stays and is named") {
+    check("Installer: a wrong model file in Pippa's own folder (older download) is removed and loaded again") {
         let home = fakeHome("model-wrong"); defer { discard(home) }
         let payload = try fakePayload(in: home.appendingPathComponent("src"))
         let (model, data) = dummyModel()
-        let file = "Dummy-1B-Q4_K_M.gguf"
         var wrong = data; wrong[0] ^= 0xFF
-
-        // Pippa's own folder: an older download (old .ok marker) no longer matches the catalog. Removed, download needed.
         let r = roots(home, payload)
         let own = PiInstaller(roots: r)
         _ = own.prepareModelsFolder()
-        let stale = r.pippaModels.appendingPathComponent(file)
+        let stale = modelFolder(r, model).appendingPathComponent("model.safetensors")
+        try fm.createDirectory(at: stale.deletingLastPathComponent(), withIntermediateDirectories: true)
         try wrong.write(to: stale)
         try "0000".write(to: stale.appendingPathExtension("ok"), atomically: true, encoding: .utf8)
         let reloaded = own.provideModel(model, searchRoots: [])
-        let ownOK = reloaded.outcome == .needsDownload(bytes: Int64(data.count))
+        let ok = reloaded.outcome == .needsDownload(bytes: Int64(data.count))
             && !fm.fileExists(atPath: stale.path) && !fm.fileExists(atPath: stale.appendingPathExtension("ok").path)
-
-        // Shared ~/models with the person's own file of that name: untouched, and setup says which file is in the way.
-        let homeB = fakeHome("model-wrong-shared"); defer { discard(homeB) }
-        let rB = roots(homeB, payload)
-        try fm.createDirectory(at: rB.sharedModels, withIntermediateDirectories: true)
-        let theirs = rB.sharedModels.appendingPathComponent(file)
-        try wrong.write(to: theirs)
-        let shared = PiInstaller(roots: rB)
-        _ = shared.prepareModelsFolder()
-        let refused = shared.provideModel(model, searchRoots: [])
-        let sharedOK = refused.outcome == .failed(.checksumMismatch(theirs.path)) && (try? Data(contentsOf: theirs)) == wrong
-            && PiInstaller.details(.checksumMismatch(theirs.path)).contains("Rename or remove it")
-        if !(ownOK && sharedOK) { print("   ", ownOK, sharedOK, reloaded.outcome, refused.outcome) }
-        return ownOK && sharedOK
+        if !ok { print("   ", reloaded.outcome) }
+        return ok
     }
 
     check("Installer: second run changes nothing (idempotent); repair only replaces Pippa's own release") {
@@ -424,7 +381,7 @@ func runSetupChecks() async {
         let payload = try fakePayload(in: home.appendingPathComponent("src"))
         let r = roots(home, payload)
         let (model, data) = dummyModel()
-        let source = home.appendingPathComponent(".lmstudio/models/fixture/dummy/Dummy-1B-Q4_K_M.gguf")
+        let source = home.appendingPathComponent(".lmstudio/models/fixture/dummy/model.safetensors")
         try fm.createDirectory(at: source.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: source)
         let search = ExistingModels.defaultRoots(home: home)
@@ -435,7 +392,7 @@ func runSetupChecks() async {
         let rerun = second.run(options(model, roots: search)) // models folder is remembered
         let unchanged = first.allSatisfy(\.isDone) && rerun.allSatisfy(\.isDone) && rerun.count == PiInstallStep.allCases.count
             && rerun[1].outcome == .piInstalled(layout: .official, release: r.release(.official), reused: true)
-            && rerun[3].outcome == .modelReady(file: r.pippaModels.appendingPathComponent("Dummy-1B-Q4_K_M.gguf"), method: nil, source: nil)
+            && rerun[3].outcome == .modelReady(file: modelFolder(r, model).appendingPathComponent("model.safetensors"), method: nil, source: nil)
             && rerun[4].outcome == .providerWritten(port: 18_471, backup: nil, changed: false)
             && second.state.created == createdBefore && (try? Data(contentsOf: r.modelsJSON)) == models
         // Own release damaged: the ready check reports it, repair replaces it.
@@ -443,6 +400,7 @@ func runSetupChecks() async {
         let broken = second.checkReady(modelIDs: ["dummy-1b"], model: model)
         let repaired = second.repair(.pi, options(model, roots: search))
         let ready = second.checkReady(modelIDs: ["dummy-1b"], model: model)
+        if !unchanged { print("   ", first.map(\.outcome), rerun.map(\.outcome)) }
         return unchanged && broken.outcome == .failed(.versionMismatch(found: "kaputt", expected: "1.0.4"))
             && repaired.outcome == .piInstalled(layout: .official, release: r.release(.official), reused: false)
             && ready.outcome == .ready(version: "1.0.4")
@@ -464,12 +422,13 @@ func runSetupChecks() async {
         try fm.createDirectory(at: junk, withIntermediateDirectories: true)
         // Without the marker a fresh detection would see "foreign"; the remembered state applies.
         let fresh = PiInstaller.detect(r)
-        // A half-finished model adoption sits as .import in the models folder.
-        let source = home.appendingPathComponent(".lmstudio/models/fixture/dummy/Dummy-1B-Q4_K_M.gguf")
+        // A half-finished model adoption sits as .import in the model's folder.
+        let source = home.appendingPathComponent(".lmstudio/models/fixture/dummy/model.safetensors")
         try fm.createDirectory(at: source.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: source)
-        try fm.createDirectory(at: r.pippaModels, withIntermediateDirectories: true)
-        try data.prefix(1000).write(to: r.pippaModels.appendingPathComponent("Dummy-1B-Q4_K_M.gguf.import"))
+        let folder = modelFolder(r, model)
+        try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+        try data.prefix(1000).write(to: folder.appendingPathComponent("model.safetensors.import"))
         let resumed = PiInstaller(roots: r)
         let results = resumed.run(options(model, roots: ExistingModels.defaultRoots(home: home)))
         return fresh == .unmanaged(path: r.managedRoot.path)
@@ -477,24 +436,26 @@ func runSetupChecks() async {
             && PiInstaller.detect(r) == .managed(currentVersion: "1.0.4")
             && fm.isExecutableFile(atPath: r.launcher.path)
             && !fm.fileExists(atPath: junk.deletingLastPathComponent().path)
-            && !fm.fileExists(atPath: r.pippaModels.appendingPathComponent("Dummy-1B-Q4_K_M.gguf.import").path)
-            && (try? Data(contentsOf: r.pippaModels.appendingPathComponent("Dummy-1B-Q4_K_M.gguf"))) == data
+            && !fm.fileExists(atPath: folder.appendingPathComponent("model.safetensors.import").path)
+            && (try? Data(contentsOf: folder.appendingPathComponent("model.safetensors"))) == data
     }
 
-    check("Installer: models folder without asking (support folder, excluded from Time Machine); port stays stable") {
+    check("Installer: models folder <Support>/omlx/models without asking (excluded from Time Machine); port stays stable") {
         let home = fakeHome("folder"); defer { discard(home) }
         let payload = try fakePayload(in: home.appendingPathComponent("src"))
         let r = roots(home, payload)
         let results = PiInstaller(roots: r).run(options(nil))
         let port = PiInstaller.stablePort(support: r.support)
-        let excluded = (try? r.pippaModels.resourceValues(forKeys: [.isExcludedFromBackupKey]))?.isExcludedFromBackup == true
-        return results.allSatisfy(\.isDone) && results.contains { $0.outcome == .modelsFolder(r.pippaModels, shared: false) }
-            && !fm.fileExists(atPath: r.sharedModels.path) && excluded
+        let folder = modelsFolder(r)
+        let excluded = (try? folder.resourceValues(forKeys: [.isExcludedFromBackupKey]))?.isExcludedFromBackup == true
+        return results.allSatisfy(\.isDone) && results.contains { $0.outcome == .modelsFolder(folder, shared: false) }
+            && folder.path == r.support.appendingPathComponent("omlx/models").path && excluded
             && port > 0 && PiInstaller.stablePort(support: r.support) == port
-            && PippaSettings.load(from: r.support).llamaPort == port
+            && PippaSettings.load(from: r.support).serverPort == port
     }
 
     await runSetupFlowChecks()
+    await runTerminalAutostartChecks()
     runPiUpgradeChecks()
 
     // With the real payload: the pinned Pi (version from the payload, scripts/bump-pi.sh) with Pippa's Node, launcher via the terminal path.
@@ -548,8 +509,9 @@ func runSetupChecks() async {
     }
 }
 
-// Installer without technical questions (PiSetupFlow): the only question is the download; adoption, models folder,
-// Pi and models.json run silently. Download is a stub only (writes the test file), never touches the network.
+// Installer without technical questions (PiSetupFlow): the only question is the download (runtime and model together);
+// adoption, models folder, Pi and models.json run silently. Download is a stub only (writes the test file), never
+// touches the network; the runtime is a stand-in (an unpacked folder or a local archive).
 private final class Recorder<Value: Sendable>: @unchecked Sendable {
     private let lock = NSLock()
     private var values: [Value] = []
@@ -568,25 +530,34 @@ private func stubDownload(_ data: Data, fail: (any Error & Sendable)? = nil, cal
     }
 }
 
+/// A runtime that counts as installed: `PIPPA_MLX_RUNTIME_DIR` with an executable `bin/python3`.
+private func installedRuntime(_ r: PiInstallRoots, size: Int64 = 123_456) -> MLXRuntime {
+    MLXRuntime(support: r.support, environment: ["PIPPA_MLX_RUNTIME_DIR": fakeRuntimeDirectory(in: r.home).path],
+               manifest: fakeRuntimeManifest(size: size, sha256: String(repeating: "0", count: 64)))!
+}
+
 func runSetupFlowChecks() async {
     check("Setup: existing model adopted without asking, no download, models folder in the support folder") {
         let home = fakeHome("flow-adopt"); defer { discard(home) }
         let payload = try fakePayload(in: home.appendingPathComponent("src"))
         let r = roots(home, payload)
         let (model, data) = dummyModel()
-        let source = home.appendingPathComponent(".lmstudio/models/fixture/dummy/Dummy-1B-Q4_K_M.gguf")
+        let source = home.appendingPathComponent(".lmstudio/models/fixture/dummy/model.safetensors")
         try fm.createDirectory(at: source.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: source)
         let calls = Recorder<String>()
         let search = ExistingModels.defaultRoots(home: home)
-        let flow = PiSetupFlow(roots: r, model: model, contextWindow: 4096, searchRoots: search, port: 18_471, download: stubDownload(data, calls: calls))
+        let runtime = installedRuntime(r)
+        let flow = PiSetupFlow(roots: r, model: model, contextWindow: 4096, searchRoots: search, port: 18_471, runtime: runtime,
+                               download: stubDownload(data, calls: calls))
         let before = flow.adoptionSource()
         let state = flow.prepare()
-        let again = PiSetupFlow(roots: r, model: model, contextWindow: 4096, searchRoots: search, port: 18_471).prepare()
+        let again = PiSetupFlow(roots: r, model: model, contextWindow: 4096, searchRoots: search, port: 18_471, runtime: runtime).prepare()
         let ok = before == "LM Studio" && state == .ready(adoptedFrom: "LM Studio") && calls.all.isEmpty
-            && flow.installer.state.modelsFolder == r.pippaModels.path && !fm.fileExists(atPath: r.sharedModels.path)
+            && flow.installer.state.modelsFolder == modelsFolder(r).path
+            && ModelDownloader(directory: modelFolder(r, model)).isInstalled(model)
             && PiInstaller.providerModelIDs(modelsJSON: r.modelsJSON) == ["dummy-1b"]
-            && (try? Data(contentsOf: source)) == data && again == .ready(adoptedFrom: nil)
+            && (try? Data(contentsOf: source)) == data && again == .ready(adoptedFrom: nil) && flow.adoptionSource() == nil
         if !ok { print("   ", before ?? "-", state, again) }
         return ok
     }
@@ -596,7 +567,8 @@ func runSetupFlowChecks() async {
         let payload = try fakePayload(in: home.appendingPathComponent("src"))
         let r = roots(home, payload)
         let (model, data) = dummyModel()
-        let flow = PiSetupFlow(roots: r, model: model, contextWindow: 4096, searchRoots: [], port: 18_471, download: stubDownload(data))
+        let flow = PiSetupFlow(roots: r, model: model, contextWindow: 4096, searchRoots: [], port: 18_471, runtime: installedRuntime(r),
+                               download: stubDownload(data))
         let question = flow.prepare()
         let configuredBefore = PiInstaller.providerModelIDs(modelsJSON: r.modelsJSON) == ["dummy-1b"] && fm.fileExists(atPath: r.release(.official).path)
         let seen = Recorder<Double>()
@@ -604,9 +576,45 @@ func runSetupFlowChecks() async {
         let text = PiInstaller.downloadQuestion(bytes: 6_716_356_800)
         let ok = question == .askDownload(bytes: Int64(data.count)) && configuredBefore
             && seen.all == [0.25, 0.5, 0.75, 1] && done == .ready(adoptedFrom: nil)
-            && ModelDownloader(directory: r.pippaModels).isInstalled(model)
+            && ModelDownloader(directory: modelFolder(r, model)).isInstalled(model)
             && text.contains("10") && text.contains("GB") && !text.contains("Pi ")
         if !ok { print("   ", question, done, seen.all, text) }
+        return ok
+    }
+
+    await checkAsync("Setup: the download question includes the runtime; it installs from its archive (hash checked), older versions go") {
+        let home = fakeHome("flow-runtime"); defer { discard(home) }
+        let payload = try fakePayload(in: home.appendingPathComponent("src"))
+        let r = roots(home, payload)
+        let (model, data) = dummyModel()
+        // Not installed, to be downloaded: the question names runtime and model together.
+        let missing = MLXRuntime(support: r.support, environment: [:], manifest: fakeRuntimeManifest(size: 123_456, sha256: String(repeating: "0", count: 64)))!
+        let asked = PiSetupFlow(roots: r, model: model, contextWindow: 4096, searchRoots: [], port: 18_471, runtime: missing,
+                                download: stubDownload(data)).prepare()
+        // From a local archive (PIPPA_MLX_RUNTIME_ARCHIVE): nothing to download for the runtime, but still installed on "Load".
+        let archive = try fakeRuntimeArchive(in: home)
+        let hash = try ModelDownloader.sha256(of: archive)
+        let manifest = fakeRuntimeManifest(size: ModelDownloader.fileSize(archive), sha256: hash)
+        let local = MLXRuntime(support: r.support, environment: ["PIPPA_MLX_RUNTIME_ARCHIVE": archive.path], manifest: manifest)!
+        let old = r.support.appendingPathComponent("mlx-runtime/0.0.1-old", isDirectory: true)
+        try fm.createDirectory(at: old, withIntermediateDirectories: true)
+        let flow = PiSetupFlow(roots: r, model: model, contextWindow: 4096, searchRoots: [], port: 18_471, runtime: local, download: stubDownload(data))
+        let question = flow.prepare()
+        let done = await flow.download { _, _ in }
+        // A damaged archive: the hash decides, nothing is installed.
+        let homeB = fakeHome("flow-runtime-bad"); defer { discard(homeB) }
+        let rB = roots(homeB, payload)
+        let damaged = MLXRuntime(support: rB.support, environment: ["PIPPA_MLX_RUNTIME_ARCHIVE": archive.path],
+                                 manifest: fakeRuntimeManifest(size: manifest.size, sha256: String(repeating: "1", count: 64)))!
+        let badFlow = PiSetupFlow(roots: rB, model: model, contextWindow: 4096, searchRoots: [], port: 18_471, runtime: damaged, download: stubDownload(data))
+        _ = badFlow.prepare()
+        let refused = await badFlow.download { _, _ in }
+        let ok = asked == .askDownload(bytes: Int64(data.count) + 123_456)
+            && question == .askDownload(bytes: Int64(data.count)) && done == .ready(adoptedFrom: nil)
+            && local.isInstalled && local.python.path == r.support.appendingPathComponent("mlx-runtime/\(manifest.version)/bin/python3").path
+            && fm.isExecutableFile(atPath: local.python.path) && !fm.fileExists(atPath: old.path) && fm.fileExists(atPath: archive.path)
+            && refused == .failed(PiSetupProblem(.downloadDamaged)) && !damaged.isInstalled
+        if !ok { print("   ", asked, question, done, local.isInstalled, refused) }
         return ok
     }
 
@@ -615,16 +623,17 @@ func runSetupFlowChecks() async {
         let payload = try fakePayload(in: home.appendingPathComponent("src"))
         let r = roots(home, payload)
         let (model, data) = dummyModel()
+        let runtime = installedRuntime(r)
         // models.json with a comment (Pi allows that; Pippa does not modify such a file).
         try fm.createDirectory(at: r.agentDirectory, withIntermediateDirectories: true)
         write("// meine Notiz\n{}\n", r.modelsJSON)
-        let flow = PiSetupFlow(roots: r, model: model, contextWindow: 4096, searchRoots: [], port: 18_471,
+        let flow = PiSetupFlow(roots: r, model: model, contextWindow: 4096, searchRoots: [], port: 18_471, runtime: runtime,
                                download: stubDownload(data, fail: URLError(.networkConnectionLost)))
         let failed = flow.prepare()
         write("{}\n", r.modelsJSON)   // the person cleans up, then "Try again"
         let question = flow.prepare()
         let dropped = await flow.download { _, _ in }
-        let retry = PiSetupFlow(roots: r, model: model, contextWindow: 4096, searchRoots: [], port: 18_471, download: stubDownload(data))
+        let retry = PiSetupFlow(roots: r, model: model, contextWindow: 4096, searchRoots: [], port: 18_471, runtime: runtime, download: stubDownload(data))
         let done = await retry.download { _, _ in }
         guard case .failed(let problem) = failed, case .failed(let offline) = dropped else { print("   ", failed, dropped); return false }
         let offlineKind = { if case .downloadFailed = offline.failure { return true }; return false }()
@@ -634,116 +643,6 @@ func runSetupFlowChecks() async {
             && offlineKind && offline.canRetry && !offline.message.contains("NSURL") && done == .ready(adoptedFrom: nil)
         if !ok { print("   ", problem, question, offline, done) }
         return ok
-    }
-
-    await checkAsync("Setup: migrating an installed 9B fallback publishes its bounded 16K context to Pi") {
-        let home = fakeHome("bounded-fallback"); defer { discard(home) }
-        let payload = try fakePayload(in: home.appendingPathComponent("src"))
-        let r = roots(home, payload)
-        let (fixture, data) = dummyModel(name: "Old-Q4.gguf", key: "qwen3.5-9b-q4")
-        var old = fixture
-        old.ctx = 32768
-        let (new, _) = dummyModel(name: "New-Q4.gguf", key: "new-model")
-        let catalog = ModelCatalog(sampling: [:], models: [old, new])
-        // A 16 GB Mac, not the host: on 8 GB the 9B is a model for larger Macs and never the fallback.
-        let memory: UInt64 = 16 << 30
-        let before = PiSetupFlow(roots: r, model: old, contextWindow: 32768, searchRoots: [], port: 18_471,
-                                 catalog: catalog, physicalMemory: memory, download: stubDownload(data))
-        guard case .askDownload = before.prepare(), await before.download(progress: { _, _ in }) == .ready(adoptedFrom: nil) else { return false }
-        let after = PiSetupFlow(roots: r, model: new, contextWindow: 32768, searchRoots: [], port: 18_471, catalog: catalog,
-                                physicalMemory: memory)
-        return after.prepare() == .ready(adoptedFrom: nil) && after.activeModelKey == old.key
-            && PiInstaller.providerContextWindow(modelsJSON: r.modelsJSON, id: old.key) == 16384
-            && after.pendingDownload != nil && ModelDownloader(directory: r.pippaModels).isInstalled(old)
-    }
-
-    await checkAsync("Setup: new table model while the old one works (update, \"More thorough\"): ready with the old one, download offered; afterwards the new one, old file kept; switching back is instant") {
-        let home = fakeHome("flow-fallback"); defer { discard(home) }
-        let payload = try fakePayload(in: home.appendingPathComponent("src"))
-        let r = roots(home, payload)
-        let (old, oldData) = dummyModel(name: "Old-Q4.gguf", key: "old-model")
-        let (new, newData) = dummyModel(name: "New-Q4.gguf", bytes: 524_288, key: "new-model")
-        let catalog = ModelCatalog(sampling: [:], models: [old, new])
-        // Before the update: the old table model is set up and listed in models.json.
-        let before = PiSetupFlow(roots: r, model: old, contextWindow: 4096, searchRoots: [], port: 18_471, catalog: catalog, download: stubDownload(oldData))
-        guard case .askDownload = before.prepare(), await before.download(progress: { _, _ in }) == .ready(adoptedFrom: nil) else { return false }
-        // After the update the table names `new`: no question, the old one keeps answering, the download is offered.
-        let after = PiSetupFlow(roots: r, model: new, contextWindow: 8192, searchRoots: [], port: 18_471, catalog: catalog, download: stubDownload(newData))
-        let waiting = after.prepare()
-        let keptOld = PiInstaller.providerModelIDs(modelsJSON: r.modelsJSON) == ["old-model"]
-            && PiInstaller.providerContextWindow(modelsJSON: r.modelsJSON, id: "old-model") == 4096
-        let offered = after.pendingDownload == Int64(newData.count) && after.activeModelKey == "old-model"
-        let done = await after.download { _, _ in }
-        let switched = PiInstaller.providerModelIDs(modelsJSON: r.modelsJSON) == ["new-model"] && after.pendingDownload == nil
-            && after.activeModelKey == "new-model" && ModelDownloader(directory: r.pippaModels).isInstalled(old)
-        // Back (e.g. "Standard" again): already there, so instant and without a download.
-        let back = PiSetupFlow(roots: r, model: old, contextWindow: 4096, searchRoots: [], port: 18_471, catalog: catalog, download: stubDownload(Data()))
-        let backState = back.prepare()
-        let backOK = backState == .ready(adoptedFrom: nil) && back.pendingDownload == nil
-            && PiInstaller.providerModelIDs(modelsJSON: r.modelsJSON) == ["old-model"]
-        // Without a usable previous model (file gone) it is the normal question again.
-        try fm.removeItem(at: r.pippaModels.appendingPathComponent("New-Q4.gguf"))
-        try fm.removeItem(at: r.pippaModels.appendingPathComponent("Old-Q4.gguf"))
-        let none = PiSetupFlow(roots: r, model: new, contextWindow: 8192, searchRoots: [], port: 18_471, catalog: catalog).prepare()
-        let ok = waiting == .ready(adoptedFrom: nil) && keptOld && offered && done == .ready(adoptedFrom: nil) && switched && backOK
-            && none == .askDownload(bytes: Int64(newData.count))
-        if !ok { print("   ", waiting, keptOld, offered, done, switched, backState, none) }
-        return ok
-    }
-
-    await checkAsync("Setup: 24 GB update from the 35B → the download question for the 9B, models.json names the 9B, the 35B file stays") {
-        let home = fakeHome("flow-24gb-35b"); defer { discard(home) }
-        let payload = try fakePayload(in: home.appendingPathComponent("src"))
-        let r = roots(home, payload)
-        let (large, largeData) = dummyModel(name: "Large-Q3.gguf", key: "qwen3.6-35b-a3b-q3")
-        let (nine, nineData) = dummyModel(name: "Nine-Q4.gguf", bytes: 524_288, key: "qwen3.5-9b-q4")
-        let (k2, k2Data) = dummyModel(name: "K2-Q4.gguf", bytes: 262_144, key: "k2-horizon-7b")
-        let catalog = ModelCatalog(sampling: [:], models: [large, nine, k2])
-        let memory: UInt64 = 24 << 30
-        // 0.3.17 on a 24 GB Mac: the 35B is set up and listed in models.json.
-        let before = PiSetupFlow(roots: r, model: large, contextWindow: 4096, searchRoots: [], port: 18_471, catalog: catalog,
-                                 physicalMemory: memory, download: stubDownload(largeData))
-        guard case .askDownload = before.prepare(), await before.download(progress: { _, _ in }) == .ready(adoptedFrom: nil) else { return false }
-        // 0.3.18: the table names the 9B. No silent fallback to the 35B: the one download question, models.json already moved.
-        let after = PiSetupFlow(roots: r, model: nine, contextWindow: 16384, searchRoots: [], port: 18_471, catalog: catalog,
-                                physicalMemory: memory, download: stubDownload(nineData))
-        let asked = after.prepare()
-        let moved = PiInstaller.providerModelIDs(modelsJSON: r.modelsJSON) == ["qwen3.5-9b-q4"] && after.activeModelKey == "qwen3.5-9b-q4"
-            && after.pendingDownload == nil
-        let done = await after.download { _, _ in }
-        let largeFile = r.pippaModels.appendingPathComponent("Large-Q3.gguf")
-        let kept = fm.fileExists(atPath: largeFile.path) && fm.fileExists(atPath: largeFile.appendingPathExtension("ok").path)
-        // On 32 GB the same 35B is the table model's peer: it still bridges a download (here: a newer table model).
-        try fm.removeItem(at: r.pippaModels.appendingPathComponent("Nine-Q4.gguf"))
-        let bridge = PiSetupFlow(roots: r, model: large, contextWindow: 4096, searchRoots: [], port: 18_471, catalog: catalog,
-                                 physicalMemory: memory, download: stubDownload(largeData))
-        _ = bridge.prepare()  // the 35B is in models.json again
-        let thirtyTwo = PiSetupFlow(roots: r, model: nine, contextWindow: 16384, searchRoots: [], port: 18_471, catalog: catalog,
-                                    physicalMemory: 32 << 30, download: stubDownload(nineData))
-        let bridged = thirtyTwo.prepare() == .ready(adoptedFrom: nil) && thirtyTwo.activeModelKey == "qwen3.6-35b-a3b-q3"
-        // A superseded smaller model (K2) still bridges the 9B download on 24 GB, as before.
-        let k2Setup = PiSetupFlow(roots: r, model: k2, contextWindow: 4096, searchRoots: [], port: 18_471, catalog: catalog,
-                                  physicalMemory: memory, download: stubDownload(k2Data))
-        guard case .askDownload = k2Setup.prepare(), await k2Setup.download(progress: { _, _ in }) == .ready(adoptedFrom: nil) else { return false }
-        let fromK2 = PiSetupFlow(roots: r, model: nine, contextWindow: 16384, searchRoots: [], port: 18_471, catalog: catalog,
-                                 physicalMemory: memory, download: stubDownload(nineData))
-        let k2Bridged = fromK2.prepare() == .ready(adoptedFrom: nil) && fromK2.activeModelKey == "k2-horizon-7b" && fromK2.pendingDownload != nil
-        let ok = asked == .askDownload(bytes: Int64(nineData.count)) && moved && done == .ready(adoptedFrom: nil) && kept && bridged && k2Bridged
-        if !ok { print("   ", asked, moved, done, kept, bridged, k2Bridged) }
-        return ok
-    }
-
-    check("Setup: texts without \"Pi\", \"Terminal\" and paths (en and de)") {
-        var bad: [String] = []
-        for language in ["en", "de"] {
-            let url = repoRoot.appendingPathComponent("app/Sources/PippaCore/Resources/\(language).lproj/Setup.strings")
-            guard let table = NSDictionary(contentsOf: url) as? [String: String], !table.isEmpty else { return false }
-            for value in table.values where value.range(of: #"\bPi\b|Terminal|~/|/Users|models\.json"#, options: .regularExpression) != nil {
-                bad.append("\(language): \(value)")
-            }
-        }
-        if !bad.isEmpty { print("   ", bad) }
-        return bad.isEmpty
     }
 
     check("Setup: \"Picked to fit your Mac\" names chip and memory in plain words") {
@@ -765,9 +664,10 @@ func runSetupFlowChecks() async {
         let payload = try fakePayload(in: home.appendingPathComponent("src"))
         let r = roots(home, payload)
         let (model, data) = dummyModel()
-        let flow = PiSetupFlow(roots: r, model: model, contextWindow: 4096, searchRoots: [], port: 18_471, download: stubDownload(data))
+        let flow = PiSetupFlow(roots: r, model: model, contextWindow: 4096, searchRoots: [], port: 18_471, runtime: installedRuntime(r),
+                               download: stubDownload(data))
         _ = flow.prepare()
-        guard let available = ModelDownloader.availableSpace(at: r.pippaModels), available > 0 else { print("    no free-space value"); return false }
+        guard let available = ModelDownloader.availableSpace(at: modelsFolder(r)), available > 0 else { print("    no free-space value"); return false }
         // Everything that is free can never fit (2 GB to spare); nothing to load never asks; a small download fits
         // wherever more than the buffer is free (not asserted on an almost full disk).
         let short = flow.spaceShortfall(remaining: available)
@@ -782,9 +682,10 @@ func runSetupFlowChecks() async {
         let payload = try fakePayload(in: home.appendingPathComponent("src"))
         let r = roots(home, payload)
         let (model, data) = dummyModel()
-        let flow = PiSetupFlow(roots: r, model: model, contextWindow: 4096, searchRoots: [], port: 18_471, download: stubDownload(data))
+        let flow = PiSetupFlow(roots: r, model: model, contextWindow: 4096, searchRoots: [], port: 18_471, runtime: installedRuntime(r),
+                               download: stubDownload(data))
         let full = flow.prepare()
-        let part = r.pippaModels.appendingPathComponent("Dummy-1B-Q4_K_M.gguf.part")
+        let part = modelFolder(r, model).appendingPathComponent("model.safetensors.part")
         try data.prefix(400_000).write(to: part)
         let partial = flow.prepare()
         try data.write(to: part)
@@ -797,27 +698,19 @@ func runSetupFlowChecks() async {
 
     check("Setup: download consent is kept across restarts, leaves other settings alone, and can be cleared") {
         let base = dir("download-consent")
-        try PippaSettings(llamaPort: 18_471, modelPreference: "thorough").save(to: base)
-        try PippaSettings.saveDownloadConsent("qwen3.5-9b-q4", to: base)
+        try PippaSettings(serverPort: 18_471, piInlineShortText: false).save(to: base)
+        try PippaSettings.saveDownloadConsent("ornith-1.5-9b-mlx-4bit", to: base)
         let kept = PippaSettings.load(from: base)
         try PippaSettings.saveDownloadConsent(nil, to: base)
         let cleared = PippaSettings.load(from: base)
-        write(#"{"llamaPort":18471}"#, base.appendingPathComponent("settings.json"))
+        // An older settings.json (llama.cpp days) keeps its port; keys that are gone are ignored.
+        write(#"{"llamaPort":18471,"modelPreference":"thorough"}"#, base.appendingPathComponent("settings.json"))
         let older = PippaSettings.load(from: base)
-        let ok = kept.downloadConsent == "qwen3.5-9b-q4" && kept.llamaPort == 18_471 && kept.preference == .thorough
-            && cleared.downloadConsent == nil && cleared.llamaPort == 18_471 && cleared.preference == .thorough
-            && older.llamaPort == 18_471 && older.downloadConsent == nil
+        let ok = kept.downloadConsent == "ornith-1.5-9b-mlx-4bit" && kept.serverPort == 18_471 && kept.piInlineShortText == false
+            && cleared.downloadConsent == nil && cleared.serverPort == 18_471 && cleared.piInlineShortText == false
+            && older.serverPort == 18_471 && older.downloadConsent == nil
         if !ok { print("   ", kept, cleared, older) }
         return ok
-    }
-
-    check("Setup: the AI goes into memory only right after setting up, not on every start") {
-        let ready = PiSetupState.ready(adoptedFrom: nil)
-        return PiSetupState.justSetUp(from: .downloading(progress: 1, remaining: nil), to: ready)
-            && PiSetupState.justSetUp(from: .preparing(adoptingFrom: "LM Studio"), to: .ready(adoptedFrom: "LM Studio"))
-            && !PiSetupState.justSetUp(from: .preparing(adoptingFrom: nil), to: ready)
-            && !PiSetupState.justSetUp(from: ready, to: ready)
-            && !PiSetupState.justSetUp(from: .downloading(progress: 0.5, remaining: nil), to: .askDownload(bytes: 1))
     }
 }
 

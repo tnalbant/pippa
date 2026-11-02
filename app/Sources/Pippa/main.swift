@@ -1,32 +1,43 @@
 import AppKit
 
-// Pi, llama-server and Node are children on pipes: if one dies just before a write, the write fails instead of
+// Pi, the oMLX server and Node are children on pipes: if one dies just before a write, the write fails instead of
 // SIGPIPE ending Pippa.
 signal(SIGPIPE, SIG_IGN)
-// Pippa lives in the menu bar and as a pill, without a Dock icon.
 let app = NSApplication.shared
-#if PIPPA_NATIVE_ACCEPTANCE
-// Instrumented candidates cannot fall through to installation, normal settings or ordinary app startup.
-Task { @MainActor in exit(await NativeAcceptance.run(CommandLine.arguments)) }
-app.run()
-exit(1)
-#else
 if CommandLine.arguments.dropFirst().contains("--verify-runtime") {
     do { try BundleVerification.run(); exit(0) }
-    catch { FileHandle.standardError.write(Data("Bundle-Prüfung fehlgeschlagen: \(error)\n".utf8)); exit(1) }
+    catch { FileHandle.standardError.write(Data("Bundle verification failed: \(error)\n".utf8)); exit(1) }
 }
-if CommandLine.arguments.dropFirst().contains("--probe-legacy-container") {
-    print("legacy_container \(LegacyMigrationPrompt.probe())")
-    exit(0)
+// Development and acceptance runs: `Pippa --ask "question"` asks through the same Pi path as the window and prints
+// what happens (steps, answer, cards) instead of showing it.
+if let index = CommandLine.arguments.firstIndex(of: "--ask"), CommandLine.arguments.count > index + 1 {
+    let question = CommandLine.arguments[index + 1]
+    Task { @MainActor in exit(await HeadlessAsk.run(question)) }
+    app.run()
 }
-// First launch from the disk image or Downloads: offer once to move to Applications (before the single-instance lock).
+// `Pippa --setup`: runs the first-run setup without the window and agrees to the download, printing each state.
+if CommandLine.arguments.dropFirst().contains("--setup") {
+    Task { @MainActor in exit(await HeadlessAsk.setup()) }
+    app.run()
+}
+if let index = CommandLine.arguments.firstIndex(of: "--make-pdf") {
+    let files = CommandLine.arguments.dropFirst(index + 1).map { URL(fileURLWithPath: $0) }
+    Task { @MainActor in
+        let result = await PippaMCPService.makePDF(files)
+        print(result.failed ? "FAILED: \(result.text)" : "\(result.text)\n\(result.card.map { String(describing: $0) } ?? "")")
+        exit(result.failed ? 1 : 0)
+    }
+    app.run()
+}
+if let index = CommandLine.arguments.firstIndex(of: "--snapshot"), CommandLine.arguments.count > index + 1 {
+    let folder = URL(fileURLWithPath: CommandLine.arguments[index + 1], isDirectory: true)
+    Task { @MainActor in exit(await Snapshots.run(into: folder)) }
+    app.run()
+}
+// First launch from the disk image or Downloads: offer once to move to Applications.
 if AppMover.runIfNeeded() { exit(0) }
-// Without the sandbox, offer once to take over conversations and settings from the old container (before AppModel).
-LegacyMigrationPrompt.runIfNeeded()
 let delegate = AppDelegate()
 app.delegate = delegate
-// PIPPA_REGULAR_APP=1 (developers only): a regular app with a Dock icon, so UI automation that only sees regular
-// apps can click through it.
+// Pippa lives in the menu bar and as a pill; PIPPA_REGULAR_APP=1 gives a Dock icon for UI automation.
 app.setActivationPolicy(ProcessInfo.processInfo.environment["PIPPA_REGULAR_APP"] == "1" ? .regular : .accessory)
 app.run()
-#endif

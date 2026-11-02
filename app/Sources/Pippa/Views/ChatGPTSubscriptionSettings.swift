@@ -12,7 +12,7 @@ final class ChatGPTSubscriptionModel: ObservableObject {
     private var task: Task<Void, Never>?
 
     private var auth: PiSubscriptionAuth? {
-        guard let target = try? PiRPCChat.installTarget(ProcessInfo.processInfo.environment) else { return nil }
+        guard let target = try? PiSession.installTarget(ProcessInfo.processInfo.environment) else { return nil }
         return PiInstaller(roots: target.roots).subscriptionAuth()
     }
 
@@ -49,7 +49,7 @@ final class ChatGPTSubscriptionModel: ObservableObject {
 
     func cancel() { task?.cancel() }
 
-    func signOut(model: AppModel) {
+    func signOut(model: SettingsModel) {
         guard let auth else { return }
         Task {
             try? await auth.signOut()
@@ -62,7 +62,7 @@ final class ChatGPTSubscriptionModel: ObservableObject {
 }
 
 struct ChatGPTSubscriptionSettings: View {
-    @ObservedObject var model: AppModel
+    @ObservedObject var model: SettingsModel
     private let subscriptionState = StateObject(wrappedValue: ChatGPTSubscriptionModel())
     private let askState = State(initialValue: false)
     private var subscription: ChatGPTSubscriptionModel { subscriptionState.wrappedValue }

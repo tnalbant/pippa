@@ -2,15 +2,12 @@ import Foundation
 
 /// Common version and paths of Pippa.
 public enum Pippa {
-    public static let version = "0.3.20"
+    public static let version = "0.4.0"
+    /// The app's bundle identifier.
+    public static let bundleID = "io.github.tschnorpfeil.pippa"
 
     /// ~/Library/Application Support/Pippa
     public static var supportDirectory: URL {
-        #if DEBUG
-        if let path = ProcessInfo.processInfo.environment["PIPPA_SNAPSHOT"], !path.isEmpty {
-            return URL(fileURLWithPath: path).appendingPathComponent("support", isDirectory: true)
-        }
-        #endif
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return base.appendingPathComponent("Pippa", isDirectory: true)
     }

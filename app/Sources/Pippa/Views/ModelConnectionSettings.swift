@@ -6,7 +6,7 @@ import PippaCore
 /// the service directly; context size and "remove key only" no longer exist.
 /// Drafts never contain an already stored key.
 struct ModelConnectionSettings: View {
-    @ObservedObject var model: AppModel
+    @ObservedObject var model: SettingsModel
     private let providerState = State(initialValue: ModelProvider.openAI)
     private let endpointState = State(initialValue: "")
     private let modelIDState = State(initialValue: "")
@@ -79,7 +79,7 @@ struct ModelConnectionSettings: View {
             HStack(spacing: 6) {
                 Image(systemName: savedCredentialApplies ? "lock.fill" : "lock")
                 Text(keyNote)
-            }.font(Fonts.hint).foregroundStyle(Theme.ink3).fixedSize(horizontal: false, vertical: true)
+            }.font(.caption).foregroundStyle(Theme.ink3).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 8) {
                 Button(T("Test and Save", table: "Settings")) { testAndSave() }.pippa(.primary)
                 if model.inferenceSettings.connection != nil {
@@ -88,9 +88,9 @@ struct ModelConnectionSettings: View {
                 if busyState.wrappedValue { ProgressView().controlSize(.small) }
             }
             Text(T("Saving first sends one short test message. No files and nothing from your conversations.", table: "Settings"))
-                .font(Fonts.hint).foregroundStyle(Theme.ink3).fixedSize(horizontal: false, vertical: true)
+                .font(.caption).foregroundStyle(Theme.ink3).fixedSize(horizontal: false, vertical: true)
             if let status = statusState.wrappedValue {
-                Text(status).font(Fonts.hint).foregroundStyle(errorState.wrappedValue ? Theme.need : Theme.ok)
+                Text(status).font(.caption).foregroundStyle(errorState.wrappedValue ? Theme.need : Theme.ok)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -98,7 +98,7 @@ struct ModelConnectionSettings: View {
 
     private func field<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(title).font(Fonts.hint).foregroundStyle(Theme.ink2).fixedSize(horizontal: false, vertical: true)
+            Text(title).font(.caption).foregroundStyle(Theme.ink2).fixedSize(horizontal: false, vertical: true)
             content()
         }
     }
@@ -170,7 +170,7 @@ struct ModelConnectionSettings: View {
             Task { @MainActor in
                 defer { busyState.wrappedValue = false }
                 do {
-                    try await LocalEngine.testModelConnection(connection, apiKey: key)
+                    try await ModelConnectionTest.check(connection, apiKey: key)
                     do {
                         guard !model.isActiveWork else { throw InferenceError.busy }
                         let oldIdentifier = model.inferenceSettings.connection?.id

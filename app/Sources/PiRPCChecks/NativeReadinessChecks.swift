@@ -15,24 +15,16 @@ func handleReadinessFixture(_ request: [String: Any]) -> Bool {
     }
     if command == "get_commands" {
         if mode == "hang-command" { return true }
-        let names = mode == "missing-policy" ? [PiNativeReadiness.command] : [PiNativeReadiness.command, PiActionPolicy.command]
-        response(["commands": mode == "missing-command" ? [] : names.map { ["name": $0,
-                                                                           "source": mode == "wrong-source" ? "prompt" : "extension"] }])
+        response(["commands": mode == "missing-command" ? [] : [["name": PiNativeReadiness.command,
+                                                                 "source": mode == "wrong-source" ? "prompt" : "extension"]]])
         return true
     }
     guard command == "prompt", let message = request["message"] as? String,
-          [PiNativeReadiness.command, PiActionPolicy.command].contains(String(message.split(separator: " ").first?.dropFirst() ?? "")) else { return false }
+          String(message.split(separator: " ").first?.dropFirst() ?? "") == PiNativeReadiness.command else { return false }
     if mode == "hang-prompt" { return true }
     let nonce = String(message.split(separator: " ").last ?? "")
-    let kind = message.hasPrefix("/" + PiActionPolicy.command) ? PiActionPolicy.command : PiNativeReadiness.command
-    let scope = ProcessInfo.processInfo.environment[PiActionPolicy.environmentVariable] ?? "standard"
-    let draft = scope == "draftOnly"
     var receipt: [String: Any] = ["v": 1, "nonce": nonce, "status": "ready",
-        "tools": kind == PiActionPolicy.command ? (draft ? PiActionPolicy.draftTools : PippaPiLaunch.tools)
-            : (draft ? PiActionPolicy.nativeReaders : PiNativeReadiness.tools),
-        "registeredTools": PiNativeReadiness.tools, "policy": scope]
-    if kind == PiActionPolicy.command && mode == "wrong-policy" { receipt["policy"] = "draftOnly" }
-    if kind == PiActionPolicy.command && mode == "wide-draft" { receipt["tools"] = PiActionPolicy.draftTools + ["write"] }
+                                  "tools": PiNativeReadiness.tools, "registeredTools": PiNativeReadiness.tools]
     if mode == "missing-registered" { receipt.removeValue(forKey: "registeredTools") }
     if mode == "wrong-nonce" { receipt["nonce"] = UUID().uuidString }
     if mode == "partial" { receipt["tools"] = Array(PiNativeReadiness.tools.dropFirst()) }
@@ -42,7 +34,7 @@ func handleReadinessFixture(_ request: [String: Any]) -> Bool {
     if mode == "wrong-registration" { receipt["status"] = "registrationMismatch" }
     if mode == "malformed" { receipt["v"] = true }
     if mode != "missing-receipt" {
-        emit(["type": "entry_appended", "entry": ["type": "custom", "customType": kind, "data": receipt]])
+        emit(["type": "entry_appended", "entry": ["type": "custom", "customType": PiNativeReadiness.command, "data": receipt]])
     }
     response(["disposition": "handled"])
     return true
@@ -64,15 +56,15 @@ func handleReadinessFixture(_ request: [String: Any]) -> Bool {
           && withMCP.extensions.filter { $0 == extensionFile }.count == 1
           && withMCP.environment["PI_CODING_AGENT_DIR"] == nil)
 
-    func make(_ mode: String, policy: PiActionPolicy = .standard) -> (PiRPCClient, URL) {
+    func make(_ mode: String) -> (PiRPCClient, URL) {
         let log = temporary.appendingPathComponent(UUID().uuidString + ".jsonl")
         FileManager.default.createFile(atPath: log.path, contents: nil)
         return (PiRPCClient(configuration: .init(executable: executable, workingDirectory: temporary,
-            environment: ["PIPPA_TEST_NATIVE_READINESS": mode, "PIPPA_TEST_NATIVE_LOG": log.path, PiActionPolicy.environmentVariable: policy.rawValue])), log)
+            environment: ["PIPPA_TEST_NATIVE_READINESS": mode, "PIPPA_TEST_NATIVE_LOG": log.path])), log)
     }
     for (mode, expected) in [
-        ("missing-command", PiNativeReadiness.Failure.commandMissing), ("wrong-source", .commandMissing), ("missing-policy", .commandMissing),
-        ("wrong-policy", .invalidReceipt), ("missing-registered", .invalidReceipt),
+        ("missing-command", PiNativeReadiness.Failure.commandMissing), ("wrong-source", .commandMissing),
+        ("missing-registered", .invalidReceipt),
         ("missing-file-preparation", .invalidReceipt),
         ("wrong-nonce", .invalidReceipt), ("partial", .invalidReceipt), ("missing-receipt", .invalidReceipt),
         ("malformed", .invalidReceipt), ("wrong-registration", .registrationMismatch),
@@ -84,7 +76,7 @@ func handleReadinessFixture(_ request: [String: Any]) -> Bool {
         do { try await client.verifyNativeTools(timeout: .milliseconds(300)) }
         catch { found = error as? PiNativeReadiness.Failure }
         check("Native readiness rejects \(mode) without admitting user work", found == expected)
-        if mode == "missing-command" || mode == "wrong-source" || mode == "missing-policy" {
+        if mode == "missing-command" || mode == "wrong-source" {
             check("Unknown or non-extension readiness command is never prompted (\(mode))",
                   !(try String(contentsOf: log, encoding: .utf8)).contains("\"type\":\"prompt\""))
         }
@@ -102,31 +94,8 @@ func handleReadinessFixture(_ request: [String: Any]) -> Bool {
         check("Native readiness releases pending commands on \(cancelTask ? "task cancellation" : "Stop")", stopped)
         await client.shutdown()
     }
-    let scoped = PippaPiLaunch.configuration(launcher: launcher, workingDirectory: temporary, paths: paths, sessionID: nil,
-                                             language: "en", environment: [PiActionPolicy.environmentVariable: "standard"], actionPolicy: .draftOnly)
-    let toolIndex = scoped.arguments.firstIndex(of: "--tools")!
-    check("Trusted draft scope overrides environment and declares only local readers",
-          scoped.environment[PiActionPolicy.environmentVariable] == "draftOnly"
-          && Set(scoped.arguments[toolIndex + 1].split(separator: ",").map(String.init)) == Set(PiActionPolicy.draftLaunchTools)
-          && scoped.extensions.first?.lastPathComponent == "pippa-policy.ts")
-    check("Native file preparation is required for registration but cannot write in draft-only scope",
-          PiNativeReadiness.tools.contains("mcp__pippa__prepare_files")
-          && !PiActionPolicy.nativeReaders.contains("mcp__pippa__prepare_files")
-          && !PiActionPolicy.draftTools.contains("mcp__pippa__prepare_files")
-          && PippaPiLaunch.tools.contains("mcp__pippa__*"))
-    check("The native chart card is required for standard registration but is not a draft-only reader",
-          PiNativeReadiness.tools.last == "mcp__pippa__make_chart"
-          && !PiActionPolicy.nativeReaders.contains("mcp__pippa__make_chart")
-          && !PiActionPolicy.draftTools.contains("mcp__pippa__make_chart")
-          && !PiTurnReceipt.pippaWriters.contains("make_chart"))
-    for mode in ["ready", "wide-draft"] {
-        let (draft, _) = make(mode, policy: .draftOnly)
-        try await draft.start()
-        var admitted = false
-        do { try await draft.verifyNativeTools(actionPolicy: .draftOnly, timeout: .seconds(1)); admitted = true } catch {}
-        check("Draft admission checks native inventory and immutable active scope (\(mode))", admitted == (mode == "ready"))
-        await draft.shutdown()
-    }
+    check("Native file preparation is required for registration and Pi may call every Pippa MCP tool",
+          PiNativeReadiness.tools.contains("mcp__pippa__prepare_files") && PippaPiLaunch.tools.contains("mcp__pippa__*"))
     let (fresh, _) = make("ready")
     try await fresh.start()
     try await fresh.verifyNativeTools(timeout: .seconds(1))

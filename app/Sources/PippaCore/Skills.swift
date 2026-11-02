@@ -104,22 +104,4 @@ public struct PippaSkill: Identifiable, Sendable, Hashable {
 
     /// The bundled capabilities, read once.
     public static let bundled: [PippaSkill] = load(from: bundledDirectory())
-
-    /// A few fitting suggestions instead of a list with everything.
-    public static func suggestions(for place: Place, in skills: [PippaSkill] = bundled) -> [PippaSkill] {
-        skills.filter { $0.places.contains(place) }
-    }
-
-    /// Format alone permits a spreadsheet check. Generic prose and Office documents need semantic evidence.
-    /// Explicit text selections keep their separate `.text` palette.
-    public static func place(for kind: DropKind, fileExtension: String? = nil) -> Place? {
-        let ext = fileExtension?.lowercased() ?? ""
-        switch kind {
-        case .mail, .pdf, .image: return nil
-        case .text, .office:
-            // Only tables Pippa can read as cells; a .numbers, .xls or .ods would get a button that then fails.
-            return SheetFileCheck.isReadable(fileExtension: ext) ? .tabelle : nil
-        case .folder, .mixed, .link, .other: return nil
-        }
-    }
 }

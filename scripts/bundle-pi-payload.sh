@@ -9,7 +9,7 @@
 # Result:
 #   <target>/release/{package.json,package-lock.json,metadata.json,node_modules}
 #   <target>/lib/node_modules/npm, <target>/Node-LICENSE.txt
-#   <target>/extensions/pippa-local-server   Pippa's terminal extension (starts the llama-server for `pi` in the terminal)
+#   <target>/extensions/pippa-local-server   Pippa's terminal extension (starts the local oMLX server for `pi` in the terminal)
 #   <target>/bin/node            only with --with-node (development, tests); in the app, Node lives in Contents/Helpers/node
 #
 # Inputs: app/Packaging/pi-release/{package.json,package-lock.json,metadata.json} (the release's official files) and
@@ -96,7 +96,7 @@ FOUND="$(PI_OFFLINE=1 PI_SKIP_VERSION_CHECK=1 PI_TELEMETRY=0 "$NODE" "$STAGE/nod
 mkdir -p "$DEST/lib/node_modules"
 mv "$STAGE" "$DEST/release"
 # Pippa's terminal extension (runtime/pippa-local-server): PiInstaller copies it to ~/.pi/agent/extensions so that
-# `pi` in the terminal starts Pippa's llama-server itself. Runtime files only, no tests.
+# `pi` in the terminal starts Pippa's local oMLX server itself. Runtime files only, no tests.
 mkdir -p "$DEST/extensions/pippa-local-server"
 for f in index.ts common.mjs ensure.mjs supervisor.mjs; do
   cp "$ROOT/runtime/pippa-local-server/$f" "$DEST/extensions/pippa-local-server/$f"

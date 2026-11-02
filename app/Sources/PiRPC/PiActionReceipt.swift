@@ -39,8 +39,7 @@ public struct PiActionRecord: Sendable, Equatable {
     public var outcome: Outcome
     public var name: String?
     public var toName: String?
-    /// `nothingMatched`: `remember` had nothing to forget; `declined`: the person said no to `save_skill` (from the
-    /// tool's own result).
+    /// `nothingMatched`: `remember` had nothing to forget (from the tool's own result).
     public var reason: String? = nil
     public var fileAccessFailure: PiFileAccessFailure? = nil
 }
@@ -58,8 +57,6 @@ public struct PiTurnReceipt: Sendable {
     private var ended: [String: PiActionRecord.Outcome] = [:]
     /// `remember` calls whose forget found nothing (the tool says so in its result, without an error).
     private var forgotNothing: Set<String> = []
-    /// `save_skill` calls the person said no to (skill-save.ts, a blocked result that says so).
-    private var declinedSkills: Set<String> = []
     private var fileAccessFailures: [String: PiFileAccessFailure] = [:]
     /// For the sources card (PippaCore `WebSourcesCard`), never from the model's text: addresses of pages Pi read
     /// (`fetch_content`, from the call's arguments) and the results of searches (`web_search`, the tool's own output).
@@ -79,7 +76,6 @@ public struct PiTurnReceipt: Sendable {
             let state = outcome ?? Self.classify(tool: name, isError: isError, result: ["content": [["type": "text", "text": result]]])
             ended[id] = state
             fileAccessFailures[id] = name == "list_folder" && started[id]?.name == name && isError && state == .failed ? fileAccessFailure : nil
-            if name == "save_skill", state == .blocked, result.contains("the person said no") { declinedSkills.insert(id) }
             guard state == .done else { break }
             if name == "fetch_content" {
                 let args = (try? JSONSerialization.jsonObject(with: Data((started[id]?.arguments ?? "").utf8))) as? [String: Any]
@@ -113,7 +109,7 @@ public struct PiTurnReceipt: Sendable {
             }
             let (action, name, toName) = Self.fallback(tool: tool, arguments: started[id]?.arguments ?? "")
             return PiActionRecord(toolCallId: id, tool: tool, action: action, outcome: outcome, name: name, toName: toName,
-                                  reason: forgotNothing.contains(id) ? "nothingMatched" : declinedSkills.contains(id) ? "declined" : nil)
+                                  reason: forgotNothing.contains(id) ? "nothingMatched" : nil)
         }
     }
 
@@ -139,8 +135,6 @@ public struct PiTurnReceipt: Sendable {
                let status = native["status"] as? String, nativeNoEffect.contains(status) { return .blocked }
             return .unclear
         }
-        // save_skill refuses before writing anything (skill-save.ts): saved elsewhere, no OK, foreign content read.
-        if tool == "save_skill", (result["details"] as? [String: Any])?["pippaSkill"] as? String == "not_saved" { return .blocked }
         if tool == "bash", let details = result["details"] as? [String: Any] {
             if details["pippaExecution"] as? String == "not_dispatched" { return isError ? .blocked : .unclear }
             if details["pippaExecution"] as? String == "uncertain" { return .unclear }
@@ -167,14 +161,14 @@ public struct PiTurnReceipt: Sendable {
         switch tool {
         case "write", "edit": return ("change", name, nil)
         case "move_files":
+            // `to: "trash"` moves one item to the macOS Trash (files.ts `isTrash`), not into a folder named "trash".
+            if let to = args?["to"] as? String, args?["groups"] == nil,
+               to.trimmingCharacters(in: .whitespaces).lowercased() == "trash" { return ("trash", name, nil) }
             if let to = args?["to"] as? String, args?["groups"] == nil { return ("move", name, URL(fileURLWithPath: to).lastPathComponent) }
             let into = ((args?["groups"] as? [[String: Any]]) ?? []).compactMap { $0["into"] as? String }
             return ("move", (args?["folder"] as? String).map { URL(fileURLWithPath: $0).lastPathComponent },
                     into.isEmpty ? nil : into.joined(separator: ", "))
-        case "move_to_trash": return ("trash", name, nil)
-        case "bash", "powershell", "applescript": return ("command", nil, nil)
-        // A saved skill (skill-save.ts): its name, from the call's own arguments.
-        case "save_skill": return ("skill", (args?["name"] as? String).map { String($0.prefix(64)) }, nil)
+        case "bash": return ("command", nil, nil)
         // Pippa's memory: what was kept (`add`) and what was let go (`forget`), one line each, shortened.
         case "remember":
             func short(_ key: String) -> String? {

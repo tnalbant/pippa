@@ -16,17 +16,14 @@ let package = Package(
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0"),
     ],
     targets: [
-        // Resources/{en,de}.lproj/*.strings become localized resources in Bundle.module (tables Core, Analysis, Skills).
+        // Resources/{en,de}.lproj/*.strings become localized resources in Bundle.module (tables Core, MCP, Setup, …; list in scripts/check-strings.py).
         .target(name: "PippaCore", resources: [.process("Resources")]),
-        // Bagel Fat One (SIL Open Font License, see Resources/Fonts/OFL.txt), only for the welcome heading.
-        // Localization/{en,de}.lproj/*.strings: tables App, Views, Settings.
+        // Localization/{en,de}.lproj/*.strings: tables App, Views, Settings, CalendarUI.
         .executableTarget(name: "Pippa", dependencies: ["PippaCore", "PiRPC", .product(name: "Sparkle", package: "Sparkle")],
-                          resources: [.copy("Resources/Fonts"), .process("Localization")]),
+                          resources: [.process("Localization")]),
         // Without Xcode there is neither XCTest nor Swift Testing: checks run as `swift run PippaChecks`.
         .executableTarget(name: "PippaChecks", dependencies: ["PippaCore"]),
         .executableTarget(name: "PippaUpdateProbe", dependencies: [.product(name: "Sparkle", package: "Sparkle")]),
-        // Development only: all flows against a real model (runs only with PIPPA_LIVE=1, see Sources/PippaLive).
-        .executableTarget(name: "PippaLive", dependencies: ["PippaCore"]),
         // Pi's RPC client (`pi --mode rpc`), used by the app.
         .target(name: "PiRPC"),
         // Protocol regression checks with a fake Pi subprocess; no model, network, or macOS permissions.

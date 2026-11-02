@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-const { default: register, serverConfig, SERVER_NAME, TOOLS, WRITE_TOOLS, VIEW_TOOLS, discoverNativeTools, REQUIRED_TOOLS, READINESS_COMMAND } = await import("./pippa-mcp.ts");
+const { default: register, serverConfig, SERVER_NAME, TOOLS, WRITE_TOOLS, discoverNativeTools, REQUIRED_TOOLS, READINESS_COMMAND } = await import("./pippa-mcp.ts");
 
 const token = "ab".repeat(32);
 
@@ -14,7 +14,7 @@ async function load(env, connectorFactory) {
 	const commands = [];
 	let connectorOptions;
 	const saved = { ...process.env };
-	for (const key of ["PIPPA_MCP_URL", "PIPPA_MCP_TOKEN", "PIPPA_MCP_EXPOSURE", "PIPPA_ACTION_POLICY"]) delete process.env[key];
+	for (const key of ["PIPPA_MCP_URL", "PIPPA_MCP_TOKEN", "PIPPA_MCP_EXPOSURE"]) delete process.env[key];
 	Object.assign(process.env, env);
 	try {
 		await register({ registerMcpServer: (name, config) => registered.push({ name, config }), registerCommand: (name, command) => commands.push({ name, command }) }, connectorFactory ?? ((options) => { connectorOptions = options; return () => {}; }));
@@ -56,27 +56,18 @@ test("tool names as in the Swift server, none writes or sends", () => {
 	assert.ok(TOOLS.every((name) => !/send|write|add|delete|create|draft/.test(name)));
 });
 
+test("admission requires exactly the readers and writers of the Swift server", () => {
+	assert.deepEqual(REQUIRED_TOOLS, ["calendar_read", "reminders_read", "mail_search", "mail_read", "photos_search", "front_read", "read_document",
+		"calendar_add", "reminder_add", "mail_draft", "prepare_files"].map((name) => `mcp__pippa__${name}`));
+});
+
 test("writing tools as in the Swift server, none sends or deletes", () => {
 	assert.deepEqual(WRITE_TOOLS, ["calendar_add", "reminder_add", "mail_draft", "prepare_files"]);
 	assert.ok(WRITE_TOOLS.every((name) => !/send|delete|remove|invite/.test(name)));
 });
 
-test("the chart view is read-only, required for standard admission and hidden in draft scope", async () => {
-	assert.deepEqual(VIEW_TOOLS, ["make_chart"]);
-	assert.ok(!TOOLS.includes("make_chart") && !WRITE_TOOLS.includes("make_chart"));
-	const name = "mcp__pippa__make_chart", f = fixture();
-	assert.ok(REQUIRED_TOOLS.includes(name));
-	f.pi.getActiveTools = () => REQUIRED_TOOLS.filter((tool) => tool !== name);
-	assert.equal((await discoverNativeTools(f.pi, f.config, 0)).status, "toolsUnavailable");
-	const draft = fixture("draftOnly");
-	assert.equal(draft.config.toolExposure.make_chart, undefined);
-	assert.equal(draft.config.toolExposure["*"], "hidden");
-	draft.pi.getActiveTools = () => TOOLS.map((tool) => `mcp__pippa__${tool}`);
-	assert.equal((await discoverNativeTools(draft.pi, draft.config, 0, undefined, "draftOnly")).status, "ready");
-});
-
-function fixture(policy = "standard") {
-	const config = serverConfig({ PIPPA_MCP_URL: "http://127.0.0.1:53124/mcp", PIPPA_MCP_TOKEN: token, PIPPA_ACTION_POLICY: policy });
+function fixture() {
+	const config = serverConfig({ PIPPA_MCP_URL: "http://127.0.0.1:53124/mcp", PIPPA_MCP_TOKEN: token });
 	const pi = { getMcpServers: () => [{ name: "pippa", config }], getActiveTools: () => REQUIRED_TOOLS, getAllTools: () => REQUIRED_TOOLS.map((name) => ({ name })) };
 	return { config, pi };
 }
@@ -115,17 +106,14 @@ test("admission waits for actual discovery and requires every active tool", asyn
 	assert.equal((await discoverNativeTools(f.pi, f.config, 0)).status, "toolsUnavailable");
 });
 
-test("file preparation must be registered and active for standard admission, and remains hidden in draft scope", async () => {
+test("file preparation must be registered and active for admission", async () => {
 	const name = "mcp__pippa__prepare_files", f = fixture();
 	assert.ok(REQUIRED_TOOLS.includes(name));
 	f.pi.getActiveTools = () => REQUIRED_TOOLS.filter((tool) => tool !== name);
 	assert.equal((await discoverNativeTools(f.pi, f.config, 0)).status, "toolsUnavailable");
-	const draft = fixture("draftOnly");
-	assert.equal(draft.config.toolExposure.prepare_files, undefined);
-	draft.pi.getActiveTools = () => TOOLS.map((tool) => `mcp__pippa__${tool}`);
-	assert.equal((await discoverNativeTools(draft.pi, draft.config, 0, undefined, "draftOnly")).status, "ready");
-	draft.pi.getAllTools = () => REQUIRED_TOOLS.filter((tool) => tool !== name).map((name) => ({ name }));
-	assert.equal((await discoverNativeTools(draft.pi, draft.config, 0, undefined, "draftOnly")).status, "toolsUnavailable");
+	f.pi.getActiveTools = () => REQUIRED_TOOLS;
+	f.pi.getAllTools = () => REQUIRED_TOOLS.filter((tool) => tool !== name).map((name) => ({ name }));
+	assert.equal((await discoverNativeTools(f.pi, f.config, 0)).status, "toolsUnavailable");
 });
 
 test("matching names from a changed registration do not establish readiness; cancellation terminates polling", async () => {
@@ -136,22 +124,8 @@ test("matching names from a changed registration do not establish readiness; can
 	assert.equal((await discoverNativeTools(f.pi, f.config, 0, controller.signal)).status, "cancelled");
 });
 
-test("draft readiness requires all registered native tools but only active local readers", async () => {
-	const f = fixture("draftOnly"), readers = TOOLS.map((name) => `mcp__pippa__${name}`);
-	f.pi.getActiveTools = () => readers;
-	const ready = await discoverNativeTools(f.pi, f.config, 0, undefined, "draftOnly");
-	assert.equal(ready.status, "ready");
-	assert.deepEqual(ready.tools, readers);
-	assert.deepEqual(ready.registeredTools, REQUIRED_TOOLS);
-	f.pi.getAllTools = () => readers.map((name) => ({ name }));
-	assert.equal((await discoverNativeTools(f.pi, f.config, 0, undefined, "draftOnly")).status, "toolsUnavailable");
-});
-
-test("draft exposure hides unknown tools and readiness rejects widened native exposure", async () => {
-	const f = fixture("draftOnly");
-	assert.equal(f.config.toolExposure["*"], "hidden");
-	for (const reader of TOOLS) assert.equal(f.config.toolExposure[reader], "direct");
-	for (const writer of WRITE_TOOLS) assert.equal(f.config.toolExposure[writer], undefined);
-	f.pi.getMcpServers = () => [{ name: "pippa", config: { ...f.config, toolExposure: { ...f.config.toolExposure, mail_draft: "direct" } } }];
-	assert.equal((await discoverNativeTools(f.pi, f.config, 0, undefined, "draftOnly")).status, "registrationMismatch");
+test("readiness rejects a registration with narrowed or widened tool exposure", async () => {
+	const f = fixture();
+	f.pi.getMcpServers = () => [{ name: "pippa", config: { ...f.config, toolExposure: { "*": "hidden" } } }];
+	assert.equal((await discoverNativeTools(f.pi, f.config, 0)).status, "registrationMismatch");
 });

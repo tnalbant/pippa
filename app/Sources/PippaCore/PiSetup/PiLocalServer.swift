@@ -1,151 +1,146 @@
 import Foundation
 
-// The app starts and owns the llama-server for Pi's provider `pippa-local`.
-// This file only says **what** it starts with; `LlamaServer` runs it (same code as for LocalEngine, there
-// with a random port). The app keeps one server for all conversations (PiRPCChat).
+// What the oMLX server for Pi's provider `pippa-local` starts with; `OMLXServer` runs it. One server for the app and
+// for Pi in the terminal (docs/omlx-switch.md).
 //
+// - Runtime: `<Support>/mlx-runtime/<version>/bin/python3` (`MLXRuntime`).
+// - Base folder `<Support>/omlx`: Pippa writes its settings.json (port, key, model folder, idle unload); models in
+//   `<Support>/omlx/models/<key>/`, oMLX's prefix cache in `<Support>/omlx/cache`.
 // - Port: fixed, from Pippa's settings.json (`PiInstaller.stablePort`), must match `baseUrl` in models.json.
 // - Key: from the 0600 key file that Pi also reads via `apiKey: "!/bin/cat …"` (`PiInstaller.stableKey`).
-// - 127.0.0.1 only, the same tuned flags as LocalEngine's server (`LlamaServer.arguments`), `--alias` with
-//   the model id from models.json.
-// - Model: developer file (`PIPPA_MODEL_FILE`), else the installer's model folder, else Pippa's current
-//   model folder (`LocalEngine.modelsDirectory`). Each only if the file is there and verified (`.ok`).
-// - Unloaded after `llamaIdleMinutes` without a request (default 10); `PIPPA_LLAMA_IDLE_SECONDS` only for measurements.
-// - Prompt cache across unloading: save the slot before unloading, restore it after the next start before Pi's first request
-//   (`<Support>/llama-slots`); `PIPPA_LLAMA_SLOT_CACHE=0` turns this off.
 public enum PiLocalServer {
-    public static let defaultIdleMinutes = 10
+    /// oMLX unloads the model after this long without a request; the next request loads it again (a few seconds).
+    public static let idleUnloadSeconds = 600
+    public static let logName = "local-server.log"
 
     public struct Plan: Sendable, Equatable {
         public var choice: ModelChoice
-        public var modelFile: URL
-        public var binary: URL
+        public var python: URL
+        public var baseDirectory: URL
         public var port: Int
         public var key: String
-        /// Model id in models.json; the server answers under this name (`--alias`).
+        /// Model id in models.json and the model's folder name, which is the id oMLX serves it under.
         public var modelID: String
-        public var idleSeconds: Double
-        /// Where the model file comes from: `dev` (PIPPA_MODEL_FILE), `installer` (its model folder), `pippa` (current location).
-        public var source: String
-        /// Folder for the saved prompt cache (`<Support>/llama-slots`); `nil` with `PIPPA_LLAMA_SLOT_CACHE=0`.
-        public var slotDirectory: URL? = nil
-        /// Lock file shared with the terminal extension (`<Support>/llama-server-pi.lock`, `PiServerLock`).
-        public var lockFile: URL? = nil
-        /// Key file (0600) from which Pi also reads the key; for the terminal extension's launch file.
-        public var keyFile: URL? = nil
+        /// Lock file shared with the terminal extension (`PiServerLock`).
+        public var lockFile: URL
+        /// Key file (0600) from which Pi also reads the key.
+        public var keyFile: URL
+
+        public var arguments: [String] {
+            ["-c", "from omlx.cli import main; main()", "serve", "--base-path", baseDirectory.path, "--headless"]
+        }
+        public var settingsFile: URL { baseDirectory.appendingPathComponent("settings.json") }
+        public var modelsDirectory: URL { baseDirectory.appendingPathComponent("models", isDirectory: true) }
     }
 
     public enum Failure: Error, Equatable, LocalizedError {
-        case binaryMissing
+        case runtimeMissing
         case unknownModel(String)
         case modelMissing(String)
         case portMismatch(modelsJSON: Int, settings: Int)
 
         public var errorDescription: String? {
             switch self {
-            case .binaryMissing: "llama-server fehlt (Contents/Helpers oder PIPPA_LLAMA_SERVER)."
-            // E.g. Gemma from an early test build: no longer in the catalog. Pippa's setup sets up the current model.
+            case .runtimeMissing: "Pippas KI-Laufzeit fehlt. Öffne Pippa; die Einrichtung lädt sie."
             case .unknownModel(let id): "Modell \(id) steht nicht mehr in Pippas Katalog. Öffne Pippa; die Einrichtung holt das aktuelle Modell."
-            case .modelMissing(let id): "Modell \(id) liegt weder im Modellordner des Installers noch in Pippas Modellordner."
+            case .modelMissing(let id): "Modell \(id) liegt nicht in Pippas Modellordner."
             case .portMismatch(let a, let b): "Port in models.json (\(a)) passt nicht zu Pippas Einstellungen (\(b)); Installer-Schritt „models.json“ reparieren."
             }
         }
     }
 
-    /// Everything the server needs, without starting anything. `legacySupport`: the app's Pippa support folder (current
-    /// model location); `agentDirectory`: where models.json lives (else `roots.agentDirectory`).
-    public static func plan(roots: PiInstallRoots, agentDirectory: URL? = nil, modelID: String, legacySupport: URL,
-                            physicalMemory: UInt64 = ProcessInfo.processInfo.physicalMemory, binary: URL? = LlamaServer.binaryURL(),
+    /// `<Support>/omlx`, Pippa's own oMLX folder (never the person's `~/.omlx`).
+    public static func baseDirectory(support: URL) -> URL { support.appendingPathComponent("omlx", isDirectory: true) }
+
+    /// Everything the server needs, without starting anything.
+    public static func plan(roots: PiInstallRoots, agentDirectory: URL? = nil, modelID: String,
+                            physicalMemory: UInt64 = ProcessInfo.processInfo.physicalMemory,
                             environment: [String: String] = ProcessInfo.processInfo.environment) throws -> Plan {
-        guard let binary else { throw Failure.binaryMissing }
+        guard let runtime = MLXRuntime(support: roots.support, environment: environment), runtime.isInstalled else { throw Failure.runtimeMissing }
         let catalog = ModelCatalog.bundled()
         guard let model = catalog.model(modelID) else { throw Failure.unknownModel(modelID) }
         let modelsJSON = (agentDirectory ?? roots.agentDirectory).appendingPathComponent("models.json")
-
         let port = PiInstaller.stablePort(support: roots.support)
         if let listed = PiInstaller.providerPort(modelsJSON: modelsJSON), listed != port {
             throw Failure.portMismatch(modelsJSON: listed, settings: port)
         }
-        let key = try PiInstaller.stableKey(support: roots.support)
-
-        var file: URL?, source = ""
-        if let dev = LocalEngine.devModelFile(environment: environment) { file = dev; source = "dev" }
-        if file == nil, let folder = PiInstallState.load(from: roots.stateFile).modelsFolder {
-            let downloader = ModelDownloader(directory: URL(fileURLWithPath: folder, isDirectory: true))
-            if downloader.isInstalled(model) { file = downloader.primaryFile(model); source = "installer" }
+        let base = baseDirectory(support: roots.support)
+        guard ModelDownloader(directory: base.appendingPathComponent("models/\(model.key)", isDirectory: true)).isInstalled(model) else {
+            throw Failure.modelMissing(modelID)
         }
-        if file == nil {
-            let downloader = ModelDownloader(directory: LocalEngine.modelsDirectory(base: legacySupport, environment: environment))
-            if downloader.isInstalled(model) { file = downloader.primaryFile(model); source = "pippa" }
-        }
-        guard let file else { throw Failure.modelMissing(modelID) }
-
-        // Flags like LocalEngine for this model; context as in models.json so Pi and the server assume the same.
-        var choice = ModelSelector.named(modelID, physicalMemory: physicalMemory, catalog: catalog)
-            ?? ModelSelector.choice(model, ctx: model.ctx, overrides: [:], catalog: catalog)
+        var choice = (try? ModelSelector.choose(physicalMemory: physicalMemory, catalog: catalog).get()) ?? ModelChoice(model: model, ctx: 16384)
         if let listed = PiInstaller.providerContextWindow(modelsJSON: modelsJSON, id: modelID) { choice.ctx = min(listed, choice.ctx) }
-
-        let settings = PippaSettings.load(from: roots.support)
-        let idle = environment["PIPPA_LLAMA_IDLE_SECONDS"].flatMap(Double.init)
-            ?? Double(max(1, settings.llamaIdleMinutes ?? defaultIdleMinutes) * 60)
-        let slots = environment["PIPPA_LLAMA_SLOT_CACHE"] == "0" ? nil : roots.support.appendingPathComponent("llama-slots", isDirectory: true)
-        return Plan(choice: choice, modelFile: file, binary: binary, port: port, key: key, modelID: modelID, idleSeconds: idle, source: source,
-                    slotDirectory: slots, lockFile: PiServerLock.url(support: roots.support), keyFile: PiInstaller.keyFile(support: roots.support))
+        return Plan(choice: choice, python: runtime.python, baseDirectory: base, port: port,
+                    key: try PiInstaller.stableKey(support: roots.support), modelID: modelID,
+                    lockFile: PiServerLock.url(support: roots.support), keyFile: PiInstaller.keyFile(support: roots.support))
     }
 
-    /// Remove all saved slots (`<Support>/llama-slots/pippa-slot-*.bin`), e.g. when a conversation is deleted;
-    /// the slot holds the last conversation as cache. Only Pippa's own cache files.
-    public static func discardSavedSlots(support: URL) {
-        let dir = support.appendingPathComponent("llama-slots", isDirectory: true)
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
-        for name in names where name.hasPrefix("pippa-slot-") && name.hasSuffix(".bin") {
-            try? FileManager.default.removeItem(at: dir.appendingPathComponent(name))
+    /// No network from the server: models come only from Pippa's folder, never from a hub at run time. `HOME` is a
+    /// folder of Pippa's own: oMLX writes a helper into `~/.omlx/bin` on every start, which would repoint the person's own
+    /// oMLX. Python may write its bytecode cache, which makes later starts about twice as fast.
+    public static func environment(_ plan: Plan, base: [String: String] = ProcessInfo.processInfo.environment) -> [String: String] {
+        var env = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": plan.baseDirectory.appendingPathComponent("home").path,
+                   "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1", "PYTHONNOUSERSITE": "1", "OMLX_HEADLESS": "1"]
+        if let tmp = base["TMPDIR"] { env["TMPDIR"] = tmp }
+        return env
+    }
+
+    /// oMLX's settings.json in Pippa's base folder (0600: it holds the key). Merged into what oMLX itself wrote, so its own
+    /// defaults stay; Pippa's values win.
+    public static func writeServerSettings(_ plan: Plan) throws {
+        let fm = FileManager.default
+        try fm.createDirectory(at: plan.modelsDirectory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        try fm.createDirectory(at: plan.baseDirectory.appendingPathComponent("home"), withIntermediateDirectories: true)
+        var document = (try? Data(contentsOf: plan.settingsFile)).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
+        func merge(_ section: String, _ values: [String: Any]) {
+            var current = document[section] as? [String: Any] ?? [:]
+            for (key, value) in values { current[key] = value }
+            document[section] = current
         }
+        merge("server", ["host": "127.0.0.1", "port": plan.port, "log_level": "info"])
+        merge("model", ["model_dirs": [plan.modelsDirectory.path], "model_dir": plan.modelsDirectory.path])
+        merge("auth", ["api_key": plan.key, "skip_api_key_verification": false, "allow_unauthenticated_inference": false])
+        merge("cache", ["enabled": true, "ssd_cache_max_size": "8GB"])
+        merge("huggingface", ["endpoint": ""])
+        merge("idle_timeout", ["idle_timeout_seconds": idleUnloadSeconds])
+        // Pi sends no sampling of its own, so these are what the model runs with. oMLX's defaults (temperature 1, no
+        // top-k) let stray tokens through: Cyrillic and English fragments in German answers. Qwen 3.5's values for
+        // precise work, which Ornith is fine-tuned from.
+        merge("sampling", ["temperature": 0.6, "top_k": 20, "top_p": 0.95])
+        let data = try JSONSerialization.data(withJSONObject: document, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
+        if (try? Data(contentsOf: plan.settingsFile)) == data { return }
+        try data.write(to: plan.settingsFile, options: .atomic)
+        try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: plan.settingsFile.path)
     }
 
-    /// The server for it (not yet started). Log `llama-server-pi.log` next to LocalEngine's.
-    public static func server(_ plan: Plan, logDirectory: URL) -> LlamaServer {
-        LlamaServer(choice: plan.choice, modelPath: plan.modelFile, binary: plan.binary, logDirectory: logDirectory,
-                    fixedPort: plan.port, fixedKey: plan.key, alias: plan.modelID, idleAfter: plan.idleSeconds,
-                    logName: "llama-server-pi.log", slotDirectory: plan.slotDirectory, lockFile: plan.lockFile)
+    /// The server for it (not yet started). Log `<Support>/local-server.log`.
+    public static func server(_ plan: Plan, logDirectory: URL) -> OMLXServer {
+        OMLXServer(plan: plan, logDirectory: logDirectory)
     }
 
     // MARK: Launch file for the terminal extension
 
-    /// `<Support>/pippa-local-server.json`: what Pippa's terminal extension (runtime/pippa-local-server, copied by the installer
-    /// to ~/.pi/agent/extensions) starts the server with when `pi` in the terminal uses `pippa-local` and the app does not
-    /// run it. No fixed paths in the extension: program in Pippa.app, model file, exactly the same
-    /// arguments as `LlamaServer.ensureRunning`, idle time. The key is never in it, only the key file.
+    /// `<Support>/pippa-local-server.json`: what Pippa's terminal extension (runtime/pippa-local-server, copied by the
+    /// installer to ~/.pi/agent/extensions) starts the server with when `pi` in the terminal uses `pippa-local` and no
+    /// server runs. The key is never in it; oMLX reads it from its settings.json.
     public static let launchFileName = "pippa-local-server.json"
     public static func launchFile(support: URL) -> URL { support.appendingPathComponent(launchFileName) }
 
-    /// Contents of the launch file. `supported`: the program's flags (`LlamaServer.supportedFlags`), as on app start.
-    public static func launchConfiguration(_ plan: Plan, support: URL, supported: Set<String>?,
-                                           environment: [String: String] = ProcessInfo.processInfo.environment) -> [String: Any] {
-        let arguments = LlamaServer.arguments(choice: plan.choice, model: plan.modelFile, port: plan.port, supported: supported,
-                                              alias: plan.modelID, slotSavePath: plan.slotDirectory)
-        // Pippa.app, if the program lives in it (for the message "Pippa.app is missing").
-        var app: String?
-        var probe = plan.binary.deletingLastPathComponent()
-        while probe.pathComponents.count > 1 {
-            if probe.pathExtension == "app" { app = probe.path; break }
-            probe = probe.deletingLastPathComponent()
-        }
+    public static func launchConfiguration(_ plan: Plan, support: URL) -> [String: Any] {
         var config: [String: Any] = [
-            "schemaVersion": 1, "provider": PiInstaller.providerKey, "port": plan.port, "binary": plan.binary.path,
-            "modelID": plan.modelID, "arguments": arguments, "idleSeconds": Int(plan.idleSeconds.rounded()),
-            "logFile": support.appendingPathComponent("llama-server-pi.log").path,
+            "schemaVersion": 2, "provider": PiInstaller.providerKey, "port": plan.port, "binary": plan.python.path,
+            "arguments": plan.arguments, "environment": environment(plan, base: [:]),
+            "modelID": plan.modelID, "logFile": support.appendingPathComponent(logName).path, "keyFile": plan.keyFile.path,
         ]
-        if let app { config["app"] = app }
-        if let keyFile = plan.keyFile { config["keyFile"] = keyFile.path }
+        if let app = Bundle.main.bundleURL.pathExtension == "app" ? Bundle.main.bundlePath : nil { config["app"] = app }
         return config
     }
 
-    /// Write the launch file (atomic, 0600), only if something changed. `true`: written.
+    /// Write the launch file and oMLX's settings (atomic, 0600), only if something changed. `true`: written.
     @discardableResult
-    public static func publishLaunchFile(_ plan: Plan, support: URL, supported: Set<String>? = nil) throws -> Bool {
-        let flags = supported ?? LlamaServer.supportedFlags(binary: plan.binary)
-        let config = launchConfiguration(plan, support: support, supported: flags)
+    public static func publishLaunchFile(_ plan: Plan, support: URL) throws -> Bool {
+        try writeServerSettings(plan)
+        let config = launchConfiguration(plan, support: support)
         let data = try JSONSerialization.data(withJSONObject: config, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]) + Data("\n".utf8)
         let url = launchFile(support: support)
         if (try? Data(contentsOf: url)) == data { return false }

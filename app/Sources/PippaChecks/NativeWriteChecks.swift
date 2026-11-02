@@ -3,6 +3,26 @@ import PippaCore
 
 /// Native cancellation checks use invented integrations and the real Apple Events serial queue, never real apps.
 func runNativeWriteChecks() async {
+    await checkAsync("Native request origin: late front reads keep the captured turn, chip and receipt identity") {
+        let demo = DemoIntegrations(granted: true), turns = PippaMCPTurns(), old = PippaMCPTurn(), next = PippaMCPTurn()
+        turns.begin(old)
+        let reads = NativeReadBox()
+        reads.front = FrontApp(name: "Safari", bundleID: FrontApp.safari, pid: 1, title: "Old page")
+        var h = host(demo, turns: turns)
+        h.front = DemoFrontApp(); h.shownFront = { reads.front }; h.onRead = { reads.append($0) }
+        let tools = PippaMCPTools(host: h), captured = tools.captureRequest()
+        turns.end(old); turns.begin(next); reads.front = nil
+        let file = root.appendingPathComponent("native-request-origin.txt")
+        try "Invented document for the original answer.".write(to: file, atomically: true, encoding: .utf8)
+        let document = try JSONSerialization.data(withJSONObject: ["jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                      "params": ["name": "read_document", "arguments": ["path": file.path]]])
+        let front = try JSONSerialization.data(withJSONObject: ["jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                      "params": ["name": "front_read", "arguments": [:]]])
+        _ = await tools.handle(document, context: captured)
+        let shown = payload(await tools.handle(front, context: captured))
+        return (shown["data"] as? [String: Any])?["app"] as? String == "Safari"
+            && reads.notes.first?.turnID == old.id && reads.notes.first?.read == true
+    }
     func request(_ name: String = "reminder_add") -> Data {
         let args = name == "calendar_add" ? ["title": "Test appointment", "date": "tomorrow"] : ["title": "Test reminder"]
         return try! JSONSerialization.data(withJSONObject: ["jsonrpc": "2.0", "id": 1, "method": "tools/call",
@@ -43,39 +63,6 @@ func runNativeWriteChecks() async {
         return waiting && result["status"] as? String == "cancelled" && late["status"] as? String == "cancelled"
             && demo.createdCount == 0 && receipts.count == 2 && receipts.allSatisfy { $0.turnID == old.id && $0.operationID != nil }
             && observed.receipts == receipts && next.writes.snapshot.receipts.isEmpty && next.writes.snapshot.pending.isEmpty
-    }
-
-    await checkAsync("Native writes: no active MCP turn fails closed, direct Save Draft has an independent action scope") {
-        let demo = DemoIntegrations(granted: true), turns = PippaMCPTurns()
-        let h = host(demo, turns: turns)
-        let result = payload(await PippaMCPTools(host: h).handle(request()))
-        let source = MailReplySource(messageID: "native-cancel@example.test", replyTo: "person@example.test", subject: "Test")!
-        let saved = await PippaMCPWriteTools(host: h).replyDraft(to: source, body: "Thank you.")
-        return result["status"] as? String == "cancelled" && demo.createdCount == 0
-            && !saved.isError && demo.insertedDrafts.count == 1 && saved.receipt?.turnID == nil && saved.receipt?.operationID != nil
-    }
-
-    await checkAsync("Native request origin: late document/front reads keep the captured turn, chip and receipt identity") {
-        let demo = DemoIntegrations(granted: true), turns = PippaMCPTurns(), old = PippaMCPTurn(), next = PippaMCPTurn()
-        turns.begin(old)
-        let reads = NativeReadBox()
-        reads.front = FrontApp(name: "Safari", bundleID: FrontApp.safari, pid: 1, title: "Old page")
-        var h = host(demo, turns: turns)
-        h.front = DemoFrontApp(); h.shownFront = { reads.front }; h.onRead = { reads.append($0) }
-        let tools = PippaMCPTools(host: h), captured = tools.captureRequest()
-        turns.end(old); turns.begin(next); reads.front = nil
-        let file = root.appendingPathComponent("native-request-origin.txt")
-        try "Invented document for the original answer.".write(to: file, atomically: true, encoding: .utf8)
-        let document = try JSONSerialization.data(withJSONObject: ["jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                      "params": ["name": "read_document", "arguments": ["path": file.path]]])
-        let front = try JSONSerialization.data(withJSONObject: ["jsonrpc": "2.0", "id": 2, "method": "tools/call",
-                      "params": ["name": "front_read", "arguments": [:]]])
-        _ = await tools.handle(document, context: captured)
-        let shown = payload(await tools.handle(front, context: captured))
-        let originalLedger = await old.ledger, laterLedger = await next.ledger
-        return originalLedger.readCompletely(file.path) == true && laterLedger.readCompletely(file.path) != true
-            && (shown["data"] as? [String: Any])?["app"] as? String == "Safari"
-            && reads.notes.first?.turnID == old.id && reads.notes.first?.read == true
     }
 
     await checkAsync("Native writes: Stop while waiting on Apple Events queue prevents dispatch and records nothing changed") {

@@ -7,36 +7,6 @@ extension ActionReceipt.Item {
     /// Actions of the writing MCP tools.
     public static let appActions: Set<String> = ["calendarAdd", "reminderAdd", "mailDraft"]
 
-    /// "Open draft": a mail draft that is in Mail or may be.
-    public var canOpenMailDraft: Bool { action == "mailDraft" && (outcome == "done" || outcome == "unclear") }
-
-    /// Opening Reminders reveals the app, not an exact item: macOS exposes no supported reminder deep link.
-    public var canOpenReminders: Bool { action == "reminderAdd" && (outcome == "done" || outcome == "unclear") }
-
-    /// Only a durable, unresolved reminder has authoritative state to recheck. Legacy receipts cannot be replayed.
-    public var canCheckReminderStatus: Bool {
-        action == "reminderAdd" && outcome == "unclear" && operationID != nil && nativeRevision != nil
-    }
-
-    /// A known permission denial can open the relevant privacy pane. It never authorizes or retries an action.
-    public var permissionSettingsIntegration: Integration? {
-        guard reason == "denied", ["failed", "blocked", "declined"].contains(outcome) else { return nil }
-        return switch action {
-        case "calendarAdd": .calendar
-        case "reminderAdd": .reminders
-        case "mailDraft": .mail
-        default: nil
-        }
-    }
-
-    /// Preserve legacy native-write receipts; a successful Photos search can still have denied library previews.
-    public var permissionRepairTarget: PermissionRepairTarget? {
-        if let permissionRepair,
-           ["failed", "blocked", "declined"].contains(outcome)
-            || (action == "read" && outcome == "done" && permissionRepair == .photos) { return permissionRepair }
-        return permissionSettingsIntegration.map(PermissionRepairTarget.init(integration:))
-    }
-
     func appLine(language: String?) -> String {
         if outcome == "cancelled" {
             return switch action {

@@ -27,7 +27,7 @@ struct PhotoCardView: View {
             }
             .padding(.horizontal, 14)
             if let note = card.truncatedNote {
-                Text(note).font(Fonts.hint).foregroundStyle(Theme.ink3)
+                Text(note).font(.caption).foregroundStyle(Theme.ink3)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 14).padding(.top, 8)
             }
@@ -80,14 +80,14 @@ private struct PhotoTile: View {
         .accessibilityAddTraits(.isButton)
         .task(id: item.id) {
             // With PIPPA_DEMO=1 no real library (the ids are invented).
-            guard previews, image == nil, DevEnvironment.value("PIPPA_DEMO") != "1" else { return }
+            guard previews, image == nil, ProcessInfo.processInfo.environment["PIPPA_DEMO"] != "1" else { return }
             imageState.wrappedValue = await PhotosLibrary.preview(id: item.id, side: 280)?.image
         }
     }
 
     /// The photo itself in Photos; if Photos can't find it, Photos comes to the front. With PIPPA_DEMO=1 nothing.
     private func open() {
-        guard DevEnvironment.value("PIPPA_DEMO") != "1" else { return }
+        guard ProcessInfo.processInfo.environment["PIPPA_DEMO"] != "1" else { return }
         let id = item.id
         Task { await PhotosLibrary.show(id: id) }
     }

@@ -141,7 +141,6 @@ public struct PippaMCPTools: Sendable {
         + PippaMCPTurnTools.names
         + PippaMCPWriteTools.names
         + [PippaMCPFilePreparation.name]
-        + [PippaMCPChart.name]
 
     let host: PippaMCPHost
     public init(host: PippaMCPHost) { self.host = host }
@@ -241,12 +240,6 @@ public struct PippaMCPTools: Sendable {
                 }
                 return Self.result(id: id, ["content": [["type": "text", "text": outcome.text]], "isError": outcome.isError])
             }
-            // A chart card from a table file (PippaMCPChart.swift): read only, the card comes with the read note.
-            if name == PippaMCPChart.name {
-                let outcome = await PippaMCPChart(turn: context.turn).call(arguments)
-                host.onRead?(PippaMCPChart.readNote(for: outcome, path: arguments["path"] as? String ?? "", turnID: context.turn?.id))
-                return Self.result(id: id, ["content": [["type": "text", "text": outcome.text]], "isError": outcome.isError])
-            }
             if PippaMCPWriteTools.names.contains(name) {
                 let outcome = await PippaMCPWriteTools(host: host, scope: context.writes).call(name, arguments)
                 if let receipt = outcome.receipt { host.onWrite?(receipt) }
@@ -304,7 +297,7 @@ public struct PippaMCPTools: Sendable {
             tool("front_read", "Geöffnetes lesen", "Front content."),
         ]
         return readers + PippaMCPTurnTools.toolList() + PippaMCPWriteTools.toolList() + PippaMCPFilePreparation.toolList()
-            + PippaMCPChart.toolList()
+
     }
 
     /// Each reader accepts only its own declared fields and types. An invalid optional filter must never become
@@ -457,7 +450,8 @@ public struct PippaMCPTools: Sendable {
     /// Pippa's sentence before the first system prompt: what she reads and when. One sentence, then the Mac asks.
     public static func accessExplanation(_ subject: PippaMCPAccessSubject) -> String {
         switch subject {
-        case .integration(.calendar): CalendarConversation.accessBenefit
+        case .integration(.calendar):
+            L("To answer this, I need to read your calendar on this Mac – only the period you ask about, and only when you ask.", table: "Calendar")
         case .integration(.reminders):
             L("To answer this, I need to read your reminders on this Mac – only when you ask, and I don’t change anything.", table: "MCP")
         case .integration(.mail):
@@ -608,17 +602,30 @@ public struct PippaMCPTools: Sendable {
             return reply
         }
         do {
-            let fetch = try await host.hostData.searchMail(query, unread: unread, limit: limit)
+            var fetch = try await host.hostData.searchMail(query, unread: unread, limit: limit)
+            // Mail finds parts of words, not other forms: "Zahlungseingänge" misses "Zahlungseingangsliste". A small
+            // model then guesses word after word; one retry with the singular saves those turns.
+            var searched = query
+            if fetch.items.isEmpty, let singular = Self.mailSingular(query) {
+                let retry = try await host.hostData.searchMail(singular, unread: unread, limit: limit)
+                if !retry.items.isEmpty { fetch = retry; searched = singular }
+            }
+            let query = searched
             let mails = fetch.items.map { m -> [String: Any] in
                 var value: [String: Any] = ["subject": m.subject, "from": m.sender, "mailbox": m.mailbox, "start": Self.compact(m.preview),
                                             "unread": m.unread]
                 if let date = m.date { value["date"] = Self.dateLabel(date, time: true, calendar: host.calendar) }
                 return value
             }
+            var next = "If mails is not empty, the person sees them as a card under your answer: do not list them again; answer in one or two sentences. start is only the beginning of each email; for the whole email or its attachments call mail_read with its subject and from. If mails is empty, no email in the inbox matches."
+            // A small model asked for "the last three" when there are two keeps searching until time runs out.
+            if let count = await host.turns.active?.countMailSearch(), count >= Self.mailSearchesBeforeStop {
+                next = "This is Mail search \(count) in this answer: stop searching. Tell the person which mails you found and that you found no others, then work with those."
+            }
             var result = Self.bounded(source: query.isEmpty ? "Mail on this Mac (newest in the inbox)" : "Mail on this Mac (inbox search by subject or sender)",
                                       data: ["query": query, "unread": unread, "mails": mails, "shown": mails.count, "total": fetch.total,
                                              "truncated": fetch.total > mails.count],
-                                      next: "If mails is not empty, the person sees them as a card under your answer: do not list them again; answer in one or two sentences. start is only the beginning of each email; for the whole email or its attachments call mail_read with its subject and from. If mails is empty, no email in the inbox matches.")
+                                      next: next)
             if !fetch.items.isEmpty {
                 result.card = .mail(MailCard(query: query, unread: unread, mails: fetch.items, total: fetch.total, calendar: host.calendar))
             }
@@ -626,6 +633,23 @@ public struct PippaMCPTools: Sendable {
         } catch {
             return failure(error, .mail)
         }
+    }
+
+    /// From this Mail search on in one answer, the result tells the model to stop and work with what it found.
+    static let mailSearchesBeforeStop = 4
+
+    /// A German plural as a stem Mail's search finds: "Zahlungseingänge" → "Zahlungseingang", "Rechnungen" → "Rechnung",
+    /// "Verträge" → "Vertrag". One word only; `nil` when nothing changes.
+    public static func mailSingular(_ word: String) -> String? {
+        guard !word.contains(where: \.isWhitespace), word.count >= 5 else { return nil }
+        var w = word
+        let vowels: [Character: Character] = ["ä": "a", "ö": "o", "ü": "u", "Ä": "A", "Ö": "O", "Ü": "U"]
+        if let i = w.indices.suffix(4).last(where: { vowels[w[$0]] != nil }) { w.replaceSubrange(i...i, with: String(vowels[w[i]]!)) }
+        for ending in ["en", "er", "es", "e", "n", "s"] where w.lowercased().hasSuffix(ending) && w.count - ending.count >= 4 {
+            w.removeLast(ending.count)
+            break
+        }
+        return w == word ? nil : w
     }
 
     // MARK: Photos
@@ -960,11 +984,6 @@ public struct PippaMCPTools: Sendable {
                 list.removeLast(); data[key] = list; data["shown"] = list.count; data["truncated"] = true
                 return true
             }
-        }
-        // make_chart: fewer computed rows for the model; the card still shows all of them.
-        if var rows = data["rows"] as? [Any], rows.count > 1 {
-            rows.removeLast(); data["rows"] = rows; data["rows_shown"] = rows.count
-            return true
         }
         for key in ["body", "sheet", "text"] {
             if let text = data[key] as? String, text.count > 200 {

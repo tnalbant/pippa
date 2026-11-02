@@ -65,7 +65,7 @@ private struct ReminderCardRow: View {
 
     /// Reminders has no stable link to one reminder: the app comes forward. With PIPPA_DEMO=1 nothing (no real apps).
     private func open() {
-        guard DevEnvironment.value("PIPPA_DEMO") != "1",
+        guard ProcessInfo.processInfo.environment["PIPPA_DEMO"] != "1",
               let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: Integration.reminders.bundleIdentifier) else { return }
         NSWorkspace.shared.openApplication(at: app, configuration: .init())
     }

@@ -10,7 +10,7 @@ public struct PiProviderModel: Sendable, Equatable {
     public init(id: String, name: String, contextWindow: Int, maxTokens: Int = 4096) {
         self.id = id; self.name = name; self.contextWindow = contextWindow; self.maxTokens = maxTokens
     }
-    /// From Pippa's choice: id = catalog key (also the llama-server `--alias`), context as the server.
+    /// From Pippa's choice: id = catalog key (also the model's folder name, which oMLX serves it under), context as the server.
     public init(_ choice: ModelChoice) {
         self.init(id: choice.model.key, name: choice.model.label, contextWindow: choice.ctx)
     }
@@ -31,7 +31,7 @@ public struct PiLaunchSpec: Sendable, Equatable {
 public struct PiInstallOptions: Sendable {
     /// The model that should be ready; `nil` skips the model step.
     public var model: CatalogModel?
-    /// Where to look for existing models; `nil` = old container, Pippa, ~/models, LM Studio, Ollama, Hugging Face ...
+    /// Where to look for existing models; `nil` = oMLX, LM Studio, Hugging Face ...
     public var modelSearchRoots: [ModelLocation]?
     public var providerModels: [PiProviderModel]
     public var port: Int
@@ -361,7 +361,7 @@ public final class PiInstaller: @unchecked Sendable {
          "PI_TELEMETRY": "0", "PI_OFFLINE": "1", "PI_SKIP_VERSION_CHECK": "1"]
     }
 
-    /// Start of the pinned release for PiRPCClient. `nil` until the "Pi" step has run. Pi reads the llama-server
+    /// Start of the pinned release for PiRPCClient. `nil` until the "Pi" step has run. Pi reads the local server's
     /// key itself from the key file (`apiKey: "!/bin/cat ..."` in models.json), as in the terminal.
     public func launchSpec(modelID: String) -> PiLaunchSpec? {
         guard let layout = state.layout else { return nil }
@@ -373,17 +373,32 @@ public final class PiInstaller: @unchecked Sendable {
                             piArguments: ["--provider", Self.providerKey, "--model", modelID], environment: environment)
     }
 
-    /// Fixed port for llama-server and models.json: chosen freely once, then remembered in Pippa's settings.json.
+    /// Fixed port for the local server and models.json: chosen freely once, then remembered in Pippa's settings.json.
     public static func stablePort(support: URL) -> Int {
         var settings = PippaSettings.load(from: support)
-        if let port = settings.llamaPort { return port }
-        let port = LlamaServer.freePort()
-        settings.llamaPort = port
+        if let port = settings.serverPort { return port }
+        let port = freePort()
+        settings.serverPort = port
         try? settings.save(to: support)
         return port
     }
 
-    /// Fixed key for llama-server and `pippa-local`: generated randomly once, then stored in `<Support>/llama-key`
+    static func freePort() -> Int {
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else { return 8190 + Int.random(in: 0..<500) }
+        defer { close(fd) }
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+        addr.sin_port = 0
+        var len = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let ok = withUnsafeMutablePointer(to: &addr) { ptr in
+            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, len) == 0 && getsockname(fd, $0, &len) == 0 }
+        }
+        return ok ? Int(UInt16(bigEndian: addr.sin_port)) : 8190 + Int.random(in: 0..<500)
+    }
+
+    /// Fixed key for the local server and `pippa-local`: generated randomly once, then stored in the key file
     /// (mode 0600, only the person themselves). Pi in the terminal reads it via `apiKey: "!/bin/cat ..."`; so the
     /// key is never in models.json and needs no environment variable. Too-wide permissions are reset to 0600.
     public static func stableKey(support: URL) throws -> String {
@@ -401,7 +416,7 @@ public final class PiInstaller: @unchecked Sendable {
         var bytes = [UInt8](repeating: 0, count: 32)
         arc4random_buf(&bytes, bytes.count)
         let key = bytes.map { String(format: "%02x", $0) }.joined()
-        let temporary = support.appendingPathComponent(".llama-key-\(UUID().uuidString)")
+        let temporary = support.appendingPathComponent(".server-key-\(UUID().uuidString)")
         guard fm.createFile(atPath: temporary.path, contents: Data((key + "\n").utf8), attributes: [.posixPermissions: 0o600]) else {
             throw PiInstallFailure.notWritable(path: url.path, reason: SystemError.reason(errno: errno))
         }
@@ -413,29 +428,38 @@ public final class PiInstaller: @unchecked Sendable {
         return key
     }
 
-    public static func keyFile(support: URL) -> URL { support.appendingPathComponent("llama-key") }
+    public static func keyFile(support: URL) -> URL { support.appendingPathComponent("local-server-key") }
 
     // MARK: 3. Model folder
 
-    /// No question: `~/Library/Application Support/Pippa/models`, invisible and
-    /// no clutter in the user folder. If `~/models` already exists (e.g. created for llama.cpp or Pi in the terminal),
-    /// Pippa uses that folder too. A folder chosen once stays.
+    /// No question: `<Support>/omlx/models`, the folder Pippa's oMLX server reads; one subfolder per model, named by its key.
     public func prepareModelsFolder() -> PiStepResult {
         begin(.modelsFolder)
-        let folder: URL, shared: Bool
-        if let path = state.modelsFolder, let wasShared = state.modelsFolderShared, fm.fileExists(atPath: path) {
-            folder = URL(fileURLWithPath: path, isDirectory: true); shared = wasShared
-        } else {
-            shared = Self.isDirectory(roots.sharedModels)
-            folder = shared ? roots.sharedModels : roots.pippaModels
-        }
+        let folder = PiLocalServer.baseDirectory(support: roots.support).appendingPathComponent("models", isDirectory: true)
         do {
             try makeDirectory(folder)
-            if !shared { ModelDownloader(directory: folder).excludeFromBackup() }
+            ModelDownloader(directory: folder).excludeFromBackup()
         } catch { return finish(.modelsFolder, .failed(failure(error, path: folder))) }
         state.modelsFolder = folder.path
-        state.modelsFolderShared = shared
-        return finish(.modelsFolder, .modelsFolder(folder, shared: shared))
+        state.modelsFolderShared = false
+        return finish(.modelsFolder, .modelsFolder(folder, shared: false))
+    }
+
+    /// Where a model's files go: `<models folder>/<key>/`; the folder name is the id oMLX serves.
+    public func modelDirectory(_ model: CatalogModel) -> URL? {
+        state.modelsFolder.map { URL(fileURLWithPath: $0, isDirectory: true).appendingPathComponent(model.key, isDirectory: true) }
+    }
+
+    /// What Pippa before 0.4 left for llama.cpp, once the new model is ready: her GGUF model folder `<Support>/models`,
+    /// the saved prompt cache `<Support>/llama-slots`, and in a shared `~/models` only the files she put there herself.
+    /// Several GB on most Macs; they go to the Trash, never deleted for good.
+    public static func oldModelFiles(support: URL, home: URL, state: PiInstallState) -> [URL] {
+        let fm = FileManager.default
+        var result = ["models", "llama-slots"].map { support.appendingPathComponent($0, isDirectory: true) }.filter { fm.fileExists(atPath: $0.path) }
+        let shared = home.appendingPathComponent("models", isDirectory: true).standardizedFileURL.path + "/"
+        result += state.created.filter { $0.hasPrefix(shared) && ($0.hasSuffix(".gguf") || $0.hasSuffix(".gguf.ok")) }
+            .map { URL(fileURLWithPath: $0) }.filter { fm.fileExists(atPath: $0.path) }
+        return result
     }
 
     static func isDirectory(_ url: URL) -> Bool {
@@ -452,11 +476,11 @@ public final class PiInstaller: @unchecked Sendable {
     /// shared `~/models` stops setup, because the download would have to replace it.
     public func provideModel(_ model: CatalogModel, searchRoots: [ModelLocation]? = nil) -> PiStepResult {
         begin(.model)
-        guard let path = state.modelsFolder else { return finish(.model, .failed(.missingStep(.modelsFolder))) }
+        guard let folder = modelDirectory(model) else { return finish(.model, .failed(.missingStep(.modelsFolder))) }
         guard let files = model.pinned?.files, !files.isEmpty else { return finish(.model, .failed(.missingStep(.model))) }
-        let folder = URL(fileURLWithPath: path, isDirectory: true)
+        do { try makeDirectory(folder) } catch { return finish(.model, .failed(failure(error, path: folder))) }
         let downloader = ModelDownloader(directory: folder)
-        let found = ExistingModels.find(ModelCatalog(sampling: [:], models: [model]), roots: modelSearchRoots(folder: folder, extra: searchRoots))
+        let found = ExistingModels.find(model, roots: searchRoots ?? ExistingModels.defaultRoots(home: roots.home))
         var lastMethod: PiAdoptionMethod?, lastSource: String?, missing: Int64 = 0, incomplete = false
         do {
             for file in files where !downloader.isInstalled(file) {
@@ -467,8 +491,6 @@ public final class PiInstaller: @unchecked Sendable {
                         state.record(dest.appendingPathExtension("ok"))
                         continue
                     }
-                    // The person's own file in ~/models: never replace it. Pippa's own: load it again.
-                    guard ownsModelFile(dest) else { return finish(.model, .failed(.checksumMismatch(dest.path))) }
                     DiagnosticsLog.shared.event("modell-ersetzt", ["datei": dest.lastPathComponent])
                     for stale in [dest, dest.appendingPathExtension("ok")] {
                         try? fm.removeItem(at: stale)
@@ -507,8 +529,8 @@ public final class PiInstaller: @unchecked Sendable {
     /// `download` only for checks and recordings (no real download).
     public func downloadModel(_ model: CatalogModel, using download: Download = PiInstaller.modelDownloader,
                               progress: @escaping @Sendable (Double, TimeInterval?) -> Void) async -> PiStepResult {
-        guard let path = state.modelsFolder else { return finish(.model, .failed(.missingStep(.modelsFolder))) }
-        let folder = URL(fileURLWithPath: path, isDirectory: true)
+        guard let folder = modelDirectory(model) else { return finish(.model, .failed(.missingStep(.modelsFolder))) }
+        let path = folder.path
         do { try await download(model, folder, progress) }
         catch let error as PippaError {
             switch error {
@@ -524,7 +546,6 @@ public final class PiInstaller: @unchecked Sendable {
             let code = error as NSError   // for "Details": technical cause, not the everyday wording
             return finish(.model, .failed(.downloadFailed("\(code.domain) \(code.code): \(code.localizedDescription)")))
         }
-        // Pippa's own from now on, also in a shared ~/models: a later catalog change may replace it (`ownsModelFile`).
         for file in model.pinned?.files ?? [] {
             let dest = folder.appendingPathComponent((file.path as NSString).lastPathComponent)
             state.record(dest); state.record(dest.appendingPathExtension("ok"))
@@ -533,20 +554,6 @@ public final class PiInstaller: @unchecked Sendable {
         return provideModel(model, searchRoots: [])
     }
 
-    /// May Pippa replace this file in the model folder? In its own folder always; in a shared `~/models` only what it
-    /// put there itself (downloaded or adopted).
-    func ownsModelFile(_ url: URL) -> Bool {
-        state.modelsFolderShared != true || state.didCreate(url) || state.adopted.contains { $0.file == url.path }
-    }
-
-    func modelSearchRoots(folder: URL, extra: [ModelLocation]?) -> [ModelLocation] {
-        var result = [ModelLocation(url: roots.containerModels, source: "Pippa")]
-        for (url, source) in [(roots.pippaModels, "Pippa"), (roots.sharedModels, "~/models")]
-        where url.standardizedFileURL != folder.standardizedFileURL {
-            result.append(ModelLocation(url: url, source: source))
-        }
-        return result + (extra ?? ExistingModels.defaultRoots(home: roots.home))
-    }
 
     /// `unavailable`: neither clone nor hardlink nor copy worked (e.g. copy without enough space); then it downloads.
     enum Adoption { case adopted(PiAdoptionMethod), unavailable, mismatch }
@@ -794,8 +801,11 @@ public final class PiInstaller: @unchecked Sendable {
         let listed = Self.providerModelIDs(modelsJSON: roots.modelsJSON)
         guard modelIDs.allSatisfy(listed.contains) else { return finish(.ready, .failed(.missingStep(.provider))) }
         if let model {
-            guard let path = state.modelsFolder, ModelDownloader(directory: URL(fileURLWithPath: path)).isInstalled(model) else {
+            guard let folder = modelDirectory(model), ModelDownloader(directory: folder).isInstalled(model) else {
                 return finish(.ready, .failed(.missingStep(.model)))
+            }
+            for old in Self.oldModelFiles(support: roots.support, home: roots.home, state: state) {
+                try? fm.trashItem(at: old, resultingItemURL: nil)
             }
         }
         return finish(.ready, .ready(version: found))

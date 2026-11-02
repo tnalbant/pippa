@@ -21,7 +21,7 @@ func runLocalizationChecks() {
             print("  Pippa_PippaCore.bundle not found in \(places.map(\.path))")
             return false
         }
-        let tables = ["Core", "Analysis", "Skills"]
+        let tables = ["Core", "Analysis", "Tools", "TrayCore", "Sheet", "Calendar", "Thought", "Setup", "MCP", "FilePreparation"]
         var missing: [String] = []
         for language in ["en", "de"] {
             for table in tables where bundle.url(forResource: table, withExtension: "strings", subdirectory: nil, localization: language) == nil {
@@ -41,11 +41,10 @@ func runLocalizationChecks() {
         }
         let locale = Locale(identifier: "de_DE")
         func de(_ key: String) -> String { german.localizedString(forKey: key, value: "?", table: "Core") }
-        let tidied = String(format: de("%lld files tidied"), locale: locale, 3)
         let size = String(format: de("%.1f GB"), locale: locale, 16.845511648)
         let minutes = String(format: de("about %lld minutes"), locale: locale, 10)
         let failed = String(format: de("Stopped partway through: %@ %@, and that can be undone."), locale: locale, "Kein Platz mehr frei.", "3 Dateien geordnet")
-        return de("1 file tidied") == "1 Datei geordnet" && tidied == "3 Dateien geordnet" && size == "16,8 GB"
+        return size == "16,8 GB"
             && minutes == "etwa 10 Minuten" && de("Answer stopped.") == "Antwort angehalten."
             && failed == "Mittendrin abgebrochen: Kein Platz mehr frei. 3 Dateien geordnet, das lässt sich rückgängig machen."
     }

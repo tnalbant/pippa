@@ -46,7 +46,7 @@ public struct PiPayload: Sendable, Equatable {
     }
 
     /// Pippa's terminal extension in the payload (`<payload>/extensions/pippa-local-server`, scripts/bundle-pi-payload.sh):
-    /// starts `pippa-local`'s llama-server when `pi` needs it in the terminal. `nil` if missing.
+    /// starts `pippa-local`'s oMLX server when `pi` needs it in the terminal. `nil` if missing.
     public var terminalExtension: URL? {
         let url = release.deletingLastPathComponent().appendingPathComponent("extensions/\(PiInstaller.terminalExtensionName)", isDirectory: true)
         return FileManager.default.fileExists(atPath: url.appendingPathComponent("index.ts").path) ? url : nil
@@ -97,15 +97,6 @@ public struct PiInstallRoots: Sendable {
     /// Pi's folder for the person's extensions; Pippa's terminal extension lives in it as its own folder.
     public var extensionsDirectory: URL { agentDirectory.appendingPathComponent("extensions", isDirectory: true) }
     public var stateFile: URL { support.appendingPathComponent("install-state.json") }
-    /// Key of the llama-server for `pippa-local` (0600), see `PiInstaller.stableKey`.
-    public var llamaKeyFile: URL { PiInstaller.keyFile(support: support) }
-    /// Shared model folder as in Pi's docs (llama-cpp.md), after one-time consent.
-    public var sharedModels: URL { home.appendingPathComponent("models", isDirectory: true) }
-    public var pippaModels: URL { support.appendingPathComponent("models", isDirectory: true) }
-    /// Models of the old sandbox app.
-    public var containerModels: URL {
-        home.appendingPathComponent("Library/Containers/io.github.tschnorpfeil.pippa/Data/Library/Application Support/Pippa/models", isDirectory: true)
-    }
 
     /// Root of the chosen layout (contains `releases/<pin>`).
     public func installRoot(_ layout: PiLayout) -> URL { layout == .pippaRoot ? pippaRoot : managedRoot }

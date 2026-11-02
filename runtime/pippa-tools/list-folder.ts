@@ -1,36 +1,53 @@
+/**
+ * `list_folder` (pippa-tools.ts): one folder as facts. Folders first, then files newest first; at most 20 entries with
+ * name, full path, kind, size (files) or item count (folders), full modification time, and a Markdown file's front-matter
+ * `updated`. The newest file is named and marked; what did not fit is counted, never silently dropped.
+ */
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-
-const LIST_LIMIT = 200;
-function size(bytes: number): string {
-	if (bytes < 1024) return `${bytes} B`;
-	if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-	return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
+import { entryFacts, fitting } from "./facts.mjs";
+import { FACT_RESULT_CHARS } from "./budget.ts";
 
 /** Keep real filesystem denial separate from absence; the app chooses a privacy pane, never the model. */
-export async function listFolder(folder: string, io = { readdir, stat }) {
+export async function listFolder(folder: string, io = { readdir, stat }, maxChars = FACT_RESULT_CHARS) {
 	let names: string[];
 	try {
-		names = (await io.readdir(folder)).filter((name) => !name.startsWith(".")).sort((a, b) => a.localeCompare(b));
+		names = (await io.readdir(folder)).filter((name) => !name.startsWith("."));
 	} catch (error) {
 		const code = (error as NodeJS.ErrnoException)?.code;
 		if (code === "EACCES" || code === "EPERM") {
 			return { isError: true, content: [{ type: "text", text: "Access to this folder was denied. Tell the person access must be repaired before trying again; do not claim it is empty or missing and do not try other routes." }],
 				details: { pippaFileAccess: { schema: 1, code, path: folder } } };
 		}
-		if (code === "ENOENT") throw new Error(`There is no folder at ${folder}. Use the exact path from the message (starting with / or ~), not a shortened one.`);
+		if (code === "ENOENT") throw new Error(`There is no folder at ${folder}.`);
 		if (code === "ENOTDIR") throw new Error(`This path is not a folder: ${folder}.`);
 		throw error;
 	}
-	const lines: string[] = [];
-	for (const name of names.slice(0, LIST_LIMIT)) {
-		try {
-			const info = await io.stat(join(folder, name));
-			lines.push(info.isDirectory() ? `${name}/` : `${name} (${size(info.size)}, ${info.mtime.toISOString().slice(0, 10)})`);
-		} catch { lines.push(name); }
+	const all: { path: string; info: any }[] = [];
+	for (const name of names) {
+		const path = join(folder, name);
+		try { all.push({ path, info: await io.stat(path) }); } catch { /* vanished or unreadable: not listed */ }
 	}
-	const more = names.length > LIST_LIMIT ? `\n… and ${names.length - LIST_LIMIT} more` : "";
-	const text = names.length === 0 ? `${folder} is empty.` : `${folder}:\n${lines.join("\n")}${more}`;
-	return { content: [{ type: "text", text }], details: { folder, count: names.length } };
+	all.sort((a, b) => Number(b.info.isDirectory()) - Number(a.info.isDirectory())
+		|| b.info.mtimeMs - a.info.mtimeMs || a.path.localeCompare(b.path));
+	const newest = all.filter((item) => !item.info.isDirectory()).reduce<typeof all[number] | undefined>(
+		(best, item) => !best || item.info.mtimeMs > best.info.mtimeMs ? item : best, undefined);
+	const entries: any[] = [];
+	for (const item of all.slice(0, 20)) {
+		const entry: any = await entryFacts(item.path, item.info);
+		if (item === newest) entry.newest = true;
+		entries.push(entry);
+	}
+	const folders = all.filter((item) => item.info.isDirectory()).length;
+	const result = fitting((count: number) => ({
+		folder,
+		total: all.length,
+		folders,
+		files: all.length - folders,
+		...(newest ? { newest_file: newest.path } : {}),
+		sorted: "folders first, then newest first",
+		entries: entries.slice(0, count),
+		...(all.length > count ? { left_out: all.length - count } : {}),
+	}), entries.length, maxChars);
+	return { content: [{ type: "text", text: JSON.stringify(result) }], details: result };
 }

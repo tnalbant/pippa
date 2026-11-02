@@ -41,8 +41,6 @@ public final class SystemIntegrations: AppIntegrations, @unchecked Sendable {
         }
     }
 
-    public func add(_ entry: CalendarEntry, tag: URL) async throws -> CreatedItem { try eventKit.add(entry, tag: tag) }
-
     public func remove(_ item: CreatedItem) async throws -> RemoveResult {
         switch item.integration {
         case .reminders, .calendar: return try eventKit.remove(item)
@@ -100,41 +98,6 @@ final class EventKitBridge: @unchecked Sendable {
         }
         lock.withLock { cached = s }
         return access(i)
-    }
-
-    func add(_ entry: CalendarEntry, tag: URL) throws -> CreatedItem {
-        guard access(entry.integration) == .granted else { throw PippaError.accessDenied(entry.integration.appName) }
-        let s = store
-        let cal = Calendar(identifier: .gregorian)
-        var alert = DateComponents(); alert.year = entry.alertDay.year; alert.month = entry.alertDay.month; alert.day = entry.alertDay.day; alert.hour = 9
-        let alarm = cal.date(from: alert).map { EKAlarm(absoluteDate: $0) }
-        switch entry.target {
-        case .calendar:
-            guard let calendar = s.defaultCalendarForNewEvents else { throw PippaError.entryFailed(L("I can’t find a calendar.", table: "Core")) }
-            let ev = EKEvent(eventStore: s)
-            ev.calendar = calendar
-            ev.title = entry.title
-            ev.notes = entry.notes
-            ev.url = tag
-            ev.isAllDay = true
-            let interval = entry.eventInterval(in: cal)
-            ev.startDate = interval.start
-            ev.endDate = interval.end
-            if let alarm { ev.addAlarm(alarm) }
-            try s.save(ev, span: .thisEvent, commit: true)
-            return CreatedItem(integration: .calendar, identifier: ev.calendarItemIdentifier, modified: ev.lastModifiedDate, fingerprint: fingerprint(ev))
-        case .reminder:
-            guard let list = s.defaultCalendarForNewReminders() else { throw PippaError.entryFailed(L("I can’t find a reminders list.", table: "Core")) }
-            let r = EKReminder(eventStore: s)
-            r.calendar = list
-            r.title = entry.title
-            r.notes = entry.notes
-            r.url = tag
-            r.dueDateComponents = DateComponents(calendar: cal, year: entry.date.year, month: entry.date.month, day: entry.date.day)
-            if let alarm { r.addAlarm(alarm) }
-            try s.save(r, commit: true)
-            return CreatedItem(integration: .reminders, identifier: r.calendarItemIdentifier, modified: r.lastModifiedDate, fingerprint: fingerprint(r))
-        }
     }
 
     func remove(_ item: CreatedItem) throws -> RemoveResult {

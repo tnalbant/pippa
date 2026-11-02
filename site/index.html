@@ -964,15 +964,15 @@ strong, b { font-weight: 600; }
   <div class="wrap">
     <div class="sh">
       <h2 id="h-setup">Pippa richtet alles ein.</h2>
-      <p>Sie sucht die KI aus, die zu deinem Mac passt, sagt dir die Größe und lädt erst nach deinem Okay.</p>
+      <p>Sie prüft, ob ihre KI auf deinen Mac passt, sagt dir die Größe und lädt erst nach deinem Okay.</p>
     </div>
-    <div class="tiers" role="img" aria-label="Drei Karten: Mac mit 8 GB Arbeitsspeicher, 2,7 GB KI-Download. Mac mit 16 bis 24 GB, 5,7 GB, hervorgehoben mit „Passt zu deinem Mac“. Mac ab 32 GB, 16,8 GB.">
-      <div class="tier l" aria-hidden="true"><small>Mac mit 8&nbsp;GB</small><b>2,7&nbsp;GB</b></div>
-      <div class="tier pick" aria-hidden="true"><small>Mac mit 16–24&nbsp;GB</small><b>5,7&nbsp;GB</b><em><svg class="ic"><use href="#s-check"/></svg>Passt zu deinem Mac</em></div>
-      <div class="tier r" aria-hidden="true"><small>Mac ab 32&nbsp;GB</small><b>16,8&nbsp;GB</b></div>
+    <div class="tiers" role="img" aria-label="Drei Karten: Mac unter 16 GB Arbeitsspeicher, Online-KI. Mac ab 16 GB, 5,4 GB KI-Download, hervorgehoben mit „Passt zu deinem Mac“. Modell schon von oMLX oder LM Studio da, 0 GB.">
+      <div class="tier l" aria-hidden="true"><small>Mac unter 16&nbsp;GB</small><b>Online-KI</b></div>
+      <div class="tier pick" aria-hidden="true"><small>Mac ab 16&nbsp;GB</small><b>5,4&nbsp;GB</b><em><svg class="ic"><use href="#s-check"/></svg>Passt zu deinem Mac</em></div>
+      <div class="tier r" aria-hidden="true"><small>Modell schon da</small><b>0&nbsp;GB</b></div>
     </div>
     <div class="ready"><p><svg class="ic" aria-hidden="true"><use href="#s-checkc"/></svg>Fotos und PDFs gehen schon vorher, ohne KI-Download.</p></div>
-    <p class="note">Liegt dieselbe Modelldatei schon bei LM Studio oder Ollama, nimmt Pippa die, statt sie noch einmal zu laden.</p>
+    <p class="note">Liegt dasselbe Modell schon bei oMLX, LM Studio oder im Hugging-Face-Cache, nimmt Pippa das, statt es noch einmal zu laden.</p>
   </div>
 </section>
 
@@ -1071,7 +1071,7 @@ strong, b { font-weight: 600; }
 
 <section class="faq" id="fragen" aria-labelledby="h-faq">
   <h2 id="h-faq">Noch Fragen?</h2>
-  <details id="passt"><summary>Passt mein Mac?<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 8h11"/><path class="v" d="M8 2.5v11"/></svg></summary><p>Du brauchst einen Mac mit Apple-Chip (M1 oder neuer), macOS 15 oder neuer und mindestens 8&nbsp;GB Arbeitsspeicher. Nachsehen kannst du im Apple-Menü unter „Über diesen Mac“. Intel-Macs werden nicht unterstützt. Der Download ist unter 100&nbsp;MB groß, installiert braucht Pippa rund 0,5&nbsp;GB. Die passende KI sucht Pippa selbst aus und fragt vorher: je nach Arbeitsspeicher 3 bis 17&nbsp;GB. Liegt dieselbe Modelldatei schon bei LM Studio, Ollama oder im Hugging-Face-Cache, nimmt Pippa die, statt sie noch einmal zu laden.</p></details>
+  <details id="passt"><summary>Passt mein Mac?<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 8h11"/><path class="v" d="M8 2.5v11"/></svg></summary><p>Du brauchst einen Mac mit Apple-Chip (M1 oder neuer), macOS 15 oder neuer. Nachsehen kannst du im Apple-Menü unter „Über diesen Mac“. Intel-Macs werden nicht unterstützt. Der Download ist unter 100&nbsp;MB groß. Für ihre KI auf dem Mac braucht Pippa 16&nbsp;GB Arbeitsspeicher und fragt vor dem Download, rund 5,4&nbsp;GB. Liegt dasselbe Modell schon bei oMLX, LM Studio oder im Hugging-Face-Cache, nimmt Pippa das. Mit weniger Arbeitsspeicher, oder wenn du lieber willst, nutzt Pippa eine Online-KI: ChatGPT-Anmeldung oder dein eigener Schlüssel. Ein PDF aus Fotos geht immer, auch ohne KI.</p></details>
   <details><summary>Geht’s auch ohne KI-Download?<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 8h11"/><path class="v" d="M8 2.5v11"/></svg></summary><p>Ja. Fotos und PDFs zu einem PDF machen, Dateien verkleinern und Bilder umwandeln klappt direkt nach der Installation, einen Ordner aufräumen auch. Für Briefe und Fragen lädt Pippa ihre KI, erst nach deinem Okay, und die Größe sagt sie dir vorher.</p></details>
   <details><summary>Brauche ich Internet?<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 8h11"/><path class="v" d="M8 2.5v11"/></svg></summary><p>Zum Laden der App und ihrer KI, für Updates und für Websuchen. Danach arbeiten Pippas KI und die PDF-Werkzeuge auch ohne Verbindung. Braucht ein Befehl das Internet, fragt Pippa dich vorher. Schaltest du eine Online-KI ein, braucht die natürlich Internet.</p></details>
   <details><summary>Kann ich ChatGPT weiter nutzen?<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 8h11"/><path class="v" d="M8 2.5v11"/></svg></summary><p>Ja. Melde dich in Pippa mit ChatGPT an oder trag einen eigenen Schlüssel von OpenAI oder Anthropic ein, dann nutzt sie diesen Dienst als Online-KI. Solange das an ist, gehen deine Gespräche dorthin. Ausschalten kannst du es jederzeit in den Einstellungen.</p></details>
@@ -1086,7 +1086,7 @@ strong, b { font-weight: 600; }
     <div class="act">
       <a class="btn dl" href="https://github.com/tschnorpfeil/pippa/releases/latest/download/Pippa.dmg">Kostenlos für Mac laden<svg class="ic" aria-hidden="true"><use href="#s-dl"/></svg></a>
     </div>
-    <p class="req">Für Macs mit Apple-Chip ab macOS&nbsp;15. Download unter 100&nbsp;MB, Pippas KI (3 bis 17&nbsp;GB) lädt sie erst nach deinem Okay. <a href="https://github.com/tschnorpfeil/pippa/releases/latest">Was ist neu?</a></p>
+    <p class="req">Für Macs mit Apple-Chip ab macOS&nbsp;15. Download unter 100&nbsp;MB, Pippas KI (rund 5,4&nbsp;GB, ab 16&nbsp;GB Arbeitsspeicher) lädt sie erst nach deinem Okay. <a href="https://github.com/tschnorpfeil/pippa/releases/latest">Was ist neu?</a></p>
   </div>
   <ol class="steps"><li>Öffne <strong>Pippa.dmg</strong> und zieh Pippa in den Ordner Programme.</li><li>Zieh Fotos oder PDFs auf Pippa und klick auf <strong>„Versandfertig machen“</strong>.</li><li>Lad Pippas KI, wenn du so weit bist. Sie fragt vorher und sagt dir die Größe.</li></ol>
 </section>
@@ -1098,7 +1098,7 @@ strong, b { font-weight: 600; }
     <ul class="foot-links"><li><a href="impressum.html">Impressum</a></li><li><a href="datenschutz.html">Datenschutz</a></li><li><a href="https://github.com/tschnorpfeil/pippa">Quellcode auf GitHub</a></li><li><a href="en/" hreflang="en" lang="en" data-lang="en">English</a></li></ul>
   </div>
   <p class="fine">Ein unabhängiges Open-Source-Projekt, nicht verbunden mit Apple, Microsoft, OpenAI, Anthropic oder anderen hier genannten Anbietern. Mac, macOS und Apple Intelligence sind Marken von Apple Inc., Microsoft Excel ist eine Marke der Microsoft Corporation, ChatGPT eine Marke von OpenAI und Claude eine Marke von Anthropic.</p>
-  <p class="fine">Pippa nutzt offene Modelle über llama.cpp und den Open-Source-Agenten <a href="https://github.com/earendil-works/pi">Pi</a> (MIT).</p>
+  <p class="fine">Pippa nutzt das offene Modell Ornith über <a href="https://github.com/jundot/omlx">oMLX</a> und den Open-Source-Agenten <a href="https://github.com/earendil-works/pi">Pi</a> (MIT).</p>
 </footer>
 <script src="pippaMark.js"></script>
 <script>

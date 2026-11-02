@@ -8,10 +8,11 @@ import { access, stat } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve, basename, extname } from 'node:path';
+import { entryFacts, fitting, MAX_ENTRIES } from './facts.mjs';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
-/** File types a person names ("die PDF", "das Foto"): they rank matching files first and are no search word. */
+/** File types a person names ("die PDF", "das Foto"): only files of that type count, and the word is no search word. */
 export const KINDS = {
  pdf: ['pdf'],
  image: ['jpg', 'jpeg', 'png', 'heic', 'heif', 'gif', 'tif', 'tiff', 'webp', 'bmp'],
@@ -98,17 +99,17 @@ function mdfind(args) {
  return new Promise(done => execFile('/usr/bin/mdfind', args, { timeout: 30000, maxBuffer: 16 * 1024 * 1024 }, (error, stdout) => done({ stdout: String(stdout ?? ''), error })));
 }
 
-export async function search(query, year, home = process.env.CFFIXED_USER_HOME || homedir(), { kind, run = mdfind } = {}) {
+export async function search(query, year, home = process.env.CFFIXED_USER_HOME || homedir(), { kind, sort = 'newest', run = mdfind, maxChars = 5500 } = {}) {
  checkYear(year);
  const parsed = parseQuery(query, kind);
  const { words } = parsed;
  const searched = [], unavailable = [];
  try { if (!(await stat(home)).isDirectory()) throw Error('kein Ordner'); await access(home, constants.R_OK); searched.push(home); }
- catch (e) { unavailable.push({ folder: home, reason: e.code === 'ENOENT' ? 'nicht vorhanden' : 'nicht zugänglich' }); }
- if (!searched.length) return { status: 'unavailable', files: [], searched, unavailable };
+ catch (e) { unavailable.push({ folder: home, reason: e.code === 'ENOENT' ? 'missing' : 'not accessible' }); }
+ if (!searched.length) return { status: 'unavailable', query, total: 0, files: [], unavailable };
  // Folders macOS guards separately: say when Pippa may not look inside.
  for (const name of ['Documents', 'Desktop', 'Downloads']) {
-  try { await access(join(home, name), constants.R_OK); } catch (e) { if (e.code !== 'ENOENT') unavailable.push({ folder: join(home, name), reason: 'nicht zugänglich' }); }
+  try { await access(join(home, name), constants.R_OK); } catch (e) { if (e.code !== 'ENOENT') unavailable.push({ folder: join(home, name), reason: 'not accessible' }); }
  }
  const split = stdout => [...new Set(stdout.split('\0').filter(Boolean))].filter(p => personal(p, home));
  const failures = [];
@@ -131,29 +132,43 @@ export async function search(query, year, home = process.env.CFFIXED_USER_HOME |
   return find(folder, [...rest.map(clause), ...extra].join(' && ') || 'kMDItemFSName == "*"');
  }));
  const paths = [...new Set([...direct, ...inside.flat()])];
- const kindExt = parsed.kind ? KINDS[parsed.kind] : [];
- const files = [];
+ const kindExt = parsed.kind ? KINDS[parsed.kind] : undefined;
+ const found = [];
  for (const path of paths) {
+  // A named file type is a filter: "die PDF" means only PDFs.
+  if (kindExt && !kindExt.includes(extname(path).toLowerCase().slice(1))) continue;
   try {
    const info = await stat(path);
-   if (!info.isFile()) continue;
-   const name = basename(path).toLowerCase();
-   files.push({ name: basename(path), path, kind: kindExt.includes(extname(name).slice(1)) ? 1 : 0, named: words.filter(w => named(name, w)).length, time: info.mtimeMs });
-  } catch { unavailable.push({ folder: path, reason: 'Treffer nicht mehr zugänglich' }); }
+   if (info.isFile()) found.push({ path, info });
+  } catch { unavailable.push({ folder: path, reason: 'no longer accessible' }); }
  }
- // Named type first, then the more words in the name, then the newest.
- files.sort((a, b) => b.kind - a.kind || b.named - a.named || b.time - a.time || a.path.localeCompare(b.path));
+ found.sort(sort === 'name'
+  ? (a, b) => basename(a.path).localeCompare(basename(b.path)) || a.path.localeCompare(b.path)
+  : (a, b) => b.info.mtimeMs - a.info.mtimeMs || a.path.localeCompare(b.path));
+ const newest = found.reduce((best, item) => !best || item.info.mtimeMs > best.info.mtimeMs ? item : best, undefined);
+ const files = [];
+ for (const item of found.slice(0, MAX_ENTRIES)) {
+  const entry = await entryFacts(item.path, item.info);
+  if (item === newest) entry.newest = true;
+  files.push(entry);
+ }
  const error = failures[0];
- return { status: error ? 'failed' : 'ok', query, year, ...(parsed.kind ? { kind: parsed.kind } : {}),
-  files: files.slice(0, 200).map(({ name, path }) => ({ name, path })), total: files.length, truncated: files.length > 200, searched, unavailable,
-  ...(error ? { error: error.killed ? 'Die Suche wurde nach 30 Sekunden angehalten; vorhandene Funde stehen oben.' : 'Die Dateisuche konnte nicht vollständig ausgeführt werden; vorhandene Funde stehen oben.' } : {}),
-  note: 'Sucht Inhalt, Dateinamen und Ordnernamen im Benutzerordner und in iCloud Drive. Nicht geladene Cloud-Dateien, nicht erfasste Dateien und Scans ohne erkannten Text können fehlen.' };
+ return fitting(count => ({
+  status: error ? 'failed' : 'ok', query, ...(year ? { year } : {}), ...(parsed.kind ? { kind: parsed.kind } : {}),
+  total: found.length, ...(newest ? { newest_file: newest.path } : {}),
+  sorted: sort === 'name' ? 'by name' : 'newest first',
+  files: files.slice(0, count),
+  ...(found.length > count ? { left_out: found.length - count } : {}),
+  ...(unavailable.length ? { unavailable: unavailable.slice(0, 5) } : {}),
+  ...(error ? { error: error.killed ? 'The search stopped after 30 seconds; the matches so far are listed.' : 'The search did not finish; the matches so far are listed.' } : {}),
+  note: 'Searched content, file names and folder names in the home folder and iCloud Drive. Cloud files not downloaded, files Spotlight has not indexed and scans without recognized text can be missing.',
+ }), files.length, maxChars);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
  try {
-  const { values } = parseArgs({ options: { query: { type: 'string' }, year: { type: 'string' }, kind: { type: 'string' } } });
-  const result = await search(values.query ?? '', values.year, undefined, { kind: values.kind });
+  const { values } = parseArgs({ options: { query: { type: 'string' }, year: { type: 'string' }, kind: { type: 'string' }, sort: { type: 'string' } } });
+  const result = await search(values.query ?? '', values.year, undefined, { kind: values.kind, sort: values.sort });
   console.log(JSON.stringify(result));
   if (result.status !== 'ok') process.exitCode = 1;
  } catch (e) { console.log(JSON.stringify({ status: 'failed', error: e.message, files: [] })); process.exitCode = 1; }

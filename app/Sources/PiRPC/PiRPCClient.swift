@@ -120,7 +120,7 @@ public actor PiRPCClient {
     private var nextID = 0
     /// How many user messages have arrived in the current run: the first is the prompt itself, each further one delivered later.
     private var userMessagesInRun = 0
-    /// A summary runs between answers (pippa-context.ts compacts while the person reads). Pi refuses a prompt meanwhile.
+    /// Pi compacts a long session between answers. Pi refuses a prompt meanwhile.
     private var compacting = false
     private var nativeReadinessAttempt: UUID?
 
@@ -381,9 +381,8 @@ public actor PiRPCClient {
                                           error: message["errorMessage"] as? String))
         case "tool_execution_start":
             let name = record["toolName"] as? String ?? ""
-            // save_skill's receipt takes the name from its arguments, and in sorted JSON it follows the long steps.
             events?.yield(.toolStarted(id: record["toolCallId"] as? String ?? "", name: name,
-                                       arguments: Self.json(record["args"], valueLimit: name == "save_skill" ? 8_000 : Self.argumentValueLimit)))
+                                       arguments: Self.json(record["args"], valueLimit: Self.argumentValueLimit)))
         case "tool_execution_end":
             let payload = record["result"] as? [String: Any]
             let flag = record["isError"] as? NSNumber
@@ -395,14 +394,16 @@ public actor PiRPCClient {
             // Pi's own `read` in full (up to 200,000 characters; Pi itself returns at most 50 KB per call): the
             // source check checks against exactly what Pi read (PiReadLedger). Everything else only the beginning.
             // Searches and listings: enough to count result lines for the everyday step summary ("3 matches").
-            let limit = name == "read" ? Self.readResultLimit : Self.listingTools.contains(name) ? Self.listingResultLimit : Self.resultLimit
+            // Pippa's own readers and fetched pages likewise: the answer's dates are checked against them (DateEvidence).
+            let whole = name == "read" || name == "fetch_content" || name.hasPrefix("mcp__pippa__")
+            let limit = whole ? Self.readResultLimit : Self.listingTools.contains(name) ? Self.listingResultLimit : Self.resultLimit
             events?.yield(.toolEnded(id: record["toolCallId"] as? String ?? "", name: name,
                                      isError: isError, result: String(result.prefix(limit)),
                                      outcome: PiTurnReceipt.classify(tool: name, isError: isError, result: validResult ? payload : nil),
                                      fileAccessFailure: PiFileAccessFailure.decode(tool: name, isError: isError, result: validResult ? payload : nil)))
         case "entry_appended":
             if let entry = record["entry"] as? [String: Any], entry["type"] as? String == "custom",
-               let kind = entry["customType"] as? String, ["pippa-loop-stop", "pippa-search-result", "pippa-listed-files", "pippa-change", PiNativeReadiness.command, PiActionPolicy.command].contains(kind), let data = entry["data"],
+               let kind = entry["customType"] as? String, ["pippa-loop-stop", "pippa-search-result", "pippa-listed-files", "pippa-change", PiNativeReadiness.command].contains(kind), let data = entry["data"],
                let json = try? JSONSerialization.data(withJSONObject: data) {
                 events?.yield(.notice(String(decoding: json, as: UTF8.self), kind: kind))
             }

@@ -16,6 +16,22 @@ enum PippaMCPService {
 
     /// What Pippa's readers read in this app run, in order; PiRPCChat collects it per answer.
     nonisolated static let readNotes = Notes<PippaMCPReadNote>()
+    /// What Pippa's writers did (calendar, reminders, mail drafts, prepared files), for the receipt under the answer.
+    nonisolated static let writeNotes = Notes<PippaMCPWriteReceipt>()
+
+    /// Binds the MCP tools to one answer: writes outside an answer are refused (`requireActiveWriteTurn`).
+    static func begin(_ turn: PippaMCPTurn) { currentHost.turns.begin(turn) }
+    static func end(_ turn: PippaMCPTurn) { currentHost.turns.end(turn); turn.cancelWrites() }
+
+    /// Photos and PDFs into one PDF without the model: the same tool Pi calls, started by a button.
+    static func makePDF(_ files: [URL]) async -> (card: ResultCard?, text: String, failed: Bool) {
+        let turn = PippaMCPTurn()
+        begin(turn)
+        defer { end(turn) }
+        let result = await PippaMCPFilePreparation(host: currentHost, turn: turn, scope: turn.writes).call(["paths": files.map(\.path)])
+        let note = PippaMCPFilePreparation.readNote(for: result, turnID: turn.id)
+        return (note.card, note.line, result.isError)
+    }
 
     final class Notes<Note: Sendable>: @unchecked Sendable {
         private let lock = NSLock()
@@ -29,7 +45,7 @@ enum PippaMCPService {
     /// Only entry point from `PiRPCChat`: starts the server if needed; address, key and extension for
     /// `PippaPiLaunch.configuration(…, mcp:)`, which turns them into `addMCP`. Failure stops Pi admission before any user prompt.
     static func endpoint(extensions: URL) async throws -> (endpoint: PippaPiLaunch.MCPEndpoint, extension: URL) {
-        let file = DevEnvironment.value("PIPPA_PI_MCP") ?? extensions.appendingPathComponent("pippa-mcp.ts").path
+        let file = ProcessInfo.processInfo.environment["PIPPA_PI_MCP"] ?? extensions.appendingPathComponent("pippa-mcp.ts").path
         try Task.checkCancellation()
         guard FileManager.default.fileExists(atPath: file) else { throw EndpointFailure.extensionMissing }
         let running = try await started()
@@ -52,49 +68,29 @@ enum PippaMCPService {
         alert.informativeText = sentence + "\n\n" + T("Your Mac will ask you in a moment.", table: "App")
         alert.addButton(withTitle: T("Allow…", table: "Settings"))
         alert.addButton(withTitle: T("Later", table: "Settings"))
-        if let answer = explainForSnapshot { return answer(alert, sentence) }
         return alert.runModal() == .alertFirstButtonReturn
     }
 
-    /// Recordings and checks only: answers in the person's place (sentence is recorded). `nil`: the person answers.
-    static var explainForSnapshot: ((NSAlert, String) -> Bool)?
 
     /// The server's integrations (with PIPPA_DEMO=1 a substitute appointment lives only in this substitute's memory).
     private static var host: PippaMCPHost?
 
     private static var currentHost: PippaMCPHost {
         if let host { return host }
-        var fresh: PippaMCPHost = DevEnvironment.value("PIPPA_DEMO") == "1" ? .demo() : .system()
+        var fresh: PippaMCPHost = ProcessInfo.processInfo.environment["PIPPA_DEMO"] == "1" ? .demo() : .system()
         fresh.onRead = { note in readNotes.append(note) }
-        fresh.onWrite = { receipt in
-            guard receipt.action == "create", receipt.operationID != nil else { return }
-            Task { @MainActor in
-                AppModel.shared.tray.refreshSavedPreparations()
-                AppModel.shared.refreshJobs()
-            }
-        }
+        fresh.onWrite = { receipt in writeNotes.append(receipt) }
         fresh.requireActiveWriteTurn = true
         fresh.explainAccess = { subject, sentence in await explain(subject, sentence) }
         host = fresh
         return fresh
     }
 
-    /// "Als Entwurf in Mail" creates the draft the same way as Pi's `mail_draft` (same rights,
-    /// same states, same receipt), as a reply to exactly the offer's mail (Message-ID), never to the
-    /// selection at click time. Never send.
-    static func saveDraft(_ offer: MailDraftOffer) async -> (item: ActionReceipt.Item, missing: Bool) {
-        await MailDraftOfferRule.save(offer, with: PippaMCPWriteTools(host: currentHost))
-    }
 
-    /// The app in front, read by Pippa itself before Pi answers (`FrontQuestion`): same permission steps and receipt
-    /// as Pi's `front_read`. The chip must be staged (`FrontAppStage`).
-    static func readFront() async -> PippaMCPToolResult {
-        await PippaMCPTools(host: currentHost).readFront()
-    }
 
     /// Bring mail to the front ("Entwurf öffnen"). With PIPPA_DEMO=1 nothing (no real apps).
     static func showMail() async {
-        guard DevEnvironment.value("PIPPA_DEMO") != "1",
+        guard ProcessInfo.processInfo.environment["PIPPA_DEMO"] != "1",
               let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: Integration.mail.bundleIdentifier) else { return }
         let config = NSWorkspace.OpenConfiguration()
         config.activates = true

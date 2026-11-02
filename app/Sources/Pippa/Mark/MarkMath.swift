@@ -5,15 +5,6 @@ import Foundation
 
 enum MarkState: String, Sendable, CaseIterable {
     case ruht, arbeitet, offen, fehler
-
-    var spoken: String {
-        switch self {
-        case .ruht: T("ready", table: "App")
-        case .arbeitet: T("working", table: "App")
-        case .offen: T("needs you", table: "App")
-        case .fehler: T("something didn’t work", table: "App")
-        }
-    }
 }
 
 enum MarkConst {

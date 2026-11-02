@@ -1,8 +1,8 @@
 import Darwin
 import Foundation
 
-/// The one lock/PID file for the llama-server of `pippa-local` (`<Support>/llama-server-pi.lock`). The app
-/// (`LlamaServer` with `lockFile`) and Pippa's terminal extension (runtime/pippa-local-server/common.mjs) read and
+/// The one lock/PID file for the oMLX server of `pippa-local` (`<Support>/local-server.lock`). The app
+/// (`OMLXServer`) and Pippa's terminal extension (runtime/pippa-local-server/common.mjs) read and
 /// write the same format, so two servers never run:
 ///
 ///     {"owner":"app"|"pi","holder":<pid of the app or the watcher>,"pid":<pid of the server or null>,"port":…,"startedAt":"…"}
@@ -20,7 +20,7 @@ public struct PiServerLock: Sendable, Equatable {
         self.owner = owner; self.holder = holder; self.pid = pid; self.port = port; self.startedAt = startedAt
     }
 
-    public static let fileName = "llama-server-pi.lock"
+    public static let fileName = "local-server.lock"
     public static func url(support: URL) -> URL { support.appendingPathComponent(fileName) }
 
     public var isLive: Bool { pid.map(Self.isAlive) ?? Self.isAlive(holder) }

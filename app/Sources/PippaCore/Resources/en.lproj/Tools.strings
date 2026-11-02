@@ -7,16 +7,6 @@
   Convention: docs/development.md, section "Localization".
 */
 
-"Make one PDF" = "Make one PDF";
-"Make smaller" = "Make smaller";
-"As PDF" = "As PDF";
-"As JPG" = "As JPG";
-"As PNG" = "As PNG";
-"Making one PDF" = "Making one PDF";
-"Making it smaller" = "Making it smaller";
-"Making a PDF" = "Making a PDF";
-"Making a JPG" = "Making a JPG";
-"Making a PNG" = "Making a PNG";
 "This PDF is locked. Type the password and I’ll continue." = "This PDF is locked. Type the password and I’ll continue.";
 "That password didn’t open it. Please try again." = "That password didn’t open it. Please try again.";
 "There’s nothing here I can use for this." = "There’s nothing here I can use for this.";
@@ -27,79 +17,8 @@
 "I skipped %@. %@" = "I skipped %@. %@";
 "I skipped %@." = "I skipped %@.";
 "%lld images as PDF" = "%lld images as PDF";
-"%lld images as JPG" = "%lld images as JPG";
-"%lld images as PNG" = "%lld images as PNG";
 "%lld files made smaller" = "%lld files made smaller";
 "I can only turn images and PDFs into a PDF." = "I can only turn images and PDFs into a PDF.";
 "I can only make images and PDFs smaller." = "I can only make images and PDFs smaller.";
-"I can only convert images." = "I can only convert images.";
-"Invoices as a Spreadsheet" = "Invoices as a Spreadsheet";
-"Reading invoices" = "Reading invoices";
-"Date" = "Date";
-"Sender" = "Sender";
-"Amount" = "Amount";
-"Currency" = "Currency";
-"File" = "File";
-"Line in the invoice" = "Line in the invoice";
-"Total" = "Total";
-"Invoices" = "Invoices";
-"I couldn’t read any text in it." = "I couldn’t read any text in it.";
-"I found no amount in it." = "I found no amount in it.";
-"1 invoice, %@" = "1 invoice, %@";
-"%lld invoices, together %@" = "%lld invoices, together %@";
-"Please check the yellow cells." = "Please check the yellow cells.";
-"[Your name]" = "[Your name]";
-"[Street and number]" = "[Street and number]";
-"[Postcode and town]" = "[Postcode and town]";
-"[Recipient]" = "[Recipient]";
-"Page %lld of %lld" = "Page %lld of %lld";
-"I can only read invoices as PDFs, photos or text." = "I can only read invoices as PDFs, photos or text.";
 
-"Extract Text" = "Extract Text";
-
-"Remove Location" = "Remove Location";
-
-"Extracting text" = "Extracting text";
-
-"Removing location" = "Removing location";
-
-"%lld text files extracted" = "%lld text files extracted";
-
-"%lld photos without location" = "%lld photos without location";
-
-"I can only remove location from photos." = "I can only remove location from photos.";
-
-"New PNG copies without location or camera metadata. The originals are unchanged." = "New PNG copies without location or camera metadata. The originals are unchanged.";
-
-"Download this file to the Mac first." = "Download this file to the Mac first.";
-
-"This file exceeds the 200 MB limit. Nothing was exported." = "This file exceeds the 200 MB limit. Nothing was exported.";
-
-"This image has multiple frames or pages. Export a single image first." = "This image has multiple frames or pages. Export a single image first.";
-
-"This image exceeds the 60 megapixel limit or has invalid dimensions." = "This image exceeds the 60 megapixel limit or has invalid dimensions.";
-
-"I can only extract text from PDFs and photos." = "I can only extract text from PDFs and photos.";
-
-"Source: %@" = "Source: %@";
-
-"The extracted text exceeds 2 MB. Nothing was exported; no text was cut off." = "The extracted text exceeds 2 MB. Nothing was exported; no text was cut off.";
-
-"Recognized from image (OCR; please check)" = "Recognized from image (OCR; please check)";
-
-"Embedded PDF text" = "Embedded PDF text";
-
-"Page %lld — %@" = "Page %lld — %@";
-
-"No readable text was recognized on this page." = "No readable text was recognized on this page.";
-
-"This PDF does not allow text copying." = "This PDF does not allow text copying.";
-
-"Text extraction supports 1–200 pages. Nothing was exported." = "Text extraction supports 1–200 pages. Nothing was exported.";
-
-"Each page names its source: PDF text or OCR. Check recognized text against the original; layout may differ." = "Each page names its source: PDF text or OCR. Check recognized text against the original; layout may differ.";
-
-"Text recognition took too long. Nothing was exported." = "Text recognition took too long. Nothing was exported.";
-
-"No readable text was found. No text file was created." = "No readable text was found. No text file was created.";
 "The PDF is ready. I couldn’t add searchable text to every image." = "The PDF is ready. I couldn’t add searchable text to every image.";

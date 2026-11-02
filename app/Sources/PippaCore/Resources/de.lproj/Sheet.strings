@@ -6,9 +6,6 @@
 
 "Excel" = "Excel";
 "First open your table in Excel and select the cells. Then try again." = "Öffne zuerst deine Tabelle in Excel und wähle die Zellen aus. Dann versuch es noch einmal.";
-"Looking at your table …" = "Ich schaue mir deine Tabelle an …";
-"Looking at your table: %@" = "Ich schaue mir deine Tabelle an: %@";
-"Looking at your table: %@, column %@" = "Ich schaue mir deine Tabelle an: %@, Spalte %@";
 "I didn’t find a total here." = "Ich habe hier keine Summe gefunden.";
 "The total adds up." = "Die Summe stimmt.";
 "The totals add up." = "Die Summen stimmen.";
@@ -37,8 +34,4 @@
 "“%@”" = "„%@“";
 "the row with %@" = "die Zeile mit %@";
 "the column with %@" = "die Spalte mit %@";
-"In total %@ instead of %@ (%@)." = "Insgesamt %@ statt %@ (%@).";
-"%@ %@ (%@ instead of %@)" = "%@ %@ (%@ statt %@)";
-"Changed most: %@." = "Am meisten verändert: %@.";
-"Nothing changed compared with last year." = "Im Vergleich zum Vorjahr hat sich nichts verändert.";
 "Numbers" = "Numbers";

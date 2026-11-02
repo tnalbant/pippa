@@ -16,11 +16,10 @@
  *   copy (pippa-assist.ts `backUp`), so it can be undone.
  *
  * Never, not even after an OK: delete anything outside the working and temporary folders (the Trash is
- * `move_to_trash`), or write to `~/Library` (except iCloud Drive and cloud folders), dot folders such as `~/.ssh` or
+ * `move_files` with `to: "trash"`), or write to `~/Library` (except iCloud Drive and cloud folders), dot folders such as `~/.ssh` or
  * `~/.pi`, and Pippa's own folder. An approved network grant still permits network requests; these rules are not
  * a universal no-send guarantee for standard tasks. Other executors have their own policies.
  */
-import { actionPolicy } from "./pippa-policy.ts";
 import { existsSync, realpathSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
@@ -122,7 +121,7 @@ export function neededGrants(command: string): Set<Grant> {
 
 const NETWORK_FAILURE = /Could not resolve host|Couldn't connect|Failed to connect|nodename nor servname|Network is unreachable|getaddrinfo|Name or service not known|Temporary failure in name resolution|Failed to establish a new connection|URLError|unable to access '|Connection refused|No route to host/i;
 const APPS_FAILURE = /Not authorized to send Apple events|\(-1743\)|errAEEventNotPermitted|\(-600\)|\/usr\/bin\/(?:osascript|open|shortcuts|automator): (?:Operation not permitted|Permission denied)/i;
-export const APP_CONTROL_REASON = "Not run: app control is not available in Pippa’s shell. Use the applescript tool or the dedicated native tools; Mail replies remain unsent drafts. Do not bypass this with another shell command, shortcut or URL.";
+export const APP_CONTROL_REASON = "Not run: app control is not available in Pippa’s shell. Use Pippa's native tools; Mail replies remain unsent drafts. Do not bypass this with another shell command, shortcut or URL.";
 const WRITE_FAILURE = /Operation not permitted/i;
 
 /** Grants a failed command lacked, judged from its output. */
@@ -191,9 +190,9 @@ export const NO_SANDBOX_REASON = "Not run: Pippa's safe shell (sandbox-exec) is 
 export function limitsNote(grants: ReadonlySet<Grant>, work: string): string {
 	const no: string[] = [];
 	if (!grants.has("write")) no.push(`write only in ${work} and temporary folders (save results there, then move_files them where they belong; for one text file use write)`);
-	no.push("never delete outside that folder (use move_to_trash)");
+	no.push("never delete outside that folder (move_files to \"trash\" moves to the Trash)");
 	if (!grants.has("net")) no.push("no internet (use web_search and fetch_content)");
-	no.push("no app control (use the applescript tool or Pippa’s native tools)");
+	no.push("no app control (Pippa’s native tools cover Mail, Calendar, Reminders and Photos)");
 	return `Note: bash runs in Pippa's sandbox: ${no.join("; ")}. Do not retry the same command.`;
 }
 
@@ -240,7 +239,6 @@ export function shellTool(create: (cwd: string, options?: any) => any, deps: She
 	const available = deps.available ?? (() => sandboxAvailable(sandbox));
 	const env = deps.env ?? process.env;
 	const home = deps.home ?? homedir();
-	const policy = actionPolicy(env);
 	let grants = new Set<Grant>();
 
 	return {
@@ -255,7 +253,6 @@ export function shellTool(create: (cwd: string, options?: any) => any, deps: She
 					const notRun = (reason: string) => ({ content: [{ type: "text", text: reason }], isError: true,
 						details: { pippaExecution: "not_dispatched" } });
 					if (signal?.aborted) return notRun("Stopped before running the command.");
-					if (policy === "draftOnly") return notRun("This task prepares draft text only. Read local context and answer; do not run commands or change anything.");
 					if (!available()) return notRun(NO_SANDBOX_REASON);
 					const where = places(cwd, env, home);
 					const command = String(params?.command ?? "");

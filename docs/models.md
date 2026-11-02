@@ -1,94 +1,71 @@
 # Pippa's local AI
 
-Pippa has no model picker. She chooses one local AI for your Mac from its memory, tells you the download size and
-asks before downloading it. Photo and PDF jobs, Tidy Up and the morning overview work before that download.
+Pippa has no model picker. Her AI on your Mac is one model, **Ornith 1.5 9B** in MLX 4-bit
+([`ornith-ai/Ornith-1.5-9B-MLX-4bit`](https://huggingface.co/ornith-ai/Ornith-1.5-9B-MLX-4bit)), served by
+[oMLX](https://github.com/jundot/omlx). She tells you the download size and asks before downloading. With an online AI
+switched on, she works without that download.
 
-This page is for the curious. The [README](../README.md#will-it-run-on-my-mac) has the short version.
+The [README](../README.md#will-it-run-on-my-mac) has the short version.
 
-## Which Mac gets which AI
+## Which Macs
 
-| Mac memory | AI | File (quantization) | Download | Context | Thinking |
-|---|---|---|---|---|---|
-| 8 GB | Qwen3.5 4B | Q4_K_M | 2.74 GB | 16K tokens | Off |
-| 16, 18 or 24 GB | Qwen3.5 9B | Q4_K_M | 5.68 GB | 16K tokens | Medium |
-| 32 GB or more | Qwen3.6 35B-A3B (mixture of experts, about 3B active) | UD-Q3_K_XL | 16.85 GB | 32K tokens | Off |
+| Mac | Local AI | Context | Thinking |
+|---|---|---|---|
+| Apple silicon, 24 GB or more | Ornith 1.5 9B | 32K tokens | Medium |
+| Apple silicon, 16 or 18 GB | Ornith 1.5 9B | 16K tokens | Medium |
+| Less than 16 GB | None; use an online AI | | |
 
-- **Memory classes.** Pippa rounds your Mac's memory to a class: under 12 GB counts as 8 GB, under 20 GB as 16 GB,
-  under 28 GB as 24 GB, and everything above that gets the 32 GB row.
-- **Where the files come from.** The GGUF files come from Unsloth's repositories on Hugging Face
-  (`unsloth/Qwen3.5-4B-GGUF`, `unsloth/Qwen3.5-9B-GGUF`, `unsloth/Qwen3.6-35B-A3B-GGUF`). Each one is pinned to a
-  revision, a size and a SHA-256 checksum. Downloads can resume and are verified before use.
-- **License.** The Qwen models are licensed under Apache 2.0.
-- **How they run.** llama.cpp's `llama-server` runs the AI on your Mac, reachable only from your Mac. It is unloaded
-  again when idle.
-- **Download sizes** are in decimal gigabytes (2.74 GB = 2,740,937,888 bytes). Leave room for the app and your results.
+The download is about 5.4 GB: the model (5.06 GB) and a Python runtime with oMLX (0.35 GB). Sizes are decimal
+gigabytes. While answering, the model needs about 6.5 GB of memory; oMLX unloads it by itself when Pippa has been idle
+for a while.
 
-The source of truth is `ModelSelector.table` in
-[`app/Sources/PippaCore/Models.swift`](../app/Sources/PippaCore/Models.swift), with sizes and pins in
-[`catalog.json`](../app/Sources/PippaCore/Resources/catalog.json).
+## Why this model and engine
 
-## Why these choices
+- **One model.** The old table by memory meant three models to tune and test. One model that fits every supported Mac
+  is one thing to test and one thing to fix.
+- **Ornith 1.5 9B** is built on Qwen 3.5 9B, the model Pippa used before on 16 and 24 GB. In Pi it runs at 25 to
+  30 tokens per second on a 24 GB Mac and leaves the Mac usable.
+- **oMLX instead of llama.cpp.** MLX is built for Apple silicon; oMLX serves an OpenAI-compatible API, keeps its own
+  prompt cache on disk and unloads the model when idle. Pippa no longer builds or bundles an engine of her own.
 
-- **8 GB:** the 9B needs about 7 GiB of memory, more than Pippa allows herself on an 8 GB Mac (about 4.8 GiB), so
-  these Macs get the 4B.
-- **16 GB:** Qwen3.5 9B replaced K2 Horizon 7B after a side-by-side test with Pi: more tasks done, fewer invented facts,
-  faster answers and better German ([comparison](measurements/model-compare/README.md), in German).
-- **24 GB:** since 0.3.18, the same Qwen3.5 9B profile as 16 GB. The 35B it replaced needs 17.5 GiB of the Mac's
-  24 GB; with other apps open, a long request took almost three minutes with more than 8 GiB of swap in use. The 9B peaks at about
-  8 GB and had the best results in the side-by-side test
-  ([decision record](measurements/24gb-tier-9b-2026-10-31.md)). It still has to pass a check on a busy 24 GB Mac
-  before the release.
-- **32 GB and more:** Qwen3.6 35B-A3B without thinking. In Pippa's ten-task check it passed
-  six tasks, as many as Saluki 27B, the model it was compared with, at about half its median task time (34.5 s
-  versus 69.9 s; [GGUF follow-up](measurements/qwen-gguf-validation-2026-10-24/README.md)). Medium thinking passed only three, so it
-  is not the default.
+The decision and what it removed: [Local AI: oMLX and Ornith 1.5 9B](omlx-switch.md).
 
-These are small test suites, not quality guarantees. Local AI can miss details or get facts wrong; check important
-names, amounts and dates against the original. The full reasoning is in
-[Settings simplification](settings-simplification.md#the-model-is-fixed-by-hardware).
+These are small tests, not quality guarantees. Local AI can miss details or get facts wrong; check important names,
+amounts and dates against the original.
 
-## The hidden "More thorough" option
+## Where the files go
 
-Macs with 24 GB or more have a second choice, "Standard" or "More thorough", but Settings doesn't show it yet
-(`thoroughTested = false` in `Models.swift`). It stays hidden until it passes Pippa's side-by-side test with Pi.
+Everything lives in `~/Library/Application Support/Pippa`:
 
-| Option | File | Download | Context | Thinking |
-|---|---|---|---|---|
-| More thorough (hidden) | Qwen3.6 35B-A3B, UD-IQ3_S | 13.68 GB | 32K tokens | Medium |
-
-- **Designed for the 9B default.** The option dates from when the 24 GB default was the 9B (5.7 GB). Since 0.3.18 it
-  is again; on 32 GB and more, where the default is the 35B Q3, it would be the smaller download.
-- **Saved choices.** While the option is hidden, a saved "More thorough" choice counts as "Standard".
-- **For developers.** The file stays pinned, so developers can still run it with
-  `PIPPA_PI_MODEL=qwen3.6-35b-a3b-iq3`.
-
-## Using a file you already have
-
-Before downloading, Pippa looks for the exact same file in other apps' folders:
-
-| App | Folder |
+| What | Folder |
 |---|---|
-| LM Studio | `~/.lmstudio/models`, `~/.cache/lm-studio/models` |
-| Hugging Face | `~/.cache/huggingface/hub` |
-| llama.cpp | `~/Library/Caches/llama.cpp` |
-| Ollama | `~/.ollama/models/blobs` |
-| Jan | `~/Library/Application Support/Jan` |
-| GPT4All | `~/Library/Application Support/nomic.ai/GPT4All` |
+| Model files (one pinned revision, each file with size and SHA-256) | `omlx/models/ornith-1.5-9b-mlx-4bit/` |
+| oMLX settings (loopback only, fixed port, key) and its prompt cache | `omlx/settings.json`, `omlx/cache/` |
+| Python runtime with oMLX (pinned archive, SHA-256 checked) | `mlx-runtime/<version>/` |
 
-Only the identical file counts: same size, and the SHA-256 checksum is checked before use. Pippa clones it (APFS),
-hard-links it or, as a last resort, copies it into her model folder. The other app's file is left as it is. Other
-models or other quantizations of the same model don't count, so Pippa still downloads hers.
+The model comes from Hugging Face, the runtime from Pippa's GitHub releases. Downloads resume and are verified before
+use. If the same model is already on your Mac from oMLX (`~/.omlx/models`), LM Studio (`~/.lmstudio/models`) or the
+Hugging Face cache (`~/.cache/huggingface/hub`), Pippa checks each file's SHA-256 and clones it (APFS, no extra space)
+instead of downloading it. The other app's files are left as they are.
 
-Her model folder is `~/models` if that folder already exists (the shared folder Pi suggests), otherwise
-`~/Library/Application Support/Pippa/models`.
+The server listens only on 127.0.0.1. Pippa starts it when needed; `pi` in the terminal starts the same server through
+Pippa's extension when the app is not running.
 
-## Apple Intelligence
+## Changing the model
 
-Apple Intelligence is optional. On macOS 26, when it is turned on, Pippa uses Apple's on-device model for a few quick
-jobs: suggestions for a document, the first line of a letter, short text selections and sorting unclear files while
-tidying. Without it, these jobs fall back to simpler rules or to Pippa's own AI. Pippa never needs it.
+For developers:
+
+1. Put the new entry in [`catalog.json`](../app/Sources/PippaCore/Resources/catalog.json) (key, label, repo, context,
+   thinking, memory). The key is the folder name and the model id that oMLX serves and Pi asks for.
+2. Pin it: `scripts/pin-model.sh <key> <hf-repo>` writes the revision and each file's size and SHA-256.
+   `build-app.sh` refuses a model that is not pinned (`scripts/check-default-models.py`).
+3. Check the memory floor and context in `ModelSelector` ([`Models.swift`](../app/Sources/PippaCore/Models.swift)) and
+   the thinking switch in `PiModelTuning`.
+4. A new oMLX version means a new runtime archive: `scripts/build-mlx-runtime.sh`, then update
+   [`mlx-runtime.json`](../app/Sources/PippaCore/Resources/mlx-runtime.json).
 
 ## Online AI instead
 
 If you prefer, Pippa can work with an online AI: sign in with your ChatGPT subscription, or add your own OpenAI or
-Anthropic key in Settings. While it's on, your conversations and what Pippa reads for them go to that service. See [Privacy and permissions](privacy-and-permissions.md#online-ai-only-if-you-switch-it-on).
+Anthropic key in Settings. While it's on, your conversations and what Pippa reads for them go to that service. See
+[Privacy and permissions](privacy-and-permissions.md#online-ai-only-if-you-switch-it-on).

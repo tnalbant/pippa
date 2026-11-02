@@ -56,13 +56,9 @@ public struct SheetCheckResult: Sendable, Equatable {
     public var totals: [SheetTotal]
     public var findings: [SheetFinding]
     /// "This total leaves out one row.", "The totals add up.", "I didn’t find a total here."
-    public var firstLine: FirstLine
+    public var firstLine: String
 
     public var foundTotals: Bool { !totals.isEmpty }
-    /// Totals found and everything is correct.
-    public var allFine: Bool {
-        !totals.isEmpty && findings.isEmpty && totals.allSatisfy { $0.recomputed != nil && $0.value != nil }
-    }
 }
 
 public enum SheetCheck {
@@ -89,7 +85,7 @@ public enum SheetCheck {
     }
 
     /// The first line: the most important finding, otherwise "correct", otherwise "no total found". Without numbers and addresses.
-    static func firstLine(totals: [SheetTotal], findings: [SheetFinding]) -> FirstLine {
+    static func firstLine(totals: [SheetTotal], findings: [SheetFinding]) -> String {
         let text: String
         if totals.isEmpty {
             text = L("I didn’t find a total here.", table: "Sheet")
@@ -118,7 +114,7 @@ public enum SheetCheck {
         } else {
             text = totals.count == 1 ? L("The total adds up.", table: "Sheet") : L("The totals add up.", table: "Sheet")
         }
-        return FirstLine(text: text, pleaseCheck: findings.contains { $0.kind == .unverified }, usedSystemModel: false)
+        return text
     }
 
     /// Number for sentences: without decimals if whole, otherwise two.
