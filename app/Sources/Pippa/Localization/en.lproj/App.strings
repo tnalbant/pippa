@@ -127,3 +127,4 @@
 "Working…" = "Working…";
 "%lld s" = "%lld s";
 "The AI on this Mac didn’t start. Try again in a moment." = "The AI on this Mac didn’t start. Try again in a moment.";
+"Not in what I read: %@. I worked this out myself, so please check it." = "Not in what I read: %@. I worked this out myself, so please check it.";

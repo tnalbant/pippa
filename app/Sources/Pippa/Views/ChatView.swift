@@ -237,6 +237,7 @@ private struct MessageView: View {
             if live && !message.text.isEmpty && message.steps.allSatisfy(\.done) {
                 LiveLine(started: chat.answerStarted, label: T("Working…", table: "App"))
             }
+            if !live, let dates = message.unsupportedDates, !dates.isEmpty { DateNote(dates: dates) }
             if !message.cards.isEmpty { ResultCardsView(cards: message.cards) }
             ForEach(Array(message.receipts.enumerated()), id: \.offset) { _, receipt in ReceiptRow(receipt: receipt) }
             if let error = message.error {
@@ -392,6 +393,23 @@ private struct CopyButton: View {
 }
 
 /// What a writing tool did: added to Calendar, a reminder, a Mail draft.
+/// Dates in the answer that nothing Pippa read shows (`DateEvidence`): the model worked them out itself.
+private struct DateNote: View {
+    var dates: [String]
+
+    var body: some View {
+        Label {
+            Text(T("Not in what I read: %@. I worked this out myself, so please check it.", table: "App",
+                   dates.formatted(.list(type: .and))))
+        } icon: {
+            Image(systemName: "calendar.badge.exclamationmark").foregroundStyle(Theme.need)
+        }
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: 520, alignment: .leading)
+    }
+}
+
 private struct ReceiptRow: View {
     var receipt: PippaMCPWriteReceipt
     private var done: Bool { receipt.outcome == "done" }

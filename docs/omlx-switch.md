@@ -40,8 +40,10 @@ tuning flags.
 - [x] Remove llama code, bundle steps, checks, scripts; docs
 - [x] Build, verify; setup adopts Ornith from `~/.omlx` by APFS clone; ETF question answered from `ETF-Portfolio.md` (270 s, 13.7 tok/s while a second oMLX held the same model)
 - [x] Acceptance runs with Ornith alone in memory (2026-11-01, headless `--ask`, see below): 2 of 5 pass
-- [ ] Letter deadline: Ornith computes a date from "four weeks after receipt" despite the persona rule (three runs,
-  13, 17 and 19 November); needs a structural fix, not more prompt
+- [x] Letter deadline: Ornith computes a date from "four weeks after receipt" despite the persona rule (three runs,
+  13, 17 and 19 November). Fixed structurally: `DateEvidence` names every date in the answer that nothing the turn
+  read shows, under the answer ("Not in what I read: … please check it"). Rerun: one answer without a date, one with
+  19 November, which the note named
 - [ ] Mail totals: too slow (no answer after 600 s; prompt grew to 23K tokens reading two mail PDFs)
 - [ ] Calendar: `calendar_read` hangs in the headless run of the re-signed build (likely an unanswered permission prompt)
 - [ ] Publish the runtime archive as a release asset (needs the person's go: it is a push)

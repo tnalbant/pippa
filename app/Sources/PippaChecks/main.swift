@@ -399,6 +399,7 @@ check("System errors in our own words, never the system's wording") {
                                       userInfo: [NSUnderlyingErrorKey: NSError(domain: NSPOSIXErrorDomain, code: Int(ENOSPC))])) == noSpace
 }
 
+runDateEvidenceChecks()
 runErrorMessageChecks()
 runLocalizationChecks()
 runSkillChecks()

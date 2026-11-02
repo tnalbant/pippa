@@ -22,6 +22,8 @@ struct ChatMessage: Codable, Identifiable, Equatable {
     var receipts: [PippaMCPWriteReceipt] = []
     /// The model's reasoning before it answered (local models think first); shown folded.
     var thinking: String?
+    /// Dates in the answer that nothing Pippa read shows (`DateEvidence`); named under the answer.
+    var unsupportedDates: [String]?
     var error: String?
 }
 
@@ -49,6 +51,8 @@ final class ChatModel: ObservableObject {
     @Published var unseen: Unseen?
     enum Unseen { case answer, failed }
     @Published private(set) var isAnswering = false
+    /// What the current answer read, for its dates.
+    private var evidence = DateEvidence()
     /// When the running answer started, for the live "Thinking … 12 s".
     @Published private(set) var answerStarted: Date?
     private var answer: Task<Void, Never>?
@@ -100,6 +104,8 @@ final class ChatModel: ObservableObject {
         isAnswering = true
         answerStarted = Date()
         _ = PippaMCPService.readNotes.take(); _ = PippaMCPService.writeNotes.take()
+        evidence = DateEvidence()
+        evidence.add(prompt: prompt)
         answer = Task {
             do {
                 try await PiSession.shared.ask(prompt, conversation: id) { [weak self] event in self?.apply(event, in: id) }
@@ -112,6 +118,8 @@ final class ChatModel: ObservableObject {
             updateLast(in: id) { message in
                 message.cards = cards
                 message.receipts = receipts
+                let dates = evidence.unsupported(in: message.text)
+                message.unsupportedDates = dates.isEmpty ? nil : dates
                 for index in message.steps.indices where !message.steps[index].done { message.steps[index].done = true }
             }
             isAnswering = false
@@ -179,6 +187,7 @@ final class ChatModel: ObservableObject {
     }
 
     private func apply(_ event: PiRPCEvent, in id: String) {
+        evidence.observe(event)
         switch event {
         case .textDelta(let delta):
             updateLast(in: id) { $0.text += delta }

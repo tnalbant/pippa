@@ -102,10 +102,18 @@ enum Snapshots {
             answer.steps = [ChatStep(id: "1", label: "Reading Calendar", done: true, failed: true)]
             answer.error = "Pippa darf deinen Kalender nicht lesen. Erlaube es in den Systemeinstellungen unter Datenschutz & Sicherheit."
         }
-        let first = Conversation(id: "c1", title: "Wo ist meine aktuelle ETF-Übersicht?", updated: now, messages: [
-            ChatMessage(role: .user, text: "Wo ist meine aktuelle ETF-Übersicht in brain und was steht drin?"),
-            answer,
-        ])
+        var letter = ChatMessage(role: .assistant, text: """
+        Die Nachzahlung von **184,37 €** musst du **bis zum 15. November 2026** überweisen.
+
+        Einwände gehen innerhalb von vier Wochen nach Zugang, also bis **19. November 2026**.
+        """)
+        letter.steps = [ChatStep(id: "4", label: "Reading Brief-Stadtwerke.pdf", done: true)]
+        letter.unsupportedDates = ["19. November 2026"]
+        var messages = [ChatMessage(role: .user, text: "Wo ist meine aktuelle ETF-Übersicht in brain und was steht drin?"), answer]
+        if !answering && !failed {
+            messages += [ChatMessage(role: .user, text: "Bis wann muss ich hier etwas tun?", files: ["/Users/me/Downloads/Brief-Stadtwerke.pdf"]), letter]
+        }
+        let first = Conversation(id: "c1", title: "Wo ist meine aktuelle ETF-Übersicht?", updated: now, messages: messages)
         return [
             first,
             Conversation(id: "c2", title: "Frist im Brief vom Finanzamt", updated: now.addingTimeInterval(-3600 * 5), messages: []),

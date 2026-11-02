@@ -394,7 +394,9 @@ public actor PiRPCClient {
             // Pi's own `read` in full (up to 200,000 characters; Pi itself returns at most 50 KB per call): the
             // source check checks against exactly what Pi read (PiReadLedger). Everything else only the beginning.
             // Searches and listings: enough to count result lines for the everyday step summary ("3 matches").
-            let limit = name == "read" ? Self.readResultLimit : Self.listingTools.contains(name) ? Self.listingResultLimit : Self.resultLimit
+            // Pippa's own readers and fetched pages likewise: the answer's dates are checked against them (DateEvidence).
+            let whole = name == "read" || name == "fetch_content" || name.hasPrefix("mcp__pippa__")
+            let limit = whole ? Self.readResultLimit : Self.listingTools.contains(name) ? Self.listingResultLimit : Self.resultLimit
             events?.yield(.toolEnded(id: record["toolCallId"] as? String ?? "", name: name,
                                      isError: isError, result: String(result.prefix(limit)),
                                      outcome: PiTurnReceipt.classify(tool: name, isError: isError, result: validResult ? payload : nil),

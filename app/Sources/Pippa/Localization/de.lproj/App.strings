@@ -127,3 +127,4 @@
 "Working…" = "Arbeitet …";
 "%lld s" = "%lld s";
 "The AI on this Mac didn’t start. Try again in a moment." = "Die KI auf diesem Mac ist nicht gestartet. Versuch es gleich noch einmal.";
+"Not in what I read: %@. I worked this out myself, so please check it." = "Steht nicht in dem, was ich gelesen habe: %@. Das habe ich selbst ausgerechnet – bitte prüf es.";

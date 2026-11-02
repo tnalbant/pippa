@@ -28,9 +28,12 @@ enum HeadlessAsk {
             FileHandle.standardOutput.write(Data((String(format: "%6.1fs ", Date().timeIntervalSince(started)) + line + "\n").utf8))
         }
         var answer = ""
+        var evidence = DateEvidence()
+        evidence.add(prompt: question)
         _ = PippaMCPService.readNotes.take(); _ = PippaMCPService.writeNotes.take()
         do {
             try await PiSession.shared.ask(question, conversation: "ask-" + UUID().uuidString.lowercased()) { event in
+                evidence.observe(event)
                 switch event {
                 case .textDelta(let delta): answer += delta
                 case .toolStarted(_, let name, let arguments): say("→ \(name) \(arguments.prefix(300))")
@@ -47,6 +50,8 @@ enum HeadlessAsk {
         for card in PippaMCPService.readNotes.take().compactMap(\.card) { say("[card] \(String(describing: card).prefix(200))") }
         for receipt in PippaMCPService.writeNotes.take() { say("[done] \(receipt.action) \(receipt.outcome) \(receipt.name)") }
         say("ANSWER (\(Int(Date().timeIntervalSince(started))) s):\n\(answer)")
+        let dates = evidence.unsupported(in: answer)
+        if !dates.isEmpty { say("[not in the sources] \(dates.joined(separator: ", "))") }
         await PiSession.shared.shutdown()
         if let server = PiSession.shared.ownedServer { await server.stop() }
         return 0
