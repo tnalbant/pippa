@@ -72,6 +72,15 @@ final class PiSession {
         try? await client?.abort()
     }
 
+    /// How full the current conversation's context is (Pi's `get_session_stats`), for the context panel.
+    func contextUsage() async -> ContextUsage? {
+        guard let client, let data = try? await client.command(["type": "get_session_stats"]),
+              let stats = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let usage = stats["contextUsage"] as? [String: Any],
+              let tokens = usage["tokens"] as? Int, let window = usage["contextWindow"] as? Int else { return nil }
+        return ContextUsage(tokens: tokens, window: window)
+    }
+
     /// Before a conversation is deleted: end Pi if it holds that session, then move the session file to the Trash.
     func forget(_ conversation: String) async {
         if sessionID == conversation { await client?.shutdown(); client = nil; sessionID = nil }

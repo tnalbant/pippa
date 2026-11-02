@@ -31,7 +31,7 @@ enum Snapshots {
             for dark in [false, true] {
                 let view = ChatView(chat: chat, setup: setup)
                 let file = folder.appendingPathComponent("\(name)-\(dark ? "dark" : "light").png")
-                await render(view, size: NSSize(width: 1040, height: 720), dark: dark, to: file)
+                await render(view, size: NSSize(width: 1240, height: 760), dark: dark, to: file)
             }
             chat.attachments = []
         }
@@ -93,7 +93,7 @@ enum Snapshots {
         if answering {
             answer.text = ""
             answer.receipts = []
-            answer.steps = [ChatStep(id: "1", label: "Searching files for “ETF”", done: true), ChatStep(id: "2", label: "Reading ETF-Portfolio.md", done: true)]
+            answer.steps = [ChatStep(id: "1", label: "Searching files for “ETF”", done: true), ChatStep(id: "2", label: "Reading ETF-Portfolio.md", done: false)]
             answer.thinking = "Die Person fragt nach der aktuellen ETF-Übersicht. Es gibt drei Dateien; ETF-Portfolio.md ist die neueste (updated 2026-11-01). Ich lese sie und nenne die Aufteilung." 
         }
         if failed {
@@ -109,6 +109,15 @@ enum Snapshots {
         """)
         letter.steps = [ChatStep(id: "4", label: "Reading Brief-Stadtwerke.pdf", done: true)]
         letter.unsupportedDates = ["19. November 2026"]
+        letter.checkedDates = ["15. November 2026"]
+        letter.sources = [ChatSource(kind: .file, name: "Brief-Stadtwerke.pdf", location: "/Users/me/Downloads/Brief-Stadtwerke.pdf", detail: "Ganze Seite")]
+        letter.receipts = [PippaMCPWriteReceipt(action: "reminderAdd", outcome: "done", name: "Nachzahlung überweisen · Fr., 14. Nov.")]
+        letter.context = ContextUsage(tokens: 12_431, window: 32_768)
+        if !answering && !failed {
+            answer.sources = [ChatSource(kind: .file, name: "ETF-Portfolio.md", location: "/Users/me/brain/ETF-Portfolio.md", detail: nil),
+                              ChatSource(kind: .file, name: "ETF-Ideen.md", location: "/Users/me/brain/ETF-Ideen.md", detail: nil)]
+            answer.checkedDates = ["1. November 2026"]
+        }
         var messages = [ChatMessage(role: .user, text: "Wo ist meine aktuelle ETF-Übersicht in brain und was steht drin?"), answer]
         if !answering && !failed {
             messages += [ChatMessage(role: .user, text: "Bis wann muss ich hier etwas tun?", files: ["/Users/me/Downloads/Brief-Stadtwerke.pdf"]), letter]
@@ -116,10 +125,20 @@ enum Snapshots {
         let first = Conversation(id: "c1", title: "Wo ist meine aktuelle ETF-Übersicht?", updated: now, messages: messages)
         return [
             first,
-            Conversation(id: "c2", title: "Frist im Brief vom Finanzamt", updated: now.addingTimeInterval(-3600 * 5), messages: []),
-            Conversation(id: "c3", title: "Fotos vom Umzug als PDF", updated: now.addingTimeInterval(-3600 * 30), messages: []),
-            Conversation(id: "c4", title: "Termine nächste Woche", updated: now.addingTimeInterval(-3600 * 24 * 4), messages: []),
-            Conversation(id: "c5", title: "Kündigungsfrist Mietvertrag", updated: now.addingTimeInterval(-3600 * 24 * 20), messages: []),
+            Conversation(id: "c2", title: "Frist im Brief vom Finanzamt", updated: now.addingTimeInterval(-3600 * 5), messages: [
+                ChatMessage(role: .user, text: "Bis wann?", files: ["/Users/me/Downloads/Finanzamt.pdf"]),
+                ChatMessage(role: .assistant, text: "Einspruch bis **16. Dezember 2026**, steht auf Seite 2."),
+            ]),
+            Conversation(id: "c3", title: "Fotos vom Umzug als PDF", updated: now.addingTimeInterval(-3600 * 30), messages: [
+                ChatMessage(role: .user, text: "", files: ["/Users/me/Desktop/IMG_2041.jpeg"]),
+                ChatMessage(role: .assistant, text: "Fertig: ein PDF mit 12 Seiten, 3,1 MB."),
+            ]),
+            Conversation(id: "c4", title: "Termine nächste Woche", updated: now.addingTimeInterval(-3600 * 24 * 4), messages: [
+                ChatMessage(role: .assistant, text: "Drei Termine: Montag Zahnarzt, Mittwoch Elternabend, Freitag Werkstatt."),
+            ]),
+            Conversation(id: "c5", title: "Kündigungsfrist Mietvertrag", updated: now.addingTimeInterval(-3600 * 24 * 20), messages: [
+                ChatMessage(role: .assistant, text: "Drei Monate zum Monatsende, § 4 Absatz 2."),
+            ], pinned: true),
         ]
     }
 }

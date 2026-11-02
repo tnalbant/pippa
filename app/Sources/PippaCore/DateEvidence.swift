@@ -48,6 +48,13 @@ public struct DateEvidence: Sendable {
         }
     }
 
+    /// The answer's dates that a source shows, as written, each day once.
+    public func supported(in answer: String) -> [String] {
+        guard hasSources else { return [] }
+        var seen = Set<DayDate>()
+        return Self.dates(in: answer).compactMap { shown.contains($0.value) && seen.insert($0.value).inserted ? $0.text : nil }
+    }
+
     static func withinAWeek(_ date: DayDate, of today: DayDate) -> Bool {
         let days = Calendar(identifier: .gregorian).dateComponents([.day], from: today.localNoon, to: date.localNoon).day ?? .max
         return abs(days) <= 7

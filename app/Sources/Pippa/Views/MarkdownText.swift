@@ -4,6 +4,8 @@ import SwiftUI
 /// these; inline-only parsing showed "## Überblick" and "- item" literally.
 struct MarkdownText: View {
     var text: String
+    /// Marked in the text: dates the model worked out itself (`DateEvidence`).
+    var highlights: [String] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -17,9 +19,9 @@ struct MarkdownText: View {
     @ViewBuilder private func view(for block: MarkdownBlock) -> some View {
         switch block {
         case .paragraph(let text):
-            Text(Self.inline(text)).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
+            Text(inline(text)).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
         case .heading(let level, let text):
-            Text(Self.inline(text))
+            Text(inline(text))
                 .font(level <= 1 ? .title3.weight(.semibold) : level == 2 ? .headline : .subheadline.weight(.semibold))
                 .padding(.top, 4)
         case .list(let items, let ordered):
@@ -28,7 +30,7 @@ struct MarkdownText: View {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(ordered ? "\(index + 1)." : "•").foregroundStyle(.secondary).monospacedDigit()
                             .frame(minWidth: ordered ? 18 : 10, alignment: .trailing)
-                        Text(Self.inline(item.text)).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
+                        Text(inline(item.text)).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(.leading, CGFloat(item.indent) * 18)
                 }
@@ -36,7 +38,7 @@ struct MarkdownText: View {
         case .quote(let text):
             HStack(spacing: 10) {
                 RoundedRectangle(cornerRadius: 1.5).fill(Theme.chatBorder).frame(width: 3)
-                Text(Self.inline(text)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Text(inline(text)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
         case .code(let text):
             ScrollView(.horizontal, showsIndicators: false) {
@@ -49,6 +51,19 @@ struct MarkdownText: View {
         case .rule:
             Divider()
         }
+    }
+
+    private func inline(_ text: String) -> AttributedString {
+        var result = Self.inline(text)
+        for mark in highlights where !mark.isEmpty {
+            var start = result.startIndex
+            while let range = result[start...].range(of: mark) {
+                result[range].backgroundColor = Theme.needTint
+                result[range].foregroundColor = Theme.need
+                start = range.upperBound
+            }
+        }
+        return result
     }
 
     static func inline(_ text: String) -> AttributedString {

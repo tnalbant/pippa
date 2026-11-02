@@ -9,6 +9,8 @@ struct ChatView: View {
     @ObservedObject var setup: SetupModel
     private let searchState = State(initialValue: "")
     private let dropState = State(initialValue: false)
+    /// The context panel on the right; open unless the person closed it.
+    private let panelState = State(initialValue: UserDefaults.standard.object(forKey: "contextPanel") as? Bool ?? true)
 
     var body: some View {
         NavigationSplitView {
@@ -35,7 +37,122 @@ struct ChatView: View {
                 return true
             }
             .navigationTitle(chat.current?.title ?? "Pippa")
+            .inspector(isPresented: panelState.projectedValue) {
+                ContextPanel(chat: chat, setup: setup)
+                    .inspectorColumnWidth(min: 220, ideal: 250, max: 320)
+            }
+            .onChange(of: panelState.wrappedValue) { _, open in UserDefaults.standard.set(open, forKey: "contextPanel") }
+            .toolbar {
+                ToolbarItem {
+                    Button { panelState.wrappedValue.toggle() } label: { Label(T("Context", table: "App"), systemImage: "sidebar.right") }
+                        .help(T("Show or hide what Pippa read and did", table: "App"))
+                }
+            }
         }
+    }
+}
+
+// MARK: Context panel
+
+/// What the latest answer read, did and checked, and how full the conversation is. Facts from tool calls and Pi,
+/// never from the model's text.
+private struct ContextPanel: View {
+    @ObservedObject var chat: ChatModel
+    @ObservedObject var setup: SetupModel
+
+    private var answer: ChatMessage? { chat.current?.messages.last { $0.role == .assistant } }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                section(T("Read", table: "App")) {
+                    if let sources = answer?.sources, !sources.isEmpty {
+                        ForEach(sources, id: \.self) { source in
+                            row(SourceChips.symbol(source.kind), source.name, source.detail, action: source.location.isEmpty ? nil : { SourceChips.open(source) })
+                        }
+                    } else {
+                        empty(chat.isAnswering ? T("Nothing yet", table: "App") : T("Nothing read for this answer", table: "App"))
+                    }
+                }
+                section(T("Done", table: "App")) {
+                    if let receipts = answer?.receipts, !receipts.isEmpty {
+                        ForEach(Array(receipts.enumerated()), id: \.offset) { _, receipt in
+                            row(ReceiptRow.symbol(receipt), ReceiptRow.title(receipt), receipt.name.isEmpty ? nil : receipt.name,
+                                tint: receipt.outcome == "done" ? Theme.ok : Theme.need)
+                        }
+                    } else {
+                        empty(T("Nothing changed on your Mac", table: "App"))
+                    }
+                }
+                let checked = answer?.checkedDates ?? [], unsupported = answer?.unsupportedDates ?? []
+                if !checked.isEmpty || !unsupported.isEmpty {
+                    section(T("Dates checked", table: "App")) {
+                        ForEach(checked, id: \.self) { row("checkmark.circle", $0, T("In what I read", table: "App"), tint: Theme.ok) }
+                        ForEach(unsupported, id: \.self) { row("exclamationmark.triangle", $0, T("Worked out, please check", table: "App"), tint: Theme.need) }
+                    }
+                }
+                if let usage = chat.current?.messages.last(where: { $0.context != nil })?.context {
+                    section(T("Conversation memory", table: "App")) {
+                        GeometryReader { geometry in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(Theme.chatBorder)
+                                Capsule().fill(usage.fraction > 0.8 ? Theme.need : Theme.accent)
+                                    .frame(width: max(6, geometry.size.width * usage.fraction))
+                            }
+                        }
+                        .frame(height: 6)
+                        Text(T("%lld %% full · %@ of %@", table: "App", Int((usage.fraction * 100).rounded()),
+                               usage.tokens.formatted(), usage.window.formatted()))
+                            .font(.caption).foregroundStyle(.secondary)
+                        if usage.fraction > 0.8 {
+                            Text(T("Almost full: Pippa will soon summarize the start. A new conversation is faster.", table: "App"))
+                                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+                Divider()
+                HStack(spacing: 6) {
+                    Image(systemName: setup.usesOnlineAI ? "cloud" : "laptopcomputer")
+                    Text(setup.usesOnlineAI ? AIBadge.label(setup) : "\(SettingsView.localModelName) · \(AIBadge.label(setup))")
+                }
+                .font(.caption).foregroundStyle(.secondary)
+                if !setup.usesOnlineAI {
+                    Text(T("Nothing leaves this Mac.", table: "App")).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            content()
+        }
+    }
+
+    @ViewBuilder
+    private func row(_ symbol: String, _ title: String, _ detail: String?, tint: Color = .secondary, action: (() -> Void)? = nil) -> some View {
+        let content = HStack(alignment: .top, spacing: 8) {
+            Image(systemName: symbol).foregroundStyle(tint).frame(width: 16)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).lineLimit(2).truncationMode(.middle)
+                if let detail { Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
+            }
+            Spacer(minLength: 0)
+        }
+        .font(.callout)
+        .contentShape(Rectangle())
+        if let action {
+            Button(action: action) { content }.buttonStyle(.plain).help(T("Open", table: "App"))
+        } else {
+            content
+        }
+    }
+
+    private func empty(_ text: String) -> some View {
+        Text(text).font(.callout).foregroundStyle(.tertiary)
     }
 }
 
@@ -44,17 +161,23 @@ struct ChatView: View {
 private struct Sidebar: View {
     @ObservedObject var chat: ChatModel
     var search: Binding<String>
+    private let renamingState = State<String?>(initialValue: nil)
+    private let nameState = State(initialValue: "")
 
     var body: some View {
         List(selection: Binding(get: { chat.currentID }, set: { if let id = $0 { chat.select(id) } })) {
             ForEach(groups, id: \.title) { group in
                 Section(group.title) {
                     ForEach(group.items) { conversation in
-                        Text(conversation.title.isEmpty ? T("New conversation", table: "App") : conversation.title)
-                            .lineLimit(1)
-                            .padding(.vertical, 2)
+                        ConversationRow(conversation: conversation)
                             .tag(conversation.id)
                             .contextMenu {
+                                Button(T("Rename…", table: "App")) {
+                                    nameState.wrappedValue = conversation.title
+                                    renamingState.wrappedValue = conversation.id
+                                }
+                                Button(conversation.pinned == true ? T("Unpin", table: "App") : T("Pin", table: "App")) { chat.togglePin(conversation.id) }
+                                Divider()
                                 Button(T("Delete", table: "App"), role: .destructive) { chat.delete(conversation.id) }
                             }
                     }
@@ -67,6 +190,15 @@ private struct Sidebar: View {
                 Text(search.wrappedValue.isEmpty ? T("Your conversations appear here.", table: "App") : T("Nothing found", table: "App"))
                     .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(24)
             }
+        }
+        .alert(T("Rename Conversation", table: "App"), isPresented: Binding(get: { renamingState.wrappedValue != nil },
+                                                                             set: { if !$0 { renamingState.wrappedValue = nil } })) {
+            TextField(T("Name", table: "App"), text: nameState.projectedValue)
+            Button(T("Rename", table: "App")) {
+                if let id = renamingState.wrappedValue { chat.rename(id, to: nameState.wrappedValue) }
+                renamingState.wrappedValue = nil
+            }
+            Button(T("Cancel", table: "App"), role: .cancel) { renamingState.wrappedValue = nil }
         }
         .toolbar {
             ToolbarItem {
@@ -93,12 +225,35 @@ private struct Sidebar: View {
             if days < 30 { return T("Previous 30 Days", table: "App") }
             return T("Older", table: "App")
         }
-        var result: [(title: String, items: [Conversation])] = []
-        for conversation in found {
+        let pinned = found.filter { $0.pinned == true }
+        var result: [(title: String, items: [Conversation])] = pinned.isEmpty ? [] : [(T("Pinned", table: "App"), pinned)]
+        for conversation in found where conversation.pinned != true {
             let name = title(conversation.updated)
             if result.last?.title == name { result[result.count - 1].items.append(conversation) } else { result.append((name, [conversation])) }
         }
         return result
+    }
+}
+
+/// Title, the start of the last answer and a symbol for what it was about.
+private struct ConversationRow: View {
+    var conversation: Conversation
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: conversation.symbol)
+                .font(.body).foregroundStyle(.secondary)
+                .frame(width: 20, height: 20)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(conversation.title.isEmpty ? T("New conversation", table: "App") : conversation.title)
+                    .lineLimit(1)
+                let preview = conversation.preview
+                if !preview.isEmpty {
+                    Text(preview).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                }
+            }
+        }
+        .padding(.vertical, 3)
     }
 }
 
@@ -232,12 +387,9 @@ private struct MessageView: View {
             if live || !message.steps.isEmpty || !(message.thinking ?? "").isEmpty {
                 WorkView(message: message, live: live, started: chat.answerStarted)
             }
-            if !message.text.isEmpty { MarkdownText(text: message.text) }
-            // Text came, but Pippa is still at it (more tools, more thinking): keep showing that she works.
-            if live && !message.text.isEmpty && message.steps.allSatisfy(\.done) {
-                LiveLine(started: chat.answerStarted, label: T("Working…", table: "App"))
-            }
+            if !message.text.isEmpty { MarkdownText(text: message.text, highlights: live ? [] : message.unsupportedDates ?? []) }
             if !live, let dates = message.unsupportedDates, !dates.isEmpty { DateNote(dates: dates) }
+            if !live, let sources = message.sources, !sources.isEmpty { SourceChips(sources: sources) }
             if !message.cards.isEmpty { ResultCardsView(cards: message.cards) }
             ForEach(Array(message.receipts.enumerated()), id: \.offset) { _, receipt in ReceiptRow(receipt: receipt) }
             if let error = message.error {
@@ -253,8 +405,8 @@ private struct MessageView: View {
     }
 }
 
-/// What Pippa did on the way to the answer. While it works: the steps as they happen and a live "Thinking … 12 s".
-/// Afterwards: one quiet line ("3 steps") that opens the steps and the model's thinking.
+/// What Pippa did on the way to the answer. While it works: one line with what she is doing right now
+/// ("Reading Lease.pdf · 14 s") that opens the steps and her thinking. Afterwards: one quiet line ("3 steps").
 private struct WorkView: View {
     var message: ChatMessage
     var live: Bool
@@ -264,16 +416,16 @@ private struct WorkView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if live {
-                steps
-                if message.text.isEmpty && message.steps.allSatisfy(\.done) {
-                    LiveLine(started: started, label: T("Thinking…", table: "App")) {
-                        if !(message.thinking ?? "").isEmpty {
-                            Button(openState.wrappedValue ? T("Hide", table: "App") : T("Show", table: "App")) { openState.wrappedValue.toggle() }
-                                .buttonStyle(.link).font(.callout)
-                        }
+                LiveLine(started: started, label: nowLabel) {
+                    if !message.steps.isEmpty || !(message.thinking ?? "").isEmpty {
+                        Button(openState.wrappedValue ? T("Hide", table: "App") : T("Details", table: "App")) { openState.wrappedValue.toggle() }
+                            .buttonStyle(.link).font(.callout)
                     }
                 }
-                if openState.wrappedValue { thinkingText }
+                if openState.wrappedValue {
+                    steps.padding(.leading, 4)
+                    thinkingText
+                }
             } else {
                 Button { withAnimation(.easeOut(duration: 0.15)) { openState.wrappedValue.toggle() } } label: {
                     HStack(spacing: 5) {
@@ -293,6 +445,12 @@ private struct WorkView: View {
                 }
             }
         }
+    }
+
+    /// What she is doing right now: the running step, else thinking or writing.
+    private var nowLabel: String {
+        if let step = message.steps.last(where: { !$0.done }) { return step.label }
+        return message.text.isEmpty ? T("Thinking…", table: "App") : T("Writing…", table: "App")
     }
 
     private var summary: String {
@@ -393,6 +551,58 @@ private struct CopyButton: View {
 }
 
 /// What a writing tool did: added to Calendar, a reminder, a Mail draft.
+/// What the answer read, as chips; a click opens the file or the page.
+private struct SourceChips: View {
+    var sources: [ChatSource]
+    private let shown = 3
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(sources.prefix(shown), id: \.self) { source in
+                Button { SourceChips.open(source) } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: SourceChips.symbol(source.kind)).font(.caption)
+                        Text(SourceChips.short(source.name)).lineLimit(1)
+                    }
+                    .fixedSize()
+                    .font(.caption).foregroundStyle(.secondary)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .overlay(Capsule().strokeBorder(Theme.chatBorder))
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(source.location.isEmpty)
+                .help(source.detail.map { "\(source.name) · \($0)" } ?? source.name)
+            }
+            if sources.count > shown {
+                Text("+\(sources.count - shown)").font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// Long names shortened in the middle, so a chip keeps its own width.
+    static func short(_ name: String, limit: Int = 30) -> String {
+        guard name.count > limit else { return name }
+        return name.prefix(limit / 2 - 1) + "…" + name.suffix(limit / 2 - 1)
+    }
+
+    static func symbol(_ kind: ChatSource.Kind) -> String {
+        switch kind {
+        case .file: "doc.text"
+        case .mail: "envelope"
+        case .web: "globe"
+        }
+    }
+
+    static func open(_ source: ChatSource) {
+        switch source.kind {
+        case .file: NSWorkspace.shared.open(URL(fileURLWithPath: source.location))
+        case .web: if let url = URL(string: source.location), ["http", "https"].contains(url.scheme) { NSWorkspace.shared.open(url) }
+        case .mail: break
+        }
+    }
+}
+
 /// Dates in the answer that nothing Pippa read shows (`DateEvidence`): the model worked them out itself.
 private struct DateNote: View {
     var dates: [String]
@@ -436,7 +646,10 @@ private struct ReceiptRow: View {
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.chatBorder))
     }
 
-    private var symbol: String {
+    private var symbol: String { Self.symbol(receipt) }
+    private var title: String { Self.title(receipt) }
+
+    static func symbol(_ receipt: PippaMCPWriteReceipt) -> String {
         switch receipt.action {
         case "calendarAdd": return "calendar.badge.plus"
         case "reminderAdd": return "checklist"
@@ -445,7 +658,8 @@ private struct ReceiptRow: View {
         }
     }
 
-    private var title: String {
+    static func title(_ receipt: PippaMCPWriteReceipt) -> String {
+        let done = receipt.outcome == "done"
         switch receipt.action {
         case "calendarAdd": return done ? T("Added to Calendar", table: "App") : T("Not added to Calendar", table: "App")
         case "reminderAdd": return done ? T("Reminder added", table: "App") : T("No reminder added", table: "App")
@@ -538,7 +752,10 @@ private struct AIBadge: View {
         .help(T("Change in Settings", table: "App"))
     }
 
-    private var label: String {
+    private var label: String { Self.label(setup) }
+
+    /// Which AI answers: the local model's name, ChatGPT or the connected model.
+    @MainActor static func label(_ setup: SetupModel) -> String {
         let settings = InferenceSettings.load(from: PiSession.settingsDirectory)
         if settings.subscriptionModel != nil { return "ChatGPT" }
         if let connection = PiOnlineProvider.activeConnection(settings) { return connection.modelID }

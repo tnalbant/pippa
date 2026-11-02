@@ -24,6 +24,12 @@ struct ChatMessage: Codable, Identifiable, Equatable {
     var thinking: String?
     /// Dates in the answer that nothing Pippa read shows (`DateEvidence`); named under the answer.
     var unsupportedDates: [String]?
+    /// Dates in the answer that a source shows.
+    var checkedDates: [String]?
+    /// What the answer read, from its tool calls.
+    var sources: [ChatSource]?
+    /// How full the conversation's context was afterwards.
+    var context: ContextUsage?
     var error: String?
 }
 
@@ -32,6 +38,7 @@ struct Conversation: Codable, Identifiable, Equatable {
     var title: String
     var updated: Date
     var messages: [ChatMessage]
+    var pinned: Bool?
 }
 
 /// The chat: conversations on disk (what the window shows), one answer at a time through `PiSession`.
@@ -53,6 +60,8 @@ final class ChatModel: ObservableObject {
     @Published private(set) var isAnswering = false
     /// What the current answer read, for its dates.
     private var evidence = DateEvidence()
+    /// Sources of tool calls that have started but not ended.
+    private var pendingSources: [String: ChatSource] = [:]
     /// When the running answer started, for the live "Thinking … 12 s".
     @Published private(set) var answerStarted: Date?
     private var answer: Task<Void, Never>?
@@ -85,6 +94,19 @@ final class ChatModel: ObservableObject {
         Task { await PiSession.shared.forget(id) }
     }
 
+    func rename(_ id: String, to title: String) {
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, let index = conversations.firstIndex(where: { $0.id == id }) else { return }
+        conversations[index].title = String(title.prefix(80))
+        save(id)
+    }
+
+    func togglePin(_ id: String) {
+        guard let index = conversations.firstIndex(where: { $0.id == id }) else { return }
+        conversations[index].pinned = conversations[index].pinned == true ? nil : true
+        save(id)
+    }
+
     // MARK: Asking
 
     func send() {
@@ -104,7 +126,7 @@ final class ChatModel: ObservableObject {
         isAnswering = true
         answerStarted = Date()
         _ = PippaMCPService.readNotes.take(); _ = PippaMCPService.writeNotes.take()
-        evidence = DateEvidence()
+        evidence = DateEvidence(); pendingSources = [:]
         evidence.add(prompt: prompt)
         answer = Task {
             do {
@@ -120,8 +142,11 @@ final class ChatModel: ObservableObject {
                 message.receipts = receipts
                 let dates = evidence.unsupported(in: message.text)
                 message.unsupportedDates = dates.isEmpty ? nil : dates
+                let checked = evidence.supported(in: message.text)
+                message.checkedDates = checked.isEmpty ? nil : checked
                 for index in message.steps.indices where !message.steps[index].done { message.steps[index].done = true }
             }
+            if let usage = await PiSession.shared.contextUsage() { updateLast(in: id) { $0.context = usage } }
             isAnswering = false
             answerStarted = nil
             if !ChatWindow.shared.isKey { unseen = current?.messages.last?.error == nil ? .answer : .failed }
@@ -195,11 +220,23 @@ final class ChatModel: ObservableObject {
             updateLast(in: id) { $0.thinking = ($0.thinking ?? "") + delta }
         case .toolStarted(let call, let name, let arguments):
             updateLast(in: id) { $0.steps.append(ChatStep(id: call, label: StepLabel.text(tool: name, arguments: arguments))) }
-        case .toolEnded(let call, _, let isError, _, let outcome, _):
+            if let source = SourceLog.source(tool: name, arguments: arguments) { pendingSources[call] = source }
+        case .toolEnded(let call, let name, let isError, let result, let outcome, _):
+            let failed = isError || (outcome.map { $0 != .done } ?? false)
             updateLast(in: id) { message in
                 guard let index = message.steps.firstIndex(where: { $0.id == call }) else { return }
                 message.steps[index].done = true
-                message.steps[index].failed = isError || (outcome.map { $0 != .done } ?? false)
+                message.steps[index].failed = failed
+            }
+            // A source counts once it was read; the same file read twice shows once, with its latest pages.
+            if var source = pendingSources.removeValue(forKey: call), !failed {
+                if name.hasSuffix("read_document") { source.detail = SourceLog.detail(result: result) }
+                updateLast(in: id) { message in
+                    var sources = message.sources ?? []
+                    sources.removeAll { $0.kind == source.kind && $0.name == source.name && $0.location == source.location }
+                    sources.append(source)
+                    message.sources = sources
+                }
             }
         case .assistantEnded(_, let reason, let error):
             if reason == "toolUse" { updateLast(in: id) { if !$0.text.isEmpty, !$0.text.hasSuffix("\n") { $0.text += "\n\n" } } }
