@@ -97,6 +97,19 @@ private func inode(_ url: URL) -> Int? { (try? fm.attributesOfItem(atPath: url.p
 private func linkCount(_ url: URL) -> Int? { (try? fm.attributesOfItem(atPath: url.path)[.referenceCount] as? NSNumber)?.intValue }
 
 func runSetupChecks() async {
+    check("Upgrade from 0.3: Pippa's old GGUF folder, prompt cache and her own files in ~/models go; the person's stay") {
+        let home = fakeHome("old-models"); defer { discard(home) }
+        let support = home.appendingPathComponent("Library/Application Support/Pippa", isDirectory: true)
+        let shared = home.appendingPathComponent("models", isDirectory: true)
+        for folder in ["models", "llama-slots", "omlx/models"] { try fm.createDirectory(at: support.appendingPathComponent(folder), withIntermediateDirectories: true) }
+        try fm.createDirectory(at: shared, withIntermediateDirectories: true)
+        let mine = shared.appendingPathComponent("Qwen3.5-9B-Q4_K_M.gguf"), theirs = shared.appendingPathComponent("their.gguf")
+        for file in [mine, theirs] { try Data("x".utf8).write(to: file) }
+        var state = PiInstallState()
+        state.created = [mine.standardizedFileURL.path]
+        let found = Set(PiInstaller.oldModelFiles(support: support, home: home, state: state).map(\.lastPathComponent))
+        return found == ["models", "llama-slots", "Qwen3.5-9B-Q4_K_M.gguf"]
+    }
     check("Installer: fresh HOME gets the official layout (marker, current-version, launcher, ~/.local/bin/pi, Node)") {
         let home = fakeHome("fresh"); defer { discard(home) }
         let payload = try fakePayload(in: home.appendingPathComponent("src"))

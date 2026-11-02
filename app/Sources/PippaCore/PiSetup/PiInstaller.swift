@@ -450,6 +450,18 @@ public final class PiInstaller: @unchecked Sendable {
         state.modelsFolder.map { URL(fileURLWithPath: $0, isDirectory: true).appendingPathComponent(model.key, isDirectory: true) }
     }
 
+    /// What Pippa before 0.4 left for llama.cpp, once the new model is ready: her GGUF model folder `<Support>/models`,
+    /// the saved prompt cache `<Support>/llama-slots`, and in a shared `~/models` only the files she put there herself.
+    /// Several GB on most Macs; they go to the Trash, never deleted for good.
+    public static func oldModelFiles(support: URL, home: URL, state: PiInstallState) -> [URL] {
+        let fm = FileManager.default
+        var result = ["models", "llama-slots"].map { support.appendingPathComponent($0, isDirectory: true) }.filter { fm.fileExists(atPath: $0.path) }
+        let shared = home.appendingPathComponent("models", isDirectory: true).standardizedFileURL.path + "/"
+        result += state.created.filter { $0.hasPrefix(shared) && ($0.hasSuffix(".gguf") || $0.hasSuffix(".gguf.ok")) }
+            .map { URL(fileURLWithPath: $0) }.filter { fm.fileExists(atPath: $0.path) }
+        return result
+    }
+
     static func isDirectory(_ url: URL) -> Bool {
         var directory: ObjCBool = false
         return FileManager.default.fileExists(atPath: url.path, isDirectory: &directory) && directory.boolValue
@@ -791,6 +803,9 @@ public final class PiInstaller: @unchecked Sendable {
         if let model {
             guard let folder = modelDirectory(model), ModelDownloader(directory: folder).isInstalled(model) else {
                 return finish(.ready, .failed(.missingStep(.model)))
+            }
+            for old in Self.oldModelFiles(support: roots.support, home: roots.home, state: state) {
+                try? fm.trashItem(at: old, resultingItemURL: nil)
             }
         }
         return finish(.ready, .ready(version: found))
